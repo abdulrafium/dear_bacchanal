@@ -1,0 +1,348 @@
+@import url('https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Caveat:wght@400;500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Bacchanal Carnival Design System - Dark Theme */
+@layer base {
+  :root {
+    /* Dark Carnival Theme */
+    --background: 0 0% 6%;
+    --foreground: 0 0% 95%;
+
+      --olive: 70 45% 50%;
+    --olive-foreground: 0 0% 10%;
+    
+    /* Primary: Coral/Crimson Red */
+    --primary: 4 72% 50%;
+    --primary-foreground: 0 0% 100%;
+    --primary-light: 4 72% 60%;
+    --primary-dark: 4 72% 40%;
+
+    /* Secondary: Teal/Turquoise */
+    --secondary: 174 42% 45%;
+    --secondary-foreground: 0 0% 100%;
+
+    /* Accent: Bright Yellow */
+    --accent: 48 95% 55%;
+    --accent-foreground: 0 0% 10%;
+
+    /* Coral Surface (for book sections) */
+    --coral: 4 72% 55%;
+    --coral-foreground: 0 0% 100%;
+
+    /* Card backgrounds - darker */
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 95%;
+
+    --muted: 0 0% 15%;
+    --muted-foreground: 0 0% 60%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 4 72% 50%;
+
+    --radius: 0.75rem;
+
+    /* Gradients */
+    --gradient-dark: linear-gradient(180deg, hsl(0 0% 6%) 0%, hsl(0 0% 3%) 100%);
+    --gradient-carnival: linear-gradient(135deg, hsl(4 72% 50%) 0%, hsl(350 70% 45%) 100%);
+    --gradient-hero: linear-gradient(180deg, hsl(4 72% 50% / 0.8) 0%, hsl(0 0% 6%) 100%);
+    --gradient-teal-dark: linear-gradient(135deg, hsl(174 50% 35%) 0%, hsl(180 40% 25%) 100%);
+
+    /* Shadows */
+    --shadow-glow: 0 0 60px hsl(4 72% 50% / 0.3);
+    --shadow-soft: 0 20px 60px -20px hsl(0 0% 0% / 0.5);
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 8%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 4 72% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 0 0% 15%;
+    --sidebar-ring: 4 72% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Poppins', sans-serif;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: 'Luckiest Guy', cursive;
+    letter-spacing: 0.02em;
+  }
+
+  .font-handwritten {
+    font-family: 'Caveat', cursive;
+  }
+
+  .font-body {
+    font-family: 'Poppins', sans-serif;
+  }
+}
+
+@layer components {
+  /* Background Variants */
+  .bg-dark-gradient {
+    background: var(--gradient-dark);
+  }
+
+  .bg-hero-gradient {
+    background: var(--gradient-hero);
+  }
+
+  .bg-coral {
+    background-color: hsl(var(--coral));
+  }
+
+  .bg-teal-gradient {
+    background: var(--gradient-teal-dark);
+  }
+
+  /* Text Styles */
+  .text-gradient {
+    background: linear-gradient(90deg, hsl(var(--accent)), hsl(var(--primary)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Glow Effects */
+  .glow-primary {
+    box-shadow: 0 0 40px hsl(var(--primary) / 0.4);
+  }
+
+  .glow-accent {
+    box-shadow: 0 0 40px hsl(var(--accent) / 0.4);
+  }
+
+  /* Image Gallery Styles */
+  .gallery-item {
+    @apply relative overflow-hidden transition-all duration-700;
+  }
+
+  .gallery-item img {
+    @apply w-full h-full object-cover transition-transform duration-700;
+  }
+
+  .gallery-item:hover img {
+    transform: scale(1.1);
+  }
+
+  /* Section Divider */
+  .section-divider {
+    @apply w-24 h-1 bg-primary mx-auto;
+  }
+
+  /* Feature Item (non-card approach) */
+  .feature-item {
+    @apply relative;
+  }
+
+  .feature-number {
+    @apply font-display text-8xl text-primary/20 absolute -top-8 -left-4;
+  }
+
+  /* Quote Styles */
+  .quote-large {
+    @apply font-handwritten text-3xl sm:text-4xl md:text-5xl leading-relaxed;
+  }
+
+  /* Step indicator */
+  .step-badge {
+    @apply inline-flex items-center justify-center w-16 h-16 rounded-2xl font-display text-2xl;
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-dark)));
+    color: hsl(var(--primary-foreground));
+  }
+}
+
+/* Animations */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-20px) rotate(3deg);
+  }
+}
+
+@keyframes bounce-subtle {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-bounce-subtle {
+  animation: bounce-subtle 2s ease-in-out infinite;
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 4s ease-in-out infinite;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.6s ease-out forwards;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 0%, hsl(var(--primary) / 0.3) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+/* Smooth scroll for GSAP */
+html.lenis {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto;
+}
+
+/* Selection color */
+::selection {
+  background: hsl(var(--primary) / 0.4);
+  color: hsl(var(--foreground));
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary-light));
+}
+
+/* Radial gradient utility */
+.bg-gradient-radial {
+  background: radial-gradient(ellipse at center, var(--tw-gradient-stops));
+}
+
+
+
+
+
+
+.bg-img-section-2{
+  background-image: url("/assets/layer-1.png");
+  width: 100%;
+  height: 100%;
+
+}
+
+
+/* globals.css */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ===== Book Editor Overrides ===== */
+/* Force all page sections to fill their container instead of the viewport */
+.book-page-container section {
+  min-height: 100% !important;
+  height: 100% !important;
+}
+
+/* Override min-h-screen anywhere inside the book */
+.book-page-container .min-h-screen {
+  min-height: 100% !important;
+}
+
+/* Override responsive min-h-screen variants inside the book */
+@media (min-width: 1280px) {
+  .book-page-container .xl\:min-h-screen {
+    min-height: 100% !important;
+  }
+}
+@media (min-width: 1024px) {
+  .book-page-container .lg\:min-h-screen {
+    min-height: 100% !important;
+  }
+}
+
+/* Ensure inner flex halves fill the book height, not viewport */
+.book-page-container .min-h-\[50vh\] {
+  min-height: 50% !important;
+}
+
+/* Force the flex container inside each page to fill vertically */
+.book-page-container section > div {
+  height: 100%;
+}
+
+/* Make sure background images cover the actual container, not viewport */
+.book-page-container section img[data-nimg] {
+  object-fit: cover;
+}
