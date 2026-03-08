@@ -58,12 +58,12 @@ export function EditorElementToolbar() {
       <style>
         {`@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Kalam:wght@300;400;700&display=swap');`}
       </style>
-      <div className="absolute top-[80px] left-1/2 -translate-x-1/2 z-40 bg-white rounded-xl shadow-lg border border-gray-100 flex items-center p-2 gap-2 h-14">
+      <div className="fixed md:absolute top-[80px] left-0 right-0 md:right-auto md:left-1/2 md:-translate-x-1/2 z-40 bg-white rounded-none md:rounded-xl shadow-lg border-b md:border border-gray-100 flex items-center p-2 gap-2 h-14 overflow-x-auto hide-scrollbar max-w-full">
         
         {element.type === "text" && (
           <>
             {/* Font Family */}
-      <div className="relative group flex items-center h-10 px-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg cursor-pointer transition-colors w-40 justify-between">
+      <div className="relative group flex items-center h-10 px-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg cursor-pointer transition-colors w-32 md:w-40 justify-between shrink-0">
         <select
           value={element.fontFamily || "Arial"}
           onChange={(e) => update({ fontFamily: e.target.value })}
@@ -73,14 +73,14 @@ export function EditorElementToolbar() {
             <option key={f} value={f}>{f}</option>
           ))}
         </select>
-        <span className="text-sm text-gray-700 truncate font-serif" style={{ fontFamily: element.fontFamily }}>
+        <span className="text-[11px] md:text-sm text-gray-700 truncate font-serif" style={{ fontFamily: element.fontFamily }}>
           {element.fontFamily || "Font"}
         </span>
-        <ChevronDown className="w-4 h-4 text-gray-500" />
+        <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
       </div>
 
       {/* Font Size */}
-      <div className="relative group flex items-center h-10 px-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg cursor-pointer transition-colors w-24 justify-between">
+      <div className="relative group flex items-center h-10 px-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg cursor-pointer transition-colors w-20 md:w-24 justify-between shrink-0">
         <select
           value={element.fontSize || 18}
           onChange={(e) => update({ fontSize: parseInt(e.target.value) })}
@@ -90,14 +90,14 @@ export function EditorElementToolbar() {
             <option key={s} value={s}>{s}</option>
           ))}
         </select>
-        <span className="text-sm text-gray-700">{element.fontSize}</span>
-        <ChevronDown className="w-4 h-4 text-gray-500" />
+        <span className="text-xs md:text-sm text-gray-700">{element.fontSize}</span>
+        <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
       </div>
 
       <div className="w-[1px] h-6 bg-gray-200 mx-1" />
 
       {/* Color Picker */}
-      <div className="relative w-8 h-8 rounded-md border-2 border-gray-200 hover:border-gray-300 transition-colors cursor-pointer overflow-hidden flex items-center justify-center">
+      <div className="relative w-8 h-8 rounded-md border-2 border-gray-200 hover:border-gray-300 transition-colors cursor-pointer overflow-hidden flex items-center justify-center shrink-0">
         <div className="w-6 h-6 rounded-sm shadow-sm" style={{ backgroundColor: element.fill || "#000" }} />
         <input
           type="color"
@@ -112,7 +112,7 @@ export function EditorElementToolbar() {
       {/* Underline */}
       <button 
         onClick={() => update({ fontStyle: element.fontStyle === "underline" ? "normal" : "underline" })}
-        className={`w-10 h-10 rounded-lg flex items-center justify-center border transition-colors ${
+        className={`w-10 h-10 rounded-lg flex items-center justify-center border transition-colors shrink-0 ${
           element.fontStyle === "underline" 
             ? "bg-gray-100 border-gray-300 text-gray-900" 
             : "border-transparent text-gray-600 hover:bg-gray-50"
@@ -127,7 +127,7 @@ export function EditorElementToolbar() {
           const nextAlign = element.align === "left" ? "center" : element.align === "center" ? "right" : "left";
           update({ align: nextAlign as any });
         }}
-        className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-gray-600 hover:bg-gray-50 transition-colors"
+        className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-gray-600 hover:bg-gray-50 transition-colors shrink-0"
       >
         {element.align === "center" ? <AlignCenter className="w-5 h-5" /> : element.align === "right" ? <AlignRight className="w-5 h-5" /> : <AlignLeft className="w-5 h-5" />}
       </button>
@@ -137,22 +137,22 @@ export function EditorElementToolbar() {
         )}
 
         {/* Layers */}
-      <button className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-gray-600 hover:bg-gray-50 transition-colors" title="Bring to front">
+      <button className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-gray-600 hover:bg-gray-50 transition-colors shrink-0" title="Bring to front">
         <Layers className="w-5 h-5" />
       </button>
 
       {/* Delete */}
-      <button onClick={handleDelete} className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-gray-600 hover:bg-gray-50 transition-colors hover:text-red-500" title="Delete">
+      <button onClick={handleDelete} className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-gray-600 hover:bg-gray-50 transition-colors hover:text-red-500 shrink-0" title="Delete">
         <Trash2 className="w-5 h-5" />
       </button>
 
       {/* Duplicate / Save Bookmark */}
-      <button onClick={handleDuplicate} className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-gray-600 hover:bg-gray-50 transition-colors" title="Duplicate">
+      <button onClick={handleDuplicate} className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-gray-600 hover:bg-gray-50 transition-colors shrink-0" title="Duplicate">
         <Bookmark className="w-5 h-5" />
       </button>
 
         {element.type === "text" && (
-          <button className="ml-2 bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 transition-colors text-sm">
+          <button className="ml-2 bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 transition-colors text-xs md:text-sm shrink-0">
             Apply to all
           </button>
         )}

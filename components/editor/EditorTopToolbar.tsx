@@ -98,7 +98,7 @@ export function EditorTopToolbar() {
           <ArrowLeft className="w-5 h-5" />
         </button>
 
-        <div className="ml-2 mr-4">
+        <div className="ml-2 mr-4 hidden sm:block">
           <span className="font-display text-lg font-bold text-[#2d2d2d] tracking-tight">
             bacchanal
           </span>
@@ -109,26 +109,26 @@ export function EditorTopToolbar() {
         <button
           onClick={undo}
           disabled={historyIndex < 0}
-          className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30"
+          className="flex flex-col items-center gap-0.5 px-2 md:px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30"
           title="Undo"
         >
           <Undo2 className="w-4 h-4 text-gray-600" />
-          <span className="text-[10px] text-gray-500">Undo</span>
+          <span className="text-[10px] text-gray-500 hidden md:block">Undo</span>
         </button>
 
         <button
           onClick={redo}
           disabled={historyIndex >= historyLength - 1}
-          className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30"
+          className="flex flex-col items-center gap-0.5 px-2 md:px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30"
           title="Redo"
         >
           <Redo2 className="w-4 h-4 text-gray-600" />
-          <span className="text-[10px] text-gray-500">Redo</span>
+          <span className="text-[10px] text-gray-500 hidden md:block">Redo</span>
         </button>
       </div>
 
       {/* Center */}
-      <button className="flex items-center gap-2 bg-[#2d2d2d] text-white px-5 py-2 rounded-full text-sm font-medium hover:bg-[#404040] transition-colors">
+      <button className="hidden lg:flex items-center gap-2 bg-[#2d2d2d] text-white px-5 py-2 rounded-full text-sm font-medium hover:bg-[#404040] transition-colors">
         <Play className="w-4 h-4 fill-current" />
         Video Tutorial
       </button>
@@ -143,32 +143,32 @@ export function EditorTopToolbar() {
         <button 
           onClick={handleManualSave}
           disabled={saveStatus === "saving"}
-          className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer disabled:opacity-50"
+          className="flex flex-col items-center gap-0.5 px-2 md:px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer disabled:opacity-50"
         >
           <Save className="w-4 h-4 text-gray-600" />
-          <span className="text-[10px] text-gray-500">Save</span>
+          <span className="text-[10px] text-gray-500 hidden md:block">Save</span>
         </button>
 
         <button
           onClick={togglePreview}
-          className="flex flex-col items-center gap-0.5 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+          className="flex flex-col items-center gap-0.5 px-2 md:px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
         >
           {isPreviewMode ? (
             <Pencil className="w-4 h-4 text-gray-600" />
           ) : (
             <Eye className="w-4 h-4 text-gray-600" />
           )}
-          <span className="text-[10px] text-gray-500">
+          <span className="text-[10px] text-gray-500 hidden md:block">
             {isPreviewMode ? "Edit" : "Preview"}
           </span>
         </button>
 
         <button 
           onClick={() => setIsOrderModalOpen(true)}
-          className="flex items-center gap-2 bg-[#2d2d2d] text-white px-6 py-2.5 rounded-full text-sm font-bold hover:bg-[#404040] transition-colors ml-2"
+          className="flex items-center gap-1.5 bg-[#2d2d2d] text-white px-3 md:px-6 py-2 md:py-2.5 rounded-full text-xs md:text-sm font-bold hover:bg-[#404040] transition-colors ml-1 md:ml-2"
         >
           <ShoppingCart className="w-4 h-4" />
-          Order
+          <span className="hidden xs:block">Order</span>
         </button>
       </div>
 

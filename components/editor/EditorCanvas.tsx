@@ -316,13 +316,31 @@ export function EditorCanvas() {
     return () => ro.disconnect();
   }, []);
 
-  const scale = zoom / 100;
   const totalWidth = PAGE_WIDTH * 2 + 8; // 8px spine
   const totalHeight = PAGE_HEIGHT;
+
+  // Auto-calculate scale to fit container if on mobile or if zoom is default
+  const [fitScale, setFitScale] = useState(1);
+  
+  useEffect(() => {
+    if (containerSize.width > 0 && containerSize.height > 0) {
+      const padding = 40;
+      const s = Math.min(
+        (containerSize.width - padding) / totalWidth,
+        (containerSize.height - padding) / totalHeight
+      );
+      setFitScale(s);
+    }
+  }, [containerSize, totalWidth, totalHeight]);
+
+  // Use either manual zoom (desktop) or auto-calculated fitScale (mobile/default)
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const scale = isMobile ? fitScale : (zoom / 100);
+  
   const stageWidth = totalWidth * scale;
   const stageHeight = totalHeight * scale;
   const stageX = Math.max(0, (containerSize.width - stageWidth) / 2);
-  const stageY = Math.max(20, (containerSize.height - stageHeight) / 2);
+  const stageY = Math.max(0, (containerSize.height - stageHeight) / 2);
 
   const handleStageClick = (e: any) => {
     if (e.target === e.target.getStage() || e.target.getClassName() === "Rect") {
@@ -434,23 +452,23 @@ export function EditorCanvas() {
         </div>
       )}
 
-      {/* Preview mode large navigation arrows */}
+      {/* Preview mode large navigation arrows - smaller on mobile */}
       {isPreviewMode && (
         <>
           <button
             onClick={prevSpread}
             disabled={currentSpreadIndex === 0}
-            className="absolute left-10 top-1/2 -translate-y-1/2 z-20 text-gray-300 hover:text-gray-600 disabled:opacity-0 transition-opacity"
+            className="absolute left-2 md:left-10 top-1/2 -translate-y-1/2 z-20 text-gray-300 hover:text-gray-600 disabled:opacity-0 transition-opacity"
           >
-            <ChevronLeft className="w-24 h-24" />
+            <ChevronLeft className="w-12 h-12 md:w-24 md:h-24" />
           </button>
           
           <button
             onClick={nextSpread}
             disabled={currentSpreadIndex === spreads.length - 1}
-            className="absolute right-10 top-1/2 -translate-y-1/2 z-20 text-gray-300 hover:text-gray-600 disabled:opacity-0 transition-opacity"
+            className="absolute right-2 md:right-10 top-1/2 -translate-y-1/2 z-20 text-gray-300 hover:text-gray-600 disabled:opacity-0 transition-opacity"
           >
-            <ChevronRight className="w-24 h-24" />
+            <ChevronRight className="w-12 h-12 md:w-24 md:h-24" />
           </button>
         </>
       )}

@@ -423,7 +423,7 @@ export function EditorLeftPanel() {
   const activeSidebarPanel = useEditorStore((s) => s.activeSidebarPanel);
 
   return (
-    <div className="w-72 bg-white border-r border-gray-200 flex flex-col flex-shrink-0 overflow-hidden">
+    <div className="w-full md:w-72 h-full bg-white border-r border-gray-200 flex flex-col flex-shrink-0 overflow-hidden">
       {activeSidebarPanel === "layouts" && <LayoutsPanel />}
       {activeSidebarPanel === "images" && <ImagesPanel />}
       {activeSidebarPanel === "templates" && <TemplatesPanel />}

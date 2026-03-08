@@ -47,9 +47,9 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px] rounded-3xl p-0 overflow-hidden bg-[#0f0f0f] border-white/10 text-white">
-        <div className="p-8">
-          <DialogHeader className="mb-8">
+      <DialogContent className="max-w-[95vw] sm:max-w-[500px] rounded-3xl p-0 overflow-hidden bg-[#0f0f0f] border-white/10 text-white">
+        <div className="p-5 sm:p-8">
+          <DialogHeader className="mb-4 sm:mb-8">
             <DialogTitle className="text-3xl font-bold font-display text-center">
               Complete Your Order
             </DialogTitle>

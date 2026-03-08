@@ -40,33 +40,35 @@ export function EditorBottomBar() {
       {/* View mode + Navigation */}
       <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
         {/* Left: View mode */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 md:gap-2">
           <button
             onClick={() => setViewMode("spread")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+            className={`flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
               viewMode === "spread"
                 ? "bg-gray-100 text-[#2d2d2d]"
                 : "text-gray-400 hover:text-gray-600"
             }`}
+             title="One Page"
           >
             <Columns2 className="w-3.5 h-3.5" />
-            One page
+            <span className="hidden sm:block">One page</span>
           </button>
           <button
             onClick={() => setViewMode("single")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+            className={`flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
               viewMode === "single"
                 ? "bg-gray-100 text-[#2d2d2d]"
                 : "text-gray-400 hover:text-gray-600"
             }`}
+            title="All Pages"
           >
             <Grid2X2 className="w-3.5 h-3.5" />
-            All pages
+            <span className="hidden sm:block">All pages</span>
           </button>
         </div>
 
         {/* Center: Page navigation */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 md:gap-3">
           <button
             onClick={prevSpread}
             disabled={currentSpreadIndex === 0}
@@ -74,37 +76,34 @@ export function EditorBottomBar() {
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-
-          <span className="text-sm text-gray-600">
-            {currentSpreadIndex === 0 ? "Cover" : `Page ${currentSpreadIndex * 2 - 1}`}
-            {currentSpread && ` — `}
-            {currentSpreadIndex === 0 ? "Page 1" : `Page ${currentSpreadIndex * 2}`}
+          <span className="text-[10px] sm:text-sm text-gray-600 font-medium">
+            {currentSpreadIndex === 0 ? "Cover" : `${currentSpreadIndex * 2 - 1}-${currentSpreadIndex * 2}`}
           </span>
-
           <button
             onClick={nextSpread}
             disabled={currentSpreadIndex >= spreads.length - 1}
-            className="text-sm text-blue-500 hover:text-blue-700 font-medium disabled:opacity-30 disabled:text-gray-400"
+            className="text-[10px] sm:text-xs text-blue-500 hover:text-blue-700 font-bold disabled:opacity-30 disabled:text-gray-400"
           >
-            Next page →
+            Next <span className="hidden xs:inline">page</span> →
           </button>
         </div>
 
         {/* Right: Actions */}
-        <div className="flex items-center gap-2 relative">
+        <div className="flex items-center gap-1 md:gap-2 relative">
           <button
             onClick={toggleThumbnails}
-            className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
+            className="text-[10px] md:text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
           >
-            {showThumbnails ? "Hide" : "Show"} page thumbnails ✓
+            <Plus className={`w-3.5 h-3.5 transition-transform ${showThumbnails ? 'rotate-45' : ''}`} />
+            <span className="hidden md:block">{showThumbnails ? "Hide" : "Show"} page thumbnails</span>
           </button>
 
-          {/* Zoom */}
-          <div className="flex items-center gap-1 ml-3 border-l border-gray-200 pl-3">
+          {/* Zoom - hidden on small mobile */}
+          <div className="hidden sm:flex items-center gap-1 ml-1 md:ml-3 border-l border-gray-200 pl-1 md:pl-3">
             <button onClick={() => setZoom(zoom - 10)} className="p-1 text-gray-400 hover:text-gray-700">
               <ZoomOut className="w-4 h-4" />
             </button>
-            <span className="text-xs text-gray-500 w-10 text-center font-medium">{zoom}%</span>
+            <span className="text-xs text-gray-500 w-8 md:w-10 text-center font-medium">{zoom}%</span>
             <button onClick={() => setZoom(zoom + 10)} className="p-1 text-gray-400 hover:text-gray-700">
               <ZoomIn className="w-4 h-4" />
             </button>
