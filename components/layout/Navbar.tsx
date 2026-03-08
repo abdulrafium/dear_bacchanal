@@ -30,15 +30,14 @@ const Navbar = () => {
 
   return (
     <nav
-      className={`fixed top-0  left-0 right-0 z-50 transition-all duration-500 ${
-        scrolled
-          ? "bg-black/60 backdrop-blur-md m-2 md:m-5 rounded-xl  "
-          : "bg-black/40 backdrop-blur-sm lg:bg-transparent lg:backdrop-blur-none rounded-xl top-8 "
-      }`}
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${scrolled
+          ? "bg-black/60 backdrop-blur-md m-2 md:m-5 rounded-xl"
+          : "bg-black/40 backdrop-blur-sm lg:bg-transparent lg:backdrop-blur-none rounded-xl top-8"
+        }`}
     >
-      <div className="container mx-auto px-4">
+      <div className="w-full px-4 md:px-8 lg:px-10">
         <div className="flex items-center justify-between h-20">
-          <Link href="/" className="font-display text-3xl">
+          <Link href="/" className="font-display text-2xl md:text-3xl">
             <span
               className="block"
               style={{
@@ -59,11 +58,10 @@ const Navbar = () => {
               <Link
                 key={link.path}
                 href={link.path}
-                className={`relative font-medium transition-colors py-2 ${
-                  pathname === link.path
-                    ? "text-pink-500"
-                    : "text-white/70 hover:text-white"
-                }`}
+                className={`relative font-medium transition-colors py-2 ${pathname === link.path
+                    ? "text-pink-600 font-bold"
+                    : "text-zinc-900 hover:text-black"
+                  }`}
               >
                 {link.label}
                 {pathname === link.path && (
@@ -85,7 +83,7 @@ const Navbar = () => {
 
           {/* Mobile Menu Button */}
           <button
-            className="md:hidden p-2 text-white"
+            className="md:hidden p-2 text-zinc-900"
             onClick={() => setIsOpen(!isOpen)}
             aria-label="Toggle menu"
           >
@@ -102,11 +100,10 @@ const Navbar = () => {
                   key={link.path}
                   href={link.path}
                   onClick={() => setIsOpen(false)}
-                  className={`font-medium py-2 transition-colors ${
-                    pathname === link.path
-                      ? "text-pink-500"
-                      : "text-white/70 hover:text-white"
-                  }`}
+                  className={`font-medium py-2 transition-colors ${pathname === link.path
+                      ? "text-pink-600 font-bold"
+                      : "text-zinc-900 hover:text-black"
+                    }`}
                 >
                   {link.label}
                 </Link>
