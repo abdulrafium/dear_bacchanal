@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     const promoCode = await stripe.promotionCodes.create({
       coupon: coupon.id,
       code: code.toUpperCase(),
-    });
+    } as any);
 
     // Optional: Store in MongoDB
     const db = await getDatabase();

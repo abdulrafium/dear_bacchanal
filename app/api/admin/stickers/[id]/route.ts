@@ -5,16 +5,17 @@ import { ObjectId } from "mongodb";
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await auth();
     if (!session?.user?.id && !session?.user?.email && process.env.NODE_ENV !== "development") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const db = await getDatabase();
-    await db.collection("global_stickers").deleteOne({ _id: new ObjectId(params.id) });
+    await db.collection("global_stickers").deleteOne({ _id: new ObjectId(id) });
 
     return NextResponse.json({ message: "Sticker deleted" }, { status: 200 });
   } catch (error) {

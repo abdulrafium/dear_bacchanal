@@ -4,16 +4,17 @@ import { auth } from "@/lib/auth";
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { templateName: string } }
+  { params }: { params: Promise<{ templateName: string }> }
 ) {
   try {
+    const { templateName } = await params;
     const session = await auth();
     if (!session?.user?.id && !session?.user?.email && process.env.NODE_ENV !== "development") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const db = await getDatabase();
-    await db.collection("global_templates").deleteOne({ templateName: decodeURIComponent(params.templateName) });
+    await db.collection("global_templates").deleteOne({ templateName: decodeURIComponent(templateName) });
 
     return NextResponse.json({ message: "Template deleted" }, { status: 200 });
   } catch (error) {
@@ -23,9 +24,10 @@ export async function DELETE(
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { templateName: string } }
+  { params }: { params: Promise<{ templateName: string }> }
 ) {
   try {
+    const { templateName } = await params;
     const session = await auth();
     if (!session?.user?.id && !session?.user?.email && process.env.NODE_ENV !== "development") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -35,7 +37,7 @@ export async function PATCH(
     const db = await getDatabase();
 
     await db.collection("global_templates").updateOne(
-      { templateName: decodeURIComponent(params.templateName) },
+      { templateName: decodeURIComponent(templateName) },
       { $set: { isActive } }
     );
 

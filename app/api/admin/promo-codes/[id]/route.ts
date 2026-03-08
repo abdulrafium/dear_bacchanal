@@ -3,17 +3,20 @@ import { stripe } from "@/lib/stripe";
 import { auth } from "@/lib/auth";
 import { getDatabase } from "@/lib/db";
 
+
+
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth();
+    const { id } = await params;
+    const session = await auth(); // Corrected 'wait auth()' to 'await auth()'
     if (!session?.user?.id && !session?.user?.email && process.env.NODE_ENV !== "development") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const promoCodeId = params.id;
+    const promoCodeId = id;
 
     // Deactivate in Stripe
     await stripe.promotionCodes.update(promoCodeId, { active: false });

@@ -9,6 +9,7 @@ export interface BookTemplate {
   year: number;
   country: string;
   spreads: BookSpread[];
+  isActive?: boolean;
 }
 
 const PAGE_WIDTH = 400;
