@@ -577,7 +577,7 @@ function StickersPanel() {
       toast.success(`${res.length} graphics uploaded and saved!`);
       fetchStickers();
     },
-    onUploadError: (err) => toast.error(`Bulk upload failed: ${err.message}`),
+    onUploadError: (err) => { toast.error(`Bulk upload failed: ${err.message}`); },
   });
 
   const selectedElementId = useEditorStore((s) => s.selectedElementId);
