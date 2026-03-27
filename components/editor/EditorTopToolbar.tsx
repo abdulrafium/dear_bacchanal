@@ -31,6 +31,7 @@ export function EditorTopToolbar() {
   const spreads = useEditorStore((s) => s.spreads);
   const isAdmin = useEditorStore((s) => s.isAdmin);
   const activeTemplateName = useEditorStore((s) => s.activeTemplateName);
+  const templateDescription = useEditorStore((s) => s.templateDescription);
   const currentSpreadIndex = useEditorStore((s) => s.currentSpreadIndex);
 
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "modified">("saved");
@@ -48,7 +49,7 @@ export function EditorTopToolbar() {
           await fetch("/api/editor/save", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ spreads, isAdmin, activeTemplateName, currentSpreadIndex }),
+            body: JSON.stringify({ spreads, isAdmin, activeTemplateName, templateDescription, currentSpreadIndex }),
           });
           setSaveStatus("saved");
           setDirty(false); // Reset dirty flag after successful save
@@ -102,6 +103,44 @@ export function EditorTopToolbar() {
           <span className="font-display text-lg font-bold text-[#2d2d2d] tracking-tight">
             bacchanal
           </span>
+        </div>
+
+        <div className="w-px h-6 bg-gray-200 mx-1" />
+
+        <div className="flex flex-col ml-2 mr-4">
+          <div className="flex items-center gap-2">
+            {isAdmin ? (
+              <div className="flex flex-col gap-0.5">
+                <input 
+                  type="text"
+                  value={activeTemplateName || ""}
+                  onChange={(e) => useEditorStore.getState().loadTemplate(spreads, e.target.value)}
+                  className="text-sm font-bold text-black bg-white/50 border-b border-gray-100 focus:border-[#2d2d2d] focus:bg-white p-0.5 focus:ring-0 w-32 md:w-64 outline-none transition-all placeholder:text-gray-300"
+                  placeholder="Enter Template Name..."
+                />
+                <span className="text-[8px] font-bold text-gray-400 -mt-0.5 ml-1">ADMIN TEMPLATE TITLE</span>
+              </div>
+            ) : (
+              <h1 className="text-sm font-bold text-gray-900 truncate max-w-[120px] md:max-w-[2000px]">
+                {activeTemplateName || "Carnival Book"}
+              </h1>
+            )}
+            <span className="bg-[#2d2d2d] text-white text-[8px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest shadow-sm">
+              {isAdmin ? "Admin" : "Draft"}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+             <div className="flex items-center gap-0.5">
+               <div className={`w-1.5 h-1.5 rounded-full ${isDirty ? 'bg-orange-500 animate-pulse' : 'bg-green-500'}`} />
+               <span className={`text-[9px] font-bold uppercase tracking-tight ${isDirty ? 'text-orange-500' : 'text-green-600'}`}>
+                 {isDirty ? 'Unsaved' : 'Synced'}
+               </span>
+             </div>
+             <span className="text-gray-200 text-[9px]">|</span>
+             <span className="text-[9px] font-medium text-gray-400">
+               {saveStatus === "saving" ? "Saving..." : "Auto-save active"}
+             </span>
+          </div>
         </div>
 
         <div className="w-px h-6 bg-gray-200 mx-1" />

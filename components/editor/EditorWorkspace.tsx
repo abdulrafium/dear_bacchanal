@@ -14,6 +14,7 @@ import { Loader2 } from "lucide-react";
 export default function EditorWorkspace() {
   const activeSidebarPanel = useEditorStore((s) => s.activeSidebarPanel);
   const isPreviewMode = useEditorStore((s) => s.isPreviewMode);
+  const resetEditor = useEditorStore((s) => s.resetEditor);
   const loadTemplate = useEditorStore((s) => s.loadTemplate);
   const setCurrentSpread = useEditorStore((s) => s.setCurrentSpread);
   const isAdmin = useEditorStore((s) => s.isAdmin);
@@ -30,19 +31,32 @@ export default function EditorWorkspace() {
         if (isAdmin) query.set("isAdmin", "true");
         if (templateName) query.set("templateName", templateName);
 
-        const res = await fetch(`/api/editor/load?` + query.toString());
+        const res = await fetch(`/api/editor/load?${query.toString()}&t=${Date.now()}`, {
+          cache: "no-store",
+          headers: { "Pragma": "no-cache" }
+        });
         if (res.ok) {
           const data = await res.json();
           
-          if (isAdmin && data.template?.spreads?.length) {
-            loadTemplate(data.template.spreads, data.template.templateName);
-            if (data.template.currentSpreadIndex !== undefined) {
-              setCurrentSpread(data.template.currentSpreadIndex);
+          if (isAdmin) {
+            if (data.template?.spreads?.length) {
+              loadTemplate(data.template.spreads, data.template.templateName, data.template.description);
+              if (data.template.currentSpreadIndex !== undefined) {
+                setCurrentSpread(data.template.currentSpreadIndex, true);
+              }
+            } else if (templateName) {
+              // Admin explicitly asked for a template by name, but it's not in DB yet
+              // Load from hard-coded templates if available
+              const { getAvailableTemplates } = await import('@/lib/book-templates');
+              const hardTemplate = getAvailableTemplates().find(t => t.name === templateName);
+              if (hardTemplate) {
+                loadTemplate(hardTemplate.spreads, hardTemplate.name, hardTemplate.description);
+              }
             }
-          } else if (!isAdmin && data.book?.spreads?.length) {
-            loadTemplate(data.book.spreads, data.book.activeTemplateName);
+          } else if (data.book?.spreads?.length) {
+            loadTemplate(data.book.spreads, data.book.activeTemplateName, data.book.templateDescription);
             if (data.book.currentSpreadIndex !== undefined) {
-              setCurrentSpread(data.book.currentSpreadIndex);
+              setCurrentSpread(data.book.currentSpreadIndex, true);
             }
           }
         }
@@ -54,7 +68,43 @@ export default function EditorWorkspace() {
     };
 
     loadEditorState();
-  }, [isAdmin, templateName, loadTemplate]);
+    
+    // Add keyboard listeners
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't delete if user is typing in an input or textarea
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      if (e.key === "Delete" || e.key === "Backspace") {
+        const { selectedElementId, spreads, removeElement, isAdmin } = useEditorStore.getState();
+        if (selectedElementId) {
+          // Find which page the element is on and check for locks
+          for (const spread of spreads) {
+            const leftEl = spread.leftPage.elements.find(el => el.id === selectedElementId);
+            if (leftEl) {
+               if (isAdmin || (!spread.leftPage.isLocked && !leftEl.isLocked)) {
+                  removeElement(spread.leftPage.id, selectedElementId);
+               }
+               break;
+            }
+            const rightEl = spread.rightPage.elements.find(el => el.id === selectedElementId);
+            if (rightEl) {
+               if (isAdmin || (!spread.rightPage.isLocked && !rightEl.isLocked)) {
+                  removeElement(spread.rightPage.id, selectedElementId);
+               }
+               break;
+            }
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isAdmin, templateName, loadTemplate, setCurrentSpread]);
 
   if (loading) {
     return (

@@ -69,26 +69,8 @@ export function EditorPageTools({ pageId, align }: { pageId: string, align: "lef
         break;
 
       case "photo":
-        // Trigger file picker
-        const input = document.createElement("input");
-        input.type = "file";
-        input.accept = "image/*";
-        input.onchange = (e: any) => {
-          const file = e.target.files?.[0];
-          if (file) {
-            const url = URL.createObjectURL(file);
-            addElement(pageId, {
-              type: "image",
-              x: 80,
-              y: 100,
-              width: 220,
-              height: 160,
-              rotation: 0,
-              src: url,
-            });
-          }
-        };
-        input.click();
+        useEditorStore.getState().setSidebarPanel("images");
+        // toast if we had it here, but we'll manually set it for now and let the panel handle it
         break;
 
       case "layout":

@@ -17,7 +17,9 @@ export async function POST(req: NextRequest) {
 
     const userId = session?.user?.id || session?.user?.email || "anonymous-dev-user";
     const body = await req.json();
-    const { isAdmin, spreads, activeTemplateName, currentSpreadIndex } = body;
+    const { isAdmin, spreads, activeTemplateName, templateDescription, currentSpreadIndex } = body;
+    const finalName = (activeTemplateName && activeTemplateName !== "undefined") ? activeTemplateName : "New Template";
+    const finalDesc = (templateDescription && templateDescription !== "undefined") ? templateDescription : "Custom template created via editor";
 
     const db = await getDatabase();
 
@@ -25,10 +27,11 @@ export async function POST(req: NextRequest) {
       // Save to global templates
       const templatesCollection = db.collection("global_templates");
       await templatesCollection.updateOne(
-        { templateName: activeTemplateName || "New Template" },
+        { templateName: finalName },
         {
           $set: {
-            templateName: activeTemplateName || "New Template",
+            templateName: finalName,
+            description: finalDesc,
             spreads: spreads || [],
             currentSpreadIndex: currentSpreadIndex || 0,
             updatedAt: new Date(),
@@ -36,6 +39,9 @@ export async function POST(req: NextRequest) {
           },
           $setOnInsert: {
             createdAt: new Date(),
+            thumbnail: "/img/templates/bacchanal-classic.jpg",
+            country: "Unknown",
+            year: "2026",
           },
         },
         { upsert: true }

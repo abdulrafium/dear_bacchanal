@@ -62,6 +62,7 @@ interface EditorState {
   // Template
   templateLoaded: boolean;
   activeTemplateName: string | null;
+  templateDescription: string | null;
 
   // UI state
   isAdmin: boolean;
@@ -78,7 +79,7 @@ interface EditorState {
   historyIndex: number;
 
   // Actions - Navigation
-  setCurrentSpread: (index: number) => void;
+  setCurrentSpread: (index: number, skipDirty?: boolean) => void;
   nextSpread: () => void;
   prevSpread: () => void;
 
@@ -95,7 +96,7 @@ interface EditorState {
   duplicateSpread: (index: number) => void;
   removeSpread: (index: number) => void;
   updatePageBackground: (pageId: string, background: string) => void;
-  loadTemplate: (spreads: BookSpread[], name: string) => void;
+  loadTemplate: (spreads: BookSpread[], name: string, description?: string | null) => void;
 
   // Actions - UI
   setSidebarPanel: (panel: SidebarPanel) => void;
@@ -112,6 +113,8 @@ interface EditorState {
   pushHistory: () => void;
   isDirty: boolean;
   setDirty: (dirty: boolean) => void;
+  setTemplateMetadata: (name: string | null, description: string | null) => void;
+  resetEditor: () => void;
 }
 
 function createDefaultPage(label: string, isLocked = false): BookPage {
@@ -124,34 +127,12 @@ function createDefaultPage(label: string, isLocked = false): BookPage {
   };
 }
 
-function createInitialSpreads(): BookSpread[] {
-  return [
-    {
-      id: uuidv4(),
-      leftPage: { ...createDefaultPage("Cover"), background: "#9f2e2b", isLocked: true },
-      rightPage: createDefaultPage("Page 1"),
-    },
-    {
-      id: uuidv4(),
-      leftPage: createDefaultPage("Page 2"),
-      rightPage: createDefaultPage("Page 3"),
-    },
-    {
-      id: uuidv4(),
-      leftPage: createDefaultPage("Page 4"),
-      rightPage: createDefaultPage("Page 5"),
-    },
-    {
-      id: uuidv4(),
-      leftPage: createDefaultPage("Page 6"),
-      rightPage: createDefaultPage("Page 7"),
-    },
-    {
-      id: uuidv4(),
-      leftPage: createDefaultPage("Page 8"),
-      rightPage: createDefaultPage("Page 9"),
-    },
-  ];
+function createDefaultSpread(): BookSpread {
+  return {
+    id: uuidv4(),
+    leftPage: createDefaultPage("Left Page"),
+    rightPage: createDefaultPage("Right Page"),
+  };
 }
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -159,6 +140,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   currentSpreadIndex: 0,
   templateLoaded: false,
   activeTemplateName: null,
+  templateDescription: null,
   isAdmin: false,
   isPreviewMode: false,
   selectedElementId: null,
@@ -173,7 +155,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setDirty: (dirty) => set({ isDirty: dirty }),
 
   // Navigation
-  setCurrentSpread: (index) => set({ currentSpreadIndex: index, selectedElementId: null, isDirty: true }),
+  setCurrentSpread: (index, skipDirty = false) => set((s) => ({ 
+    currentSpreadIndex: index, 
+    selectedElementId: null, 
+    isDirty: skipDirty ? s.isDirty : true 
+  })),
   nextSpread: () => {
     const { currentSpreadIndex, spreads } = get();
     if (currentSpreadIndex < spreads.length - 1) {
@@ -336,18 +322,26 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     });
   },
 
-  loadTemplate: (spreads, name) => {
+  loadTemplate: (spreads: BookSpread[], name: string, description?: string | null) => {
     set({
       spreads: JSON.parse(JSON.stringify(spreads)),
       currentSpreadIndex: 0,
       templateLoaded: true,
       activeTemplateName: name,
+      templateDescription: description || null,
       selectedElementId: null,
       history: [],
       historyIndex: -1,
+      isDirty: false,
       activeSidebarPanel: "layouts",
     });
   },
+
+  setTemplateMetadata: (name: string | null, description: string | null) => set({ 
+    activeTemplateName: name, 
+    templateDescription: description, 
+    isDirty: true 
+  }),
 
   // UI
   setSidebarPanel: (panel) => set((s) => ({ activeSidebarPanel: s.activeSidebarPanel === panel ? null : panel })),
@@ -380,18 +374,32 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       currentSpreadIndex: entry.currentSpreadIndex,
       historyIndex: historyIndex - 1,
       selectedElementId: null,
+      isDirty: true,
     });
   },
 
   redo: () => {
     const { history, historyIndex } = get();
     if (historyIndex >= history.length - 1) return;
-    const entry = history[historyIndex + 1];
+    const nextIndex = historyIndex + 1;
+    const entry = history[nextIndex];
     set({
       spreads: JSON.parse(JSON.stringify(entry.spreads)),
       currentSpreadIndex: entry.currentSpreadIndex,
-      historyIndex: historyIndex + 1,
+      historyIndex: nextIndex,
       selectedElementId: null,
+      isDirty: true,
     });
   },
+
+  resetEditor: () => set({
+    spreads: [createDefaultSpread()],
+    currentSpreadIndex: 0,
+    activeSidebarPanel: "layouts",
+    activeTemplateName: null,
+    selectedElementId: null,
+    history: [],
+    historyIndex: -1,
+    isDirty: false, // Reset should be clean
+  }),
 }));

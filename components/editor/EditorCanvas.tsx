@@ -2,11 +2,13 @@
 
 import { useRef, useEffect, useState, useCallback } from "react";
 import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group, Line } from "react-konva";
+import { Html } from "react-konva-utils";
 import { useEditorStore, EditorElement, BookPage } from "@/store/editor-store";
 import Konva from "konva";
 import { PAGE_LAYOUTS } from "@/lib/layouts";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { EditorPageTools } from "./EditorPageTools";
+import { toast } from "sonner";
 
 const PAGE_WIDTH = 400;
 const PAGE_HEIGHT = 550;
@@ -29,6 +31,8 @@ function PageElement({
   const shapeRef = useRef<any>(null);
   const trRef = useRef<Konva.Transformer>(null);
   const updateElement = useEditorStore((s) => s.updateElement);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(el.text || "");
 
   useEffect(() => {
     if (isSelected && trRef.current && shapeRef.current) {
@@ -90,11 +94,10 @@ function PageElement({
             padding={8}
             onDblClick={() => {
               if (!canInteract) return;
-              const newText = prompt("Edit text:", el.text || "Enter text");
-              if (newText !== null) {
-                updateElement(pageId, el.id, { text: newText });
-              }
+              setIsEditing(true);
+              setEditValue(el.text || "");
             }}
+            visible={!isEditing}
           />
         );
 
@@ -174,7 +177,7 @@ function PageElement({
   return (
     <>
       {renderElement()}
-      {isSelected && (
+      {isSelected && !isEditing && (
         <Transformer
           ref={trRef}
           boundBoxFunc={(oldBox, newBox) => {
@@ -187,7 +190,55 @@ function PageElement({
           borderStrokeWidth={1.5}
           anchorStroke="#3b82f6"
           anchorFill="#ffffff"
+          rotateEnabled={!el.isLocked}
         />
+      )}
+      {isEditing && (
+         <Group
+            x={el.x}
+            y={el.y}
+            width={el.width}
+            height={el.height}
+            rotation={el.rotation}
+         >
+            <Html>
+               <textarea
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  onBlur={() => {
+                     setIsEditing(false);
+                     updateElement(pageId, el.id, { text: editValue });
+                  }}
+                  autoFocus
+                  style={{
+                     width: `${el.width}px`,
+                     height: `${el.height}px`,
+                     fontSize: `${el.fontSize || 18}px`,
+                     fontFamily: el.fontFamily || "Arial",
+                     color: el.fill || "#000000",
+                     textAlign: (el.align as any) || "left",
+                     background: "white",
+                     border: "2px solid #3b82f6",
+                     padding: "4px",
+                     resize: "none",
+                     overflow: "hidden",
+                     outline: "none",
+                     boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                  }}
+                  onKeyDown={(e) => {
+                     if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        setIsEditing(false);
+                        updateElement(pageId, el.id, { text: editValue });
+                     }
+                     if (e.key === "Escape") {
+                        setIsEditing(false);
+                        setEditValue(el.text || "");
+                     }
+                  }}
+               />
+            </Html>
+         </Group>
       )}
     </>
   );
@@ -400,18 +451,23 @@ export function EditorCanvas() {
       const files = Array.from(e.dataTransfer.files);
       const imageFiles = files.filter((f) => f.type.startsWith("image/"));
 
-      imageFiles.forEach((file) => {
-        const url = URL.createObjectURL(file);
-        addElement(targetPage!.id, {
-          type: "image",
-          x: 50 + Math.random() * 100,
-          y: 50 + Math.random() * 100,
-          width: 200,
-          height: 150,
-          rotation: 0,
-          src: url,
+      if (imageFiles.length > 0) {
+        toast.info("Please use the 'Images' panel on the left to upload photos for permanent saving.");
+        
+        // Optional: keep temporary preview but warn
+        imageFiles.forEach((file) => {
+          const url = URL.createObjectURL(file);
+          addElement(targetPage!.id, {
+            type: "image",
+            x: 50 + Math.random() * 100,
+            y: 50 + Math.random() * 100,
+            width: 200,
+            height: 150,
+            rotation: 0,
+            src: url,
+          });
         });
-      });
+      }
     },
     [currentSpread, scale, containerSize.width, addElement, applyLayout]
   );
