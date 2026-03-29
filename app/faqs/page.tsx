@@ -7,6 +7,7 @@ import { ChevronDown, ArrowUpRight, Search, Sparkles } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthModal } from "@/hooks/useAuthModal";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 gsap.registerPlugin(ScrollTrigger);
 

@@ -69,9 +69,9 @@ export function EditorElementToolbar() {
   };
 
   const handleDuplicate = () => {
+    const { id, ...elementWithoutId } = element;
     addElement(pageId, {
-      ...element,
-      id: crypto.randomUUID(),
+      ...elementWithoutId,
       x: element.x + 20,
       y: element.y + 20,
     });

@@ -14,6 +14,7 @@ export interface EditorElement {
   height: number;
   rotation: number;
   isLocked?: boolean;
+  opacity?: number;
   // Image-specific
   src?: string;
   // Text-specific

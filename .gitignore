@@ -53,3 +53,12 @@ next-env.d.ts
 *.bak
 /public/assets/*.pdf
 /public/assets/*.backup
+
+# Large documentation folders
+"bacchanal doc/"
+"bacchanal doc.zip"
+*.psd
+*.zip
+*.rar
+*.zip
+*.rar
