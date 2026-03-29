@@ -44,3 +44,12 @@ data.txt
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# documents & downloads
+*.pdf
+*.doc
+*.docx
+*.docx
+*.bak
+/public/assets/*.pdf
+/public/assets/*.backup
