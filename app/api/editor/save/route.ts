@@ -17,21 +17,42 @@ export async function POST(req: NextRequest) {
 
     const userId = session?.user?.id || session?.user?.email || "anonymous-dev-user";
     const body = await req.json();
-    const { isAdmin, spreads, activeTemplateName, templateDescription, currentSpreadIndex } = body;
+    const { isAdmin, activeTemplateId, spreads, activeTemplateName, templateDescription, templateCountry, templateYear, currentSpreadIndex } = body;
     const finalName = (activeTemplateName && activeTemplateName !== "undefined") ? activeTemplateName : "New Template";
     const finalDesc = (templateDescription && templateDescription !== "undefined") ? templateDescription : "Custom template created via editor";
+    const finalCountry = templateCountry || "Unknown";
+    const finalYear = templateYear || "2026";
 
     const db = await getDatabase();
+    
+    // Check if user is actually an admin from session, not just request body
+    const isUserAdmin = session?.user?.isAdmin || (process.env.NODE_ENV === "development");
 
-    if (isAdmin) {
+    if (isUserAdmin && isAdmin) {
       // Save to global templates
       const templatesCollection = db.collection("global_templates");
-      await templatesCollection.updateOne(
-        { templateName: finalName },
+      
+      let query: any = { templateName: finalName };
+      
+      // If we have an ID, use it for precision and to allow renaming
+      if (activeTemplateId && activeTemplateId !== "undefined") {
+        try {
+          const { ObjectId } = await import('mongodb');
+          query = { _id: new ObjectId(activeTemplateId) };
+        } catch (e) {
+          // If ID is not a valid ObjectId (e.g. hardcoded string), fallback to name
+          query = { templateName: finalName };
+        }
+      }
+
+      const result = await templatesCollection.updateOne(
+        query,
         {
           $set: {
             templateName: finalName,
             description: finalDesc,
+            country: finalCountry,
+            year: finalYear,
             spreads: spreads || [],
             currentSpreadIndex: currentSpreadIndex || 0,
             updatedAt: new Date(),
@@ -40,14 +61,15 @@ export async function POST(req: NextRequest) {
           $setOnInsert: {
             createdAt: new Date(),
             thumbnail: "/img/templates/bacchanal-classic.jpg",
-            country: "Unknown",
-            year: "2026",
           },
         },
         { upsert: true }
       );
 
-      return NextResponse.json({ message: "Template saved successfully!" }, { status: 200 });
+      return NextResponse.json({ 
+        message: "Template saved successfully!", 
+        templateId: result.upsertedId ? result.upsertedId.toString() : (query._id ? query._id.toString() : null)
+      }, { status: 200 });
     } else {
       // Save to user books
       const userBooksCollection = db.collection("user_books");

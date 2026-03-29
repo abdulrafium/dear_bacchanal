@@ -80,22 +80,26 @@ function PageElement({
     onTransformEnd: handleTransformEnd,
   };
 
+  const previewElement = useEditorStore((s) => s.previewElement);
+  const displayEl = previewElement?.id === el.id ? { ...el, ...previewElement.updates } : el;
+
   const renderElement = () => {
-    switch (el.type) {
+    switch (displayEl.type) {
       case "text":
         return (
           <Text
             {...commonProps}
-            text={el.text || "Enter text"}
-            fontSize={el.fontSize || 18}
-            fontFamily={el.fontFamily || "Arial"}
-            fill={el.fill || "#000000"}
-            align={el.align || "left"}
+            text={displayEl.text || "Enter text"}
+            fontSize={displayEl.fontSize || 18}
+            fontFamily={displayEl.fontFamily || "Arial"}
+            fill={displayEl.fill || "#000000"}
+            align={displayEl.align || "left"}
+            fontStyle={displayEl.fontStyle || "normal"}
             padding={8}
             onDblClick={() => {
               if (!canInteract) return;
               setIsEditing(true);
-              setEditValue(el.text || "");
+              setEditValue(displayEl.text || "");
             }}
             visible={!isEditing}
           />
@@ -184,13 +188,14 @@ function PageElement({
             if (newBox.width < 20 || newBox.height < 20) return oldBox;
             return newBox;
           }}
-          anchorSize={8}
-          anchorCornerRadius={2}
+          anchorSize={typeof window !== 'undefined' && window.innerWidth < 768 ? 16 : 10}
+          anchorCornerRadius={4}
           borderStroke="#3b82f6"
-          borderStrokeWidth={1.5}
+          borderStrokeWidth={2}
           anchorStroke="#3b82f6"
           anchorFill="#ffffff"
           rotateEnabled={!el.isLocked}
+          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right', 'top-center', 'bottom-center']}
         />
       )}
       {isEditing && (
@@ -217,13 +222,18 @@ function PageElement({
                      fontFamily: el.fontFamily || "Arial",
                      color: el.fill || "#000000",
                      textAlign: (el.align as any) || "left",
-                     background: "white",
+                     fontWeight: el.fontStyle?.includes("bold") ? "bold" : "normal",
+                     textDecoration: el.fontStyle?.includes("underline") ? "underline" : "none",
+                     background: (el.fill?.toLowerCase() === "#ffffff" || el.fill?.toLowerCase() === "white") ? "#1a1a1a" : "white",
                      border: "2px solid #3b82f6",
+                     borderRadius: "4px",
                      padding: "4px",
                      resize: "none",
                      overflow: "hidden",
                      outline: "none",
-                     boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+                     boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1)",
+                     caretColor: el.fill || "#000000",
+                     zIndex: 1000,
                   }}
                   onKeyDown={(e) => {
                      if (e.key === "Enter" && !e.shiftKey) {
@@ -347,7 +357,6 @@ export function EditorCanvas() {
   const prevSpread = useEditorStore((s) => s.prevSpread);
   const isPreviewMode = useEditorStore((s) => s.isPreviewMode);
   const activeTemplateName = useEditorStore((s) => s.activeTemplateName);
-
   const templateLoaded = useEditorStore((s) => s.templateLoaded);
 
   const currentSpread = spreads[currentSpreadIndex];
@@ -367,26 +376,43 @@ export function EditorCanvas() {
     return () => ro.disconnect();
   }, []);
 
-  const totalWidth = PAGE_WIDTH * 2 + 8; // 8px spine
+  const viewMode = useEditorStore((s) => s.viewMode);
+  const setViewMode = useEditorStore((s) => s.setViewMode);
+  const [mobilePage, setMobilePage] = useState<"left" | "right">("left");
+
+  useEffect(() => {
+    const checkWidth = () => {
+      if (window.innerWidth < 1024) {
+        if (viewMode !== "single") setViewMode("single");
+      } else {
+        if (viewMode !== "spread") setViewMode("spread");
+      }
+    };
+    
+    checkWidth();
+    window.addEventListener('resize', checkWidth);
+    return () => window.removeEventListener('resize', checkWidth);
+  }, [viewMode, setViewMode]);
+
+  const isSingle = viewMode === "single";
+  const totalWidth = isSingle ? PAGE_WIDTH : (PAGE_WIDTH * 2 + 8);
   const totalHeight = PAGE_HEIGHT;
 
-  // Auto-calculate scale to fit container if on mobile or if zoom is default
   const [fitScale, setFitScale] = useState(1);
   
   useEffect(() => {
     if (containerSize.width > 0 && containerSize.height > 0) {
-      const padding = 40;
+      const padding = isSingle ? 20 : 40;
       const s = Math.min(
         (containerSize.width - padding) / totalWidth,
         (containerSize.height - padding) / totalHeight
       );
       setFitScale(s);
     }
-  }, [containerSize, totalWidth, totalHeight]);
+  }, [containerSize, totalWidth, totalHeight, isSingle]);
 
-  // Use either manual zoom (desktop) or auto-calculated fitScale (mobile/default)
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-  const scale = isMobile ? fitScale : (zoom / 100);
+  const scale = (isMobile || isSingle) ? fitScale : (zoom / 100);
   
   const stageWidth = totalWidth * scale;
   const stageHeight = totalHeight * scale;
@@ -402,7 +428,6 @@ export function EditorCanvas() {
     }
   };
 
-  // Handle drops (images or layouts)
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -411,26 +436,28 @@ export function EditorCanvas() {
       const stageEl = containerRef.current;
       if (!stageEl) return;
 
-      // Determine drop target (left or right page)
       const rect = stageEl.getBoundingClientRect();
       const dropX = e.clientX - rect.left;
       
-      const totalWidth = PAGE_WIDTH * 2 + 8;
-      const stageWidth = totalWidth * scale;
-      const stageX = Math.max(0, (containerSize.width - stageWidth) / 2);
+      const currentTotalWidth = isSingle ? PAGE_WIDTH : (PAGE_WIDTH * 2 + 8);
+      const sWidth = currentTotalWidth * scale;
+      const sX = Math.max(0, (containerSize.width - sWidth) / 2);
       
-      const dropPosInStage = dropX - stageX;
+      const dropPosInStage = dropX - sX;
       let targetPage = null;
 
-      if (dropPosInStage >= 0 && dropPosInStage <= (PAGE_WIDTH * scale)) {
-        if (!currentSpread.leftPage.isLocked) targetPage = currentSpread.leftPage;
-      } else if (dropPosInStage > (PAGE_WIDTH * scale + 8 * scale) && dropPosInStage <= stageWidth) {
-        if (!currentSpread.rightPage.isLocked) targetPage = currentSpread.rightPage;
+      if (isSingle) {
+        targetPage = mobilePage === "left" ? currentSpread.leftPage : currentSpread.rightPage;
+      } else {
+        if (dropPosInStage >= 0 && dropPosInStage <= (PAGE_WIDTH * scale)) {
+          targetPage = currentSpread.leftPage;
+        } else if (dropPosInStage > (PAGE_WIDTH * scale + 8 * scale) && dropPosInStage <= sWidth) {
+          targetPage = currentSpread.rightPage;
+        }
       }
 
-      if (!targetPage) return; // Drop on locked page or outside page bounds
+      if (!targetPage || targetPage.isLocked) return;
 
-      // 1. Check if it's a layout drop
       const layoutId = e.dataTransfer.getData("application/layout-id");
       if (layoutId) {
         const layout = PAGE_LAYOUTS.find((l) => l.id === layoutId);
@@ -447,14 +474,11 @@ export function EditorCanvas() {
         return;
       }
 
-      // 2. Check if it's an image file drop
       const files = Array.from(e.dataTransfer.files);
       const imageFiles = files.filter((f) => f.type.startsWith("image/"));
 
       if (imageFiles.length > 0) {
-        toast.info("Please use the 'Images' panel on the left to upload photos for permanent saving.");
-        
-        // Optional: keep temporary preview but warn
+        toast.info("Use the 'Images' panel to upload photos.");
         imageFiles.forEach((file) => {
           const url = URL.createObjectURL(file);
           addElement(targetPage!.id, {
@@ -469,23 +493,18 @@ export function EditorCanvas() {
         });
       }
     },
-    [currentSpread, scale, containerSize.width, addElement, applyLayout]
+    [currentSpread, scale, containerSize.width, addElement, applyLayout, isSingle, mobilePage]
   );
 
-  // Show empty state if no template loaded
   if (!templateLoaded || !currentSpread) {
     return (
       <div ref={containerRef} className="w-full h-full bg-[#e8e8e8] flex items-center justify-center">
         <div className="text-center max-w-md px-8">
-          <div className="w-20 h-20 rounded-2xl bg-white shadow-lg flex items-center justify-center mx-auto mb-6">
-            <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-            </svg>
-          </div>
-          <h3 className="text-xl font-bold text-gray-700 mb-2">Select a Template</h3>
-          <p className="text-gray-400 text-sm leading-relaxed">
-            Choose a book template from the <strong>Templates</strong> panel on the left to start editing your carnival memory book.
-          </p>
+           <div className="w-20 h-20 rounded-2xl bg-white shadow-lg flex items-center justify-center mx-auto mb-6">
+             <LayoutGrid className="w-10 h-10 text-gray-300" />
+           </div>
+           <h3 className="text-xl font-bold text-gray-700 mb-2">Select a Template</h3>
+           <p className="text-gray-400 text-sm">Choose a book template from the panel on the left.</p>
         </div>
       </div>
     );
@@ -494,130 +513,122 @@ export function EditorCanvas() {
   return (
     <div
       ref={containerRef}
-      className="w-full h-full bg-[#e8e8e8] overflow-auto relative"
+      className="w-full h-full bg-[#e8e8e8] overflow-auto relative flex flex-col"
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleDrop}
     >
-      {/* Bleed warning - only in edit mode */}
-      {!isPreviewMode && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
-          <div className="bg-[#2d2d2d] text-white text-xs px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
-            <span className="w-2 h-2 bg-yellow-400 rounded-full" />
-            Text in this highlighted area may be cut off in print.
-          </div>
+      {isSingle && (
+        <div className="flex justify-center gap-2 p-3 bg-white/40 backdrop-blur-sm z-20">
+          <button 
+            onClick={() => setMobilePage("left")}
+            className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${mobilePage === "left" ? "bg-[#2d2d2d] text-white shadow-lg" : "bg-white text-gray-500"}`}
+          >
+            Left Page
+          </button>
+          <button 
+            onClick={() => setMobilePage("right")}
+            className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${mobilePage === "right" ? "bg-[#2d2d2d] text-white shadow-lg" : "bg-white text-gray-500"}`}
+          >
+            Right Page
+          </button>
         </div>
       )}
 
-      {/* Preview mode large navigation arrows - smaller on mobile */}
-      {isPreviewMode && (
-        <>
-          <button
-            onClick={prevSpread}
-            disabled={currentSpreadIndex === 0}
-            className="absolute left-2 md:left-10 top-1/2 -translate-y-1/2 z-20 text-gray-300 hover:text-gray-600 disabled:opacity-0 transition-opacity"
-          >
-            <ChevronLeft className="w-12 h-12 md:w-24 md:h-24" />
-          </button>
-          
-          <button
-            onClick={nextSpread}
-            disabled={currentSpreadIndex === spreads.length - 1}
-            className="absolute right-2 md:right-10 top-1/2 -translate-y-1/2 z-20 text-gray-300 hover:text-gray-600 disabled:opacity-0 transition-opacity"
-          >
-            <ChevronRight className="w-12 h-12 md:w-24 md:h-24" />
-          </button>
-        </>
-      )}
+      <div className="flex-1 relative overflow-hidden">
+        {!isPreviewMode && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+            <div className="bg-[#2d2d2d] text-white text-[10px] sm:text-xs px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
+              <span className="w-2 h-2 bg-yellow-400 rounded-full" />
+              Keep content within safe margins.
+            </div>
+          </div>
+        )}
 
-      <div
-        style={{
-          position: "absolute",
-          left: stageX,
-          top: stageY,
-          width: stageWidth,
-          height: stageHeight,
-        }}
-      >
-        <Stage
-          width={stageWidth}
-          height={stageHeight}
-          scaleX={scale}
-          scaleY={scale}
-          onClick={handleStageClick}
+        {isPreviewMode && (
+          <>
+            <button
+              onClick={prevSpread}
+              disabled={currentSpreadIndex === 0}
+              className="absolute left-2 md:left-5 top-1/2 -translate-y-1/2 z-20 text-gray-300 hover:text-gray-600 disabled:opacity-0"
+            >
+              <ChevronLeft className="w-12 h-12 sm:w-20 sm:h-20" />
+            </button>
+            <button
+              onClick={nextSpread}
+              disabled={currentSpreadIndex === spreads.length - 1}
+              className="absolute right-2 md:right-5 top-1/2 -translate-y-1/2 z-20 text-gray-300 hover:text-gray-600 disabled:opacity-0"
+            >
+              <ChevronRight className="w-12 h-12 sm:w-20 sm:h-20" />
+            </button>
+          </>
+        )}
+
+        <div
+          style={{
+            position: "absolute",
+            left: stageX,
+            top: stageY,
+            width: stageWidth,
+            height: stageHeight,
+          }}
         >
-          <Layer>
-            {/* Left Page */}
-            <PageCanvas
-              page={currentSpread.leftPage}
-              offsetX={0}
-              isLocked={currentSpread.leftPage.isLocked}
-            />
+          <Stage
+            ref={(ref) => useEditorStore.getState().setStageRef(ref)}
+            width={stageWidth}
+            height={stageHeight}
+            scaleX={scale}
+            scaleY={scale}
+            onClick={handleStageClick}
+          >
+            <Layer>
+              {isSingle ? (
+                <PageCanvas
+                  page={mobilePage === "left" ? currentSpread.leftPage : currentSpread.rightPage}
+                  offsetX={0}
+                  isLocked={mobilePage === "left" ? currentSpread.leftPage.isLocked : currentSpread.rightPage.isLocked}
+                />
+              ) : (
+                <>
+                  <PageCanvas page={currentSpread.leftPage} offsetX={0} isLocked={currentSpread.leftPage.isLocked} />
+                  <Group x={PAGE_WIDTH} y={0}>
+                    <Rect width={8} height={PAGE_HEIGHT} fillLinearGradientStartPoint={{ x: 0, y: 0 }} fillLinearGradientEndPoint={{ x: 8, y: 0 }} fillLinearGradientColorStops={[0, "rgba(0,0,0,0.15)", 0.5, "rgba(0,0,0,0.05)", 1, "rgba(0,0,0,0.15)"]} />
+                  </Group>
+                  <PageCanvas page={currentSpread.rightPage} offsetX={PAGE_WIDTH + 8} isLocked={currentSpread.rightPage.isLocked} />
+                </>
+              )}
+            </Layer>
+          </Stage>
 
-            {/* Spine graphic (creases + text) */}
-            <Group x={PAGE_WIDTH} y={0}>
-              <Rect
-                x={0}
-                y={0}
-                width={8}
-                height={PAGE_HEIGHT}
-                fillLinearGradientStartPoint={{ x: 0, y: 0 }}
-                fillLinearGradientEndPoint={{ x: 8, y: 0 }}
-                fillLinearGradientColorStops={[
-                  0, "rgba(0,0,0,0.15)",
-                  0.5, "rgba(0,0,0,0.05)",
-                  1, "rgba(0,0,0,0.15)",
-                ]}
-              />
-              {/* Crease Lines */}
-              <Line
-                points={[1.5, 0, 1.5, PAGE_HEIGHT]}
-                stroke="rgba(0,0,0,0.15)"
-                strokeWidth={0.5}
-              />
-              <Line
-                points={[6.5, 0, 6.5, PAGE_HEIGHT]}
-                stroke="rgba(0,0,0,0.15)"
-                strokeWidth={0.5}
-              />
-              {/* Spine Text */}
-              <Text
-                x={4}
-                y={PAGE_HEIGHT / 2}
-                text={activeTemplateName?.toUpperCase() || "DEAR BACCHANAL"}
-                fontSize={4}
-                fontFamily="serif"
-                fill="rgba(255,255,255,0.8)"
-                rotation={90}
-                align="center"
-                verticalAlign="middle"
-                offsetX={activeTemplateName ? (activeTemplateName.length * 2) / 2 : 25} // Approximate centering
-                offsetY={0}
-              />
-            </Group>
+          {!isPreviewMode && (
+            <div className="absolute top-0 w-full pointer-events-none" style={{ height: stageHeight }}>
+              {(viewMode === "spread" || mobilePage === "left") && !currentSpread.leftPage.isLocked && (
+                <div className="pointer-events-auto contents">
+                  <EditorPageTools pageId={currentSpread.leftPage.id} align={isSingle ? "center" : "left"} />
+                </div>
+              )}
+              {(viewMode === "spread" || mobilePage === "right") && !currentSpread.rightPage.isLocked && (
+                <div className="pointer-events-auto contents">
+                  <EditorPageTools pageId={currentSpread.rightPage.id} align={isSingle ? "center" : "right"} />
+                </div>
+              )}
+            </div>
+          )}
 
-            {/* Right Page */}
-            <PageCanvas
-              page={currentSpread.rightPage}
-              offsetX={PAGE_WIDTH + 8}
-              isLocked={currentSpread.rightPage.isLocked}
-            />
-          </Layer>
-        </Stage>
-
-        {!isPreviewMode && !currentSpread.leftPage.isLocked && (
-          <EditorPageTools pageId={currentSpread.leftPage.id} align="left" />
-        )}
-        {!isPreviewMode && !currentSpread.rightPage.isLocked && (
-          <EditorPageTools pageId={currentSpread.rightPage.id} align="right" />
-        )}
-
-        {/* Page Labels underneath */}
-        <div className="flex w-full mt-4 text-[#2d2d2d] font-medium text-sm">
-          <div className="flex-1 text-center">{currentSpread.leftPage.label}</div>
-          <div className="w-[8px]" />
-          <div className="flex-1 text-center">{currentSpread.rightPage.label}</div>
+          <div className="flex w-full mt-4 text-[#2d2d2d] font-bold text-[10px] uppercase tracking-widest opacity-40">
+            {isSingle ? (
+              <div className="flex-1 text-center">{mobilePage === "left" ? currentSpread.leftPage.label : currentSpread.rightPage.label}</div>
+            ) : (
+              <>
+                <div className="flex-1 text-center">{currentSpread.leftPage.label}</div>
+                <div className="w-[8px]" />
+                <div className="flex-1 text-center">{currentSpread.rightPage.label}</div>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
   );
 }
+
+import { LayoutGrid } from "lucide-react";

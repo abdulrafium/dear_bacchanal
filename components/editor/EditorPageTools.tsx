@@ -11,13 +11,14 @@ const tools = [
   { id: "ellipse" as const, label: "Ellipse", icon: Circle },
 ];
 
-export function EditorPageTools({ pageId, align }: { pageId: string, align: "left" | "right" }) {
+export function EditorPageTools({ pageId, align }: { pageId: string, align: "left" | "right" | "center" }) {
   const activeRightTool = useEditorStore((s) => s.activeRightTool);
   const setRightTool = useEditorStore((s) => s.setRightTool);
   const addElement = useEditorStore((s) => s.addElement);
   const zoom = useEditorStore((s) => s.zoom);
+  const viewMode = useEditorStore((s) => s.viewMode);
   
-  const scale = zoom / 100;
+  const scale = viewMode === "single" ? 1 : (zoom / 100);
 
   const handleToolClick = (toolId: typeof tools[number]["id"]) => {
     setRightTool(toolId);
@@ -70,7 +71,6 @@ export function EditorPageTools({ pageId, align }: { pageId: string, align: "lef
 
       case "photo":
         useEditorStore.getState().setSidebarPanel("images");
-        // toast if we had it here, but we'll manually set it for now and let the panel handle it
         break;
 
       case "layout":
@@ -82,39 +82,40 @@ export function EditorPageTools({ pageId, align }: { pageId: string, align: "lef
     setTimeout(() => setRightTool(null), 300);
   };
 
+  const isCenter = align === "center";
+
   return (
     <div 
-      className={`absolute flex flex-col gap-2 z-30 top-[10%]`}
+      className={`absolute z-30 flex ${isCenter ? "flex-row top-[-70px] left-1/2 -translate-x-1/2" : "flex-col top-[10%]"} gap-2`}
       style={{
-        left: align === "left" ? 0 : "auto",
+        left: isCenter ? "50%" : align === "left" ? 0 : "auto",
         right: align === "right" ? 0 : "auto",
-        transform: `
-          ${align === "left" ? 'translateX(calc(-100% - 16px))' : 'translateX(calc(100% + 16px))'}
-          scale(${scale})
-        `,
-        transformOrigin: align === "left" ? "top right" : "top left",
+        transform: `${isCenter 
+          ? "translateX(-50%)" 
+          : align === "left" 
+            ? "translateX(calc(-100% - 16px))" 
+            : "translateX(calc(100% + 16px))"} scale(${scale})`,
+        transformOrigin: isCenter ? "center bottom" : align === "left" ? "top right" : "top left",
       }}
     >
       {tools.map(({ id, label, icon: Icon }) => (
         <button
           key={id}
           onClick={() => handleToolClick(id)}
-          className={`flex flex-col items-center justify-center gap-1 w-14 h-16 rounded-xl border transition-all duration-200 ${
+          className={`flex flex-col items-center justify-center gap-1 ${isCenter ? "w-12 h-14" : "w-14 h-16"} rounded-xl border transition-all duration-200 ${
             activeRightTool === id
-              ? "bg-white border-gray-300 shadow-md text-[#2d2d2d]"
-              : "bg-white/95 backdrop-blur border-gray-200 text-gray-400 hover:bg-white hover:text-gray-800 hover:shadow-sm"
+              ? "bg-[#2d2d2d] border-[#2d2d2d] shadow-lg text-white"
+              : "bg-white/95 backdrop-blur border-gray-200 text-gray-500 hover:bg-white hover:text-gray-800 hover:shadow-sm"
           }`}
         >
           {id === "text" ? (
-             <span className="font-serif font-black text-xl leading-none text-gray-700 group-hover:text-gray-900 mb-[2px]">A+</span>
+             <span className={`font-serif font-black ${isCenter ? "text-lg" : "text-xl"} leading-none mb-[1px] ${activeRightTool === id ? "text-white" : "text-gray-700"}`}>A+</span>
           ) : id === "photo" ? (
-             <Image className="w-[18px] h-[18px] mb-[2px] text-gray-500" strokeWidth={1.5} />
-          ) : id === "layout" ? (
-             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="mb-[2px] text-gray-500"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21v-5h5"/></svg>
+             <Image className={`${isCenter ? "w-4 h-4" : "w-[18px] h-[18px]"} mb-[2px]`} strokeWidth={1.5} />
           ) : (
-             <Icon className="w-[18px] h-[18px] mb-[2px] text-gray-500" strokeWidth={1.5} />
+             <Icon className={`${isCenter ? "w-4 h-4" : "w-[18px] h-[18px]"} mb-[2px]`} strokeWidth={1.5} />
           )}
-          <span className="text-[10px] font-medium tracking-tight">{label}</span>
+          <span className="text-[9px] font-bold tracking-tight uppercase">{label}</span>
         </button>
       ))}
     </div>

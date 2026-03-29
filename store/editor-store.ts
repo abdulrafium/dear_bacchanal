@@ -61,8 +61,11 @@ interface EditorState {
 
   // Template
   templateLoaded: boolean;
+  activeTemplateId: string | null;
   activeTemplateName: string | null;
   templateDescription: string | null;
+  templateCountry: string | null;
+  templateYear: string | null;
 
   // UI state
   isAdmin: boolean;
@@ -96,7 +99,7 @@ interface EditorState {
   duplicateSpread: (index: number) => void;
   removeSpread: (index: number) => void;
   updatePageBackground: (pageId: string, background: string) => void;
-  loadTemplate: (spreads: BookSpread[], name: string, description?: string | null) => void;
+  loadTemplate: (spreads: BookSpread[], name: string, description?: string | null, country?: string | null, year?: string | null, id?: string | null) => void;
 
   // Actions - UI
   setSidebarPanel: (panel: SidebarPanel) => void;
@@ -112,9 +115,16 @@ interface EditorState {
   redo: () => void;
   pushHistory: () => void;
   isDirty: boolean;
+  version: number;
+  previewElement: { id: string, updates: Partial<EditorElement> } | null;
+  setPreviewElement: (preview: { id: string, updates: Partial<EditorElement> } | null) => void;
   setDirty: (dirty: boolean) => void;
-  setTemplateMetadata: (name: string | null, description: string | null) => void;
+  save: () => Promise<boolean>;
+  setTemplateMetadata: (name: string | null, description: string | null, country?: string | null, year?: string | null) => void;
   resetEditor: () => void;
+  // Stage Ref for Export
+  stageRef: any;
+  setStageRef: (ref: any) => void;
 }
 
 function createDefaultPage(label: string, isLocked = false): BookPage {
@@ -139,8 +149,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   spreads: [],
   currentSpreadIndex: 0,
   templateLoaded: false,
+  activeTemplateId: null,
   activeTemplateName: null,
   templateDescription: null,
+  templateCountry: null,
+  templateYear: null,
   isAdmin: false,
   isPreviewMode: false,
   selectedElementId: null,
@@ -152,24 +165,26 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   history: [],
   historyIndex: -1,
   isDirty: false,
+  version: 0,
+  previewElement: null,
+  setPreviewElement: (preview) => set({ previewElement: preview }),
   setDirty: (dirty) => set({ isDirty: dirty }),
 
   // Navigation
-  setCurrentSpread: (index, skipDirty = false) => set((s) => ({ 
+  setCurrentSpread: (index) => set({ 
     currentSpreadIndex: index, 
     selectedElementId: null, 
-    isDirty: skipDirty ? s.isDirty : true 
-  })),
+  }),
   nextSpread: () => {
     const { currentSpreadIndex, spreads } = get();
     if (currentSpreadIndex < spreads.length - 1) {
-      set({ currentSpreadIndex: currentSpreadIndex + 1, selectedElementId: null, isDirty: true });
+      set({ currentSpreadIndex: currentSpreadIndex + 1, selectedElementId: null });
     }
   },
   prevSpread: () => {
     const { currentSpreadIndex } = get();
     if (currentSpreadIndex > 0) {
-      set({ currentSpreadIndex: currentSpreadIndex - 1, selectedElementId: null, isDirty: true });
+      set({ currentSpreadIndex: currentSpreadIndex - 1, selectedElementId: null });
     }
   },
 
@@ -322,13 +337,44 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     });
   },
 
-  loadTemplate: (spreads: BookSpread[], name: string, description?: string | null) => {
+  save: async () => {
+    const { spreads, isAdmin, activeTemplateId, activeTemplateName, templateDescription, templateCountry, templateYear, currentSpreadIndex, version: startVersion } = get();
+    try {
+      const res = await fetch("/api/editor/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ spreads, isAdmin, activeTemplateId, activeTemplateName, templateDescription, templateCountry, templateYear, currentSpreadIndex }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const state = get();
+        // Only clear dirty if version hasn't changed since we started
+        if (state.version === startVersion) {
+          set({ isDirty: false });
+        }
+        // If the server returned a new ID (for a new template), update the store
+        if (data.templateId && !state.activeTemplateId) {
+          set({ activeTemplateId: data.templateId });
+        }
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Save failed", error);
+      return false;
+    }
+  },
+
+  loadTemplate: (spreads: BookSpread[], name: string, description?: string | null, country?: string | null, year?: string | null, id?: string | null) => {
     set({
       spreads: JSON.parse(JSON.stringify(spreads)),
       currentSpreadIndex: 0,
       templateLoaded: true,
+      activeTemplateId: id || null,
       activeTemplateName: name,
       templateDescription: description || null,
+      templateCountry: country || null,
+      templateYear: year || null,
       selectedElementId: null,
       history: [],
       historyIndex: -1,
@@ -337,11 +383,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     });
   },
 
-  setTemplateMetadata: (name: string | null, description: string | null) => set({ 
+  setTemplateMetadata: (name, description, country, year) => set((s) => ({ 
     activeTemplateName: name, 
     templateDescription: description, 
-    isDirty: true 
-  }),
+    templateCountry: country !== undefined ? country : s.templateCountry,
+    templateYear: year !== undefined ? year : s.templateYear,
+    isDirty: true,
+    version: s.version + 1
+  })),
 
   // UI
   setSidebarPanel: (panel) => set((s) => ({ activeSidebarPanel: s.activeSidebarPanel === panel ? null : panel })),
@@ -362,20 +411,21 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const newHistory = state.history.slice(0, state.historyIndex + 1);
     newHistory.push(entry);
     if (newHistory.length > 50) newHistory.shift();
-    set({ history: newHistory, historyIndex: newHistory.length - 1, isDirty: true });
+    set((s) => ({ history: newHistory, historyIndex: newHistory.length - 1, isDirty: true, version: s.version + 1 }));
   },
 
   undo: () => {
     const { history, historyIndex } = get();
     if (historyIndex < 0) return;
     const entry = history[historyIndex];
-    set({
+    set((s) => ({
       spreads: JSON.parse(JSON.stringify(entry.spreads)),
       currentSpreadIndex: entry.currentSpreadIndex,
       historyIndex: historyIndex - 1,
       selectedElementId: null,
       isDirty: true,
-    });
+      version: s.version + 1,
+    }));
   },
 
   redo: () => {
@@ -383,23 +433,32 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     if (historyIndex >= history.length - 1) return;
     const nextIndex = historyIndex + 1;
     const entry = history[nextIndex];
-    set({
+    set((s) => ({
       spreads: JSON.parse(JSON.stringify(entry.spreads)),
       currentSpreadIndex: entry.currentSpreadIndex,
       historyIndex: nextIndex,
       selectedElementId: null,
       isDirty: true,
-    });
+      version: s.version + 1,
+    }));
   },
 
   resetEditor: () => set({
     spreads: [createDefaultSpread()],
     currentSpreadIndex: 0,
     activeSidebarPanel: "layouts",
+    activeTemplateId: null,
     activeTemplateName: null,
+    templateDescription: null,
+    templateCountry: null,
+    templateYear: null,
     selectedElementId: null,
     history: [],
     historyIndex: -1,
     isDirty: false, // Reset should be clean
   }),
+
+  // Stage Ref
+  stageRef: null,
+  setStageRef: (ref) => set({ stageRef: ref }),
 }));

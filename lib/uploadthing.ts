@@ -8,8 +8,8 @@ export const ourFileRouter = {
   // Image uploader for book pages
   bookImageUploader: f({
     image: {
-      maxFileSize: "16MB",
-      maxFileCount: 1,
+      maxFileSize: "32MB",
+      maxFileCount: 4,
     },
   })
     .middleware(async ({ req }) => {
@@ -33,7 +33,7 @@ export const ourFileRouter = {
   // PDF uploader for the entire book
   bookPdfUploader: f({
     pdf: {
-      maxFileSize: "32MB",
+      maxFileSize: "128MB",
       maxFileCount: 1,
     },
   })
@@ -50,8 +50,8 @@ export const ourFileRouter = {
   // Sticker uploader for global catalog
   stickerUploader: f({
     image: {
-      maxFileSize: "4MB",
-      maxFileCount: 20,
+      maxFileSize: "16MB",
+      maxFileCount: 100,
     },
   })
     .middleware(async () => {

@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
         }
 
         const baseUrl = req.headers.get("origin") || "";
-        const shareUrl = `${baseUrl}/book/${shareId}`;
+        const shareUrl = `${baseUrl}/editor/share/${shareId}`;
 
         return NextResponse.json(
             {

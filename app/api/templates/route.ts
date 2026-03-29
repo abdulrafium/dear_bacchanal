@@ -16,15 +16,25 @@ export async function GET(req: NextRequest) {
 
     const userId = session.user.id;
     const db = await getDatabase();
-    const templatesCollection = db.collection("book_templates");
+    const userBooksCollection = db.collection("user_books");
 
-    // Find all templates for this user, sorted by creation date (newest first)
-    const templates = await templatesCollection
+    // Find all user books, sorted by update date (newest first)
+    const templates = await userBooksCollection
       .find({ userId })
-      .sort({ createdAt: -1 })
+      .sort({ updatedAt: -1 })
       .toArray();
 
-    return NextResponse.json({ templates }, { status: 200 });
+    // Map the internal structure to the Template interface the frontend expects
+    const formattedTemplates = templates.map(t => ({
+      _id: t._id.toString(),
+      bookName: t.activeTemplateName || "My Carnival Book",
+      images: {}, // images are now inside spreads, but we can't easily count them here without deep parsing
+      textData: {}, // same for text
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt,
+    }));
+
+    return NextResponse.json({ templates: formattedTemplates }, { status: 200 });
   } catch (error) {
     console.error("Error fetching templates:", error);
     return NextResponse.json(

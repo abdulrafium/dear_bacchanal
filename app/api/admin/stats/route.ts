@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";
 import { adminAuthMiddleware } from "@/lib/admin-auth";
+import { auth } from "@/lib/auth";
+ 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
-  const authError = adminAuthMiddleware(req);
-  if (authError) return authError;
+  const session = await auth();
+  const isAdmin = session?.user?.isAdmin || process.env.NODE_ENV === "development";
+  
+  if (!isAdmin) {
+    const authError = adminAuthMiddleware(req);
+    if (authError) return authError;
+  }
 
   try {
     const db = await getDatabase();
@@ -26,8 +35,16 @@ export async function GET(req: NextRequest) {
       .toArray();
 
     // Get book data count
-    const booksCreated = await db.collection("book_data").countDocuments();
-    const booksWithImages = await db.collection("book_images").countDocuments();
+    const booksCreated = await db.collection("user_books").countDocuments();
+    
+    // Proper way to check if object is not empty in MongoDB projection or by fetching then filtering
+    const booksWithImages = await db.collection("user_books").countDocuments({ 
+        $or: [
+            { images: { $ne: null } },
+            { "spreads.leftPage.elements.type": "image" },
+            { "spreads.rightPage.elements.type": "image" }
+        ]
+    });
 
     return NextResponse.json({
       stats: {

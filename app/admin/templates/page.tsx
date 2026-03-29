@@ -102,19 +102,19 @@ export default function AdminTemplatesPage() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="flex justify-between items-center mb-8">
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-8">
         <div>
-          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600">
+          <h1 className="text-2xl sm:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600">
             Book Templates
           </h1>
-          <p className="text-gray-500 mt-1">Manage, create, and upload templates for the Dear Bacchanal editor</p>
+          <p className="text-gray-500 mt-1 text-sm sm:text-base">Manage, create, and upload templates for the Dear Bacchanal editor</p>
         </div>
         
-        <div className="flex gap-4">
-          <label className="bg-white border-2 border-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-50 hover:border-gray-300 transition-colors flex items-center gap-2 cursor-pointer shadow-sm">
+        <div className="flex flex-wrap gap-3 w-full sm:w-auto">
+          <label className="flex-1 sm:flex-none justify-center bg-white border-2 border-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-50 hover:border-gray-300 transition-colors flex items-center gap-2 cursor-pointer shadow-sm">
             <Upload className="w-4 h-4" />
-            Upload PDF
+            <span className="text-sm">Upload PDF</span>
             <input 
               type="file" 
               accept=".pdf" 
@@ -124,11 +124,11 @@ export default function AdminTemplatesPage() {
           </label>
           
           <Link 
-            href="/admin/templates/create"
-            className="bg-[#2d2d2d] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#404040] transition-colors flex items-center gap-2 shadow-md hover:shadow-lg"
+            href="/admin/templates/create?new=true"
+            className="flex-1 sm:flex-none justify-center bg-[#2d2d2d] text-white px-4 py-2 rounded-lg font-medium hover:bg-[#404040] transition-colors flex items-center gap-2 shadow-md hover:shadow-lg"
           >
             <Plus className="w-4 h-4" />
-            Create Template
+            <span className="text-sm">Create Template</span>
           </Link>
         </div>
       </div>
@@ -207,7 +207,7 @@ export default function AdminTemplatesPage() {
           })}
 
           <Link 
-            href="/admin/templates/create"
+            href="/admin/templates/create?new=true"
             className="border-2 border-dashed border-gray-300 rounded-xl bg-gray-50/50 flex flex-col items-center justify-center min-h-[350px] hover:border-[#2d2d2d] hover:bg-white transition-all group shadow-sm hover:shadow-xl hover:-translate-y-1 duration-300"
           >
             <div className="w-16 h-16 bg-white rounded-2xl shadow-sm flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-500 group-hover:shadow-lg group-hover:bg-[#2d2d2d]">

@@ -129,6 +129,8 @@ function ImagesPanel() {
     fetchImages();
   }, []);
   
+  const [targetSide, setTargetSide] = useState<"left" | "right">("right");
+
   const { startUpload, isUploading } = useUploadThing("bookImageUploader", {
     onClientUploadComplete: async (res) => {
       const newImages = res.map((file) => ({
@@ -165,7 +167,7 @@ function ImagesPanel() {
   };
 
   const currentSpread = spreads[currentSpreadIndex];
-  const targetPage = currentSpread && !currentSpread.rightPage.isLocked ? currentSpread.rightPage : currentSpread?.leftPage;
+  const targetPage = targetSide === "left" ? currentSpread?.leftPage : currentSpread?.rightPage;
 
   const handleImageClick = (url: string) => {
     if (targetPage && !targetPage.isLocked) {
@@ -178,6 +180,9 @@ function ImagesPanel() {
         rotation: 0,
         src: url,
       });
+      toast.success("Image placed on " + targetSide + " page");
+    } else if (targetPage?.isLocked) {
+      toast.error("That page is locked for the final template.");
     }
   };
 
@@ -200,17 +205,16 @@ function ImagesPanel() {
 
   return (
     <div className="flex flex-col h-full relative">
-      <div className="p-4 border-b border-gray-200">
-        <label className={`border-2 border-dashed border-gray-300 bg-gray-50 rounded-xl p-6 text-center hover:border-[#2d2d2d] hover:bg-gray-100 transition-colors cursor-pointer flex flex-col items-center justify-center ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div className="p-4 border-b border-gray-100 bg-white z-10">
+        <label className={`border-2 border-dashed border-gray-300 bg-gray-50 rounded-xl p-4 text-center hover:border-[#2d2d2d] hover:bg-gray-100 transition-colors cursor-pointer flex flex-col items-center justify-center ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
           {isUploading ? (
-            <Loader2 className="w-6 h-6 text-[#2d2d2d] animate-spin mb-2" />
+            <Loader2 className="w-5 h-5 text-[#2d2d2d] animate-spin mb-2" />
           ) : (
-            <Image className="w-6 h-6 text-gray-400 mb-2" />
+            <Image className="w-5 h-5 text-gray-400 mb-2" />
           )}
-          <span className="text-sm font-medium text-gray-600 mb-1">
+          <span className="text-[11px] font-bold text-gray-600 uppercase tracking-tight">
             {isUploading ? 'Uploading...' : 'Upload Images'}
           </span>
-          <span className="text-xs text-gray-400">Click to browse files</span>
           <input 
             type="file" 
             accept="image/*" 
@@ -222,7 +226,25 @@ function ImagesPanel() {
         </label>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="px-5 py-3 border-b border-gray-100 space-y-3">
+          <label className="text-[9px] font-extrabold text-gray-400 uppercase tracking-widest block">Placement Target</label>
+          <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-50">
+            <button 
+              onClick={() => setTargetSide("left")}
+              className={`flex-1 py-1.5 text-[9px] font-black rounded-lg transition-all ${targetSide === "left" ? "bg-white text-black shadow-sm ring-1 ring-gray-100" : "text-gray-400 hover:text-gray-600"}`}
+            >
+              LEFT PAGE
+            </button>
+            <button 
+              onClick={() => setTargetSide("right")}
+              className={`flex-1 py-1.5 text-[9px] font-black rounded-lg transition-all ${targetSide === "right" ? "bg-white text-black shadow-sm ring-1 ring-gray-100" : "text-gray-400 hover:text-gray-600"}`}
+            >
+              RIGHT PAGE
+            </button>
+          </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-5">
         {loading ? (
           <div className="flex flex-col items-center justify-center py-20 opacity-40">
             <Loader2 className="w-8 h-8 animate-spin mb-2" />
@@ -275,6 +297,67 @@ function TemplatesPanel() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [hardTemplates] = useState(getAvailableTemplates());
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState("");
+  const [editingCountry, setEditingCountry] = useState("");
+  const [editingYear, setEditingYear] = useState("");
+  const setTemplateMetadata = useEditorStore((s) => s.setTemplateMetadata);
+  const templateDescription = useEditorStore((s) => s.templateDescription);
+  const templateCountry = useEditorStore((s) => s.templateCountry);
+  const templateYear = useEditorStore((s) => s.templateYear);
+
+  const handleRename = async (template: any) => {
+    if (editingValue === template.templateName) {
+      setEditingId(null);
+      return;
+    }
+
+    setTemplates(prev => prev.map(t => t._id === template._id ? { ...t, templateName: editingValue } : t));
+    
+    if (activeTemplateName === template.templateName) {
+      setTemplateMetadata(editingValue, templateDescription, templateCountry, templateYear);
+    }
+    
+    // Persist to DB immediately
+    try {
+       const res = await fetch("/api/admin/templates", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: template._id, templateName: editingValue })
+       });
+       if (res.ok) {
+          toast.success("Template renamed successfully");
+       }
+    } catch (e) {
+       console.error("Renaming failed", e);
+    }
+    
+    setEditingId(null);
+  };
+
+  const handleMetaRename = async (template: any) => {
+    setTemplates(prev => prev.map(t => t._id === template._id ? { ...t, country: editingCountry, year: editingYear } : t));
+    
+    if (activeTemplateName === template.templateName) {
+      setTemplateMetadata(template.templateName, templateDescription, editingCountry, editingYear);
+    }
+
+    // Persist to DB immediately
+    try {
+       const res = await fetch("/api/admin/templates", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: template._id, country: editingCountry, year: editingYear })
+       });
+       if (res.ok) {
+          toast.success("Metadata updated successfully");
+       }
+    } catch (e) {
+       console.error("Meta renaming failed", e);
+    }
+    
+    setEditingId(null);
+  };
 
   useEffect(() => {
     const fetchTemplates = async () => {
@@ -304,7 +387,13 @@ function TemplatesPanel() {
             }
           });
           
-          setTemplates(merged);
+          // Only show active templates for non-admins
+          let filtered = merged;
+          if (!isAdmin) {
+             filtered = merged.filter(t => t.isActive !== false);
+          }
+          
+          setTemplates(filtered);
         } else {
           // Fallback if API fails
           setTemplates(hardTemplates.map(ht => ({
@@ -327,6 +416,9 @@ function TemplatesPanel() {
     fetchTemplates();
   }, [hardTemplates]);
 
+  const isDirty = useEditorStore((s) => s.isDirty);
+  const save = useEditorStore((s) => s.save);
+
   const handleDeleteTemplate = async (e: React.MouseEvent, templateName: string) => {
     e.stopPropagation();
     if (!confirm(`Are you sure you want to delete "${templateName}" permanently? This cannot be undone.`)) return;
@@ -345,6 +437,18 @@ function TemplatesPanel() {
     } catch (err) {
       toast.error("Failed to delete template");
     }
+  };
+
+  const handleTemplateSelect = async (spreads: any, name: string, description?: string | null, country?: string | null, year?: string | null, id?: string | null) => {
+    if (isDirty) {
+      if (confirm("You have unsaved changes. Do you want to SAVE your work before switching? \n\nClick OK to save first.\nClick Cancel to discard changes and proceed.")) {
+        await save();
+        toast.success("Work saved. Loading new template...");
+      } else {
+        if (!confirm("Are you sure? All current changes will be lost.")) return;
+      }
+    }
+    loadTemplate(spreads, name, description, country, year, id);
   };
 
   return (
@@ -386,10 +490,75 @@ function TemplatesPanel() {
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                 <div className="absolute bottom-3 left-3 right-3">
-                  <h4 className="text-white font-bold text-lg">{template.templateName}</h4>
-                  <p className="text-white/70 text-[10px] mt-0.5">
-                    {template.country} • {template.year}
-                  </p>
+                  {isAdmin && editingId === template._id ? (
+                    <input
+                      autoFocus
+                      className="bg-white/10 text-white font-bold text-lg border-b-2 border-white/50 w-full outline-none px-1"
+                      value={editingValue}
+                      onChange={(e) => setEditingValue(e.target.value)}
+                      onBlur={() => handleRename(template)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleRename(template);
+                        if (e.key === 'Escape') setEditingId(null);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <h4 
+                      className="text-white font-bold text-lg cursor-text hover:text-white/80 transition-colors"
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        if (isAdmin) {
+                          setEditingId(template._id);
+                          setEditingValue(template.templateName);
+                        }
+                      }}
+                      title={isAdmin ? "Double click to rename" : ""}
+                    >
+                      {template.templateName}
+                    </h4>
+                  )}
+                  {isAdmin && editingId === `${template._id}_meta` ? (
+                    <div className="flex items-center gap-1 text-[10px] text-white/70 mt-0.5" onClick={e => e.stopPropagation()}>
+                       <input 
+                          autoFocus
+                          className="bg-white/10 text-white border-b border-white/30 outline-none w-16 px-1"
+                          value={editingCountry}
+                          onChange={(e) => setEditingCountry(e.target.value)}
+                          onBlur={() => handleMetaRename(template)}
+                          onKeyDown={(e) => {
+                             if (e.key === 'Enter') handleMetaRename(template);
+                             if (e.key === 'Escape') setEditingId(null);
+                          }}
+                       />
+                       <span>•</span>
+                       <input 
+                          className="bg-white/10 text-white border-b border-white/30 outline-none w-10 px-1"
+                          value={editingYear}
+                          onChange={(e) => setEditingYear(e.target.value)}
+                          onBlur={() => handleMetaRename(template)}
+                          onKeyDown={(e) => {
+                             if (e.key === 'Enter') handleMetaRename(template);
+                             if (e.key === 'Escape') setEditingId(null);
+                          }}
+                       />
+                    </div>
+                  ) : (
+                    <p 
+                      className="text-white/70 text-[10px] mt-0.5 cursor-text hover:text-white/90 transition-colors"
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        if (isAdmin) {
+                          setEditingId(`${template._id}_meta`);
+                          setEditingCountry(template.country || "Unknown");
+                          setEditingYear(template.year || "2026");
+                        }
+                      }}
+                      title={isAdmin ? "Double click to edit country/year" : ""}
+                    >
+                      {template.country} • {template.year}
+                    </p>
+                  )}
                 </div>
                  <div className="absolute top-2 right-2 flex gap-1">
                     {isAdmin && !template.isHardCoded && (
@@ -423,11 +592,7 @@ function TemplatesPanel() {
                     {template.spreads?.length || 0} spreads • {(template.spreads?.length || 0) * 2} pages
                   </span>
                   <button
-                    onClick={() => {
-                        if (confirm("Switching templates will overwrite your current book. Are you sure?")) {
-                            loadTemplate(template.spreads, template.templateName);
-                        }
-                    }}
+                    onClick={() => handleTemplateSelect(template.spreads, template.templateName, template.description, template.country, template.year, template._id)}
                     className={`text-xs font-bold px-4 py-1.5 rounded-lg transition-all ${
                       isActive
                         ? "bg-green-50 text-green-600 border border-green-200"
@@ -444,17 +609,13 @@ function TemplatesPanel() {
 
         {/* Blank template */}
         <div className="rounded-xl border-2 border-dashed border-gray-200 p-6 text-center hover:border-[#2d2d2d] transition-all cursor-pointer group"
-          onClick={() => {
-            if (confirm("Start as blank book? Your current work will be lost.")) {
-              loadTemplate([
-                {
-                  id: "blank-spread",
-                  leftPage: { id: "blank-left", label: "Cover", elements: [], background: "#ffffff", isLocked: false },
-                  rightPage: { id: "blank-right", label: "Page 1", elements: [], background: "#ffffff", isLocked: false },
-                }
-              ], "Blank Book");
+          onClick={() => handleTemplateSelect([
+            {
+              id: "blank-spread",
+              leftPage: { id: "blank-left", label: "Cover", elements: [], background: "#ffffff", isLocked: false },
+              rightPage: { id: "blank-right", label: "Page 1", elements: [], background: "#ffffff", isLocked: false },
             }
-          }}
+          ], "Untitled Book")}
         >
           <Plus className="w-8 h-8 text-gray-300 mx-auto mb-2 group-hover:text-[#2d2d2d] transition-colors" />
           <p className="text-sm font-medium text-gray-500 group-hover:text-[#2d2d2d]">Start Blank</p>
@@ -478,40 +639,94 @@ function BackgroundsPanel() {
     "#0891b2", "#2563eb", "#7c3aed", "#db2777", "#f43f5e",
   ];
 
+  const targetPage = targetSide === "left" ? currentSpread?.leftPage : currentSpread?.rightPage;
+  const currentBg = targetPage?.background || "#ffffff";
+
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex bg-gray-100 p-1 rounded-lg">
-        <button 
-          onClick={() => setTargetSide("left")}
-          className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-all ${targetSide === "left" ? "bg-white text-black shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
-        >
-          LEFT PAGE
-        </button>
-        <button 
-          onClick={() => setTargetSide("right")}
-          className={`flex-1 py-1.5 text-[10px] font-bold rounded-md transition-all ${targetSide === "right" ? "bg-white text-black shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
-        >
-          RIGHT PAGE
-        </button>
+    <div className="flex flex-col h-full bg-[#fafafa]">
+       <div className="border-b border-gray-100 px-5 py-4 bg-white shadow-sm flex-shrink-0">
+        <h3 className="text-sm font-bold text-[#2d2d2d] flex items-center gap-2">
+          <Paintbrush className="w-4 h-4 text-purple-500" />
+          Page Background
+        </h3>
+        <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider mt-1.5">Customize your spreads</p>
       </div>
 
-      <h3 className="text-sm font-medium text-gray-600">Colors</h3>
-      <div className="grid grid-cols-5 gap-2">
-        {colors.map((color) => {
-          const targetPage = targetSide === "left" ? currentSpread?.leftPage : currentSpread?.rightPage;
-          return (
-            <button
-              key={color}
-              onClick={() => {
-                if (targetPage && !targetPage.isLocked) {
-                  updatePageBackground(targetPage.id, color);
-                }
-              }}
-              className="w-full aspect-square rounded-lg border-2 border-gray-200 hover:border-[#2d2d2d] transition-all hover:scale-110"
-              style={{ backgroundColor: color }}
-             />
-          );
-        })}
+      <div className="flex-1 overflow-y-auto p-5 space-y-6">
+        <div>
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-2">Target Selection</label>
+          <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-100">
+            <button 
+              onClick={() => setTargetSide("left")}
+              className={`flex-1 py-2 text-[10px] font-black rounded-lg transition-all ${targetSide === "left" ? "bg-white text-black shadow-sm ring-1 ring-gray-100" : "text-gray-400 hover:text-gray-600"}`}
+            >
+              LEFT PAGE
+            </button>
+            <button 
+              onClick={() => setTargetSide("right")}
+              className={`flex-1 py-2 text-[10px] font-black rounded-lg transition-all ${targetSide === "right" ? "bg-white text-black shadow-sm ring-1 ring-gray-100" : "text-gray-400 hover:text-gray-600"}`}
+            >
+              RIGHT PAGE
+            </button>
+          </div>
+        </div>
+
+        {/* Custom Color Picker */}
+        <div className="space-y-3">
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Custom Color</label>
+          <div className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
+            <div className="relative w-12 h-12 rounded-xl overflow-hidden border border-gray-100 shrink-0">
+              <div className="w-full h-full shadow-inner" style={{ backgroundColor: currentBg }} />
+              <input 
+                type="color"
+                value={currentBg}
+                onChange={(e) => {
+                  if (targetPage && !targetPage.isLocked) {
+                    updatePageBackground(targetPage.id, e.target.value);
+                  }
+                }}
+                className="absolute inset-0 opacity-0 cursor-pointer scale-150"
+              />
+            </div>
+            <div className="flex-1">
+              <div className="text-[9px] font-extrabold text-[#9f2e2b] uppercase tracking-tighter mb-0.5 flex items-center gap-1">
+                 <Sparkles className="w-2 h-2" />
+                 Magic Picker
+              </div>
+              <input 
+                type="text"
+                value={currentBg.toUpperCase()}
+                onChange={(e) => {
+                    const val = e.target.value;
+                    if (/^#[0-9A-F]{6}$/i.test(val) && targetPage && !targetPage.isLocked) {
+                        updatePageBackground(targetPage.id, val);
+                    }
+                }}
+                className="text-sm font-bold text-gray-700 bg-transparent w-full focus:outline-none"
+                placeholder="#FFFFFF"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Presets */}
+        <div className="space-y-3">
+          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">Palette Presets</label>
+          <div className="grid grid-cols-5 gap-3">
+            {colors.map((color) => (
+              <button
+                key={color}
+                onClick={() => {
+                  if (targetPage && !targetPage.isLocked) {
+                    updatePageBackground(targetPage.id, color);
+                  }
+                }}
+                className={`w-full aspect-square rounded-xl border-2 transition-all hover:scale-110 active:scale-95 shadow-sm ${currentBg.toLowerCase() === color.toLowerCase() ? 'border-[#2d2d2d] ring-2 ring-[#2d2d2d]/10' : 'border-white'}`}
+                style={{ backgroundColor: color }}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -76,7 +76,7 @@ function PaymentStatusContent() {
   useEffect(() => {
     if (status === "success" || status === "canceled") {
       const timer = setTimeout(() => {
-        window.location.href = "/book?auto_ship=true";
+        window.location.href = "/editor?auto_ship=true";
       }, 3000);
       return () => clearTimeout(timer);
     }
@@ -103,10 +103,10 @@ function PaymentStatusContent() {
               Something went wrong with your payment. Please try again.
             </p>
             <button
-              onClick={() => { window.location.href = "/book"; }}
+              onClick={() => { window.location.href = "/editor"; }}
               style={{ marginTop: 20, padding: "10px 24px", background: "#fff", color: "#000", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 14 }}
             >
-              Back to Book
+              Back to Editor
             </button>
           </>
         )}

@@ -13,6 +13,9 @@ import {
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Link from "next/link";
+import { useAuth } from "@/hooks/useAuth";
+import { useAuthModal } from "@/hooks/useAuthModal";
+import { useRouter } from "next/navigation";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -20,6 +23,18 @@ const CustomizeRitual = () => {
   const heroRef = useRef<HTMLElement>(null);
   const stepsRef = useRef<HTMLDivElement>(null);
   const tipsRef = useRef<HTMLDivElement>(null);
+
+  const { isAuthenticated } = useAuth();
+  const { openModal } = useAuthModal();
+  const router = useRouter();
+
+  const handleAction = () => {
+    if (isAuthenticated) {
+      router.push("/editor");
+    } else {
+      openModal("signup");
+    }
+  };
 
   const steps = [
     {
@@ -401,17 +416,17 @@ const CustomizeRitual = () => {
 
               {/* CTAs */}
               <div className="hero-cta flex flex-col sm:flex-row items-center lg:items-start justify-center lg:justify-start gap-4">
-                <Button
-                  variant="carnival"
-                  size="xl"
-                  asChild
-                  className="hero-cta-btn text-base px-8 py-6 shadow-carnival"
-                >
-                  <Link href="/editor" className="flex items-center gap-3">
-                    Create Your Book
-                    <ArrowRight className="w-5 h-5" />
-                  </Link>
-                </Button>
+                  <Button
+                    variant="carnival"
+                    size="xl"
+                    onClick={handleAction}
+                    className="hero-cta-btn text-base px-8 py-6 shadow-carnival"
+                  >
+                    <span className="flex items-center gap-3">
+                      Create Your Book
+                      <ArrowRight className="w-5 h-5" />
+                    </span>
+                  </Button>
                 <Button
                   variant="outline"
                   size="xl"
@@ -555,11 +570,11 @@ const CustomizeRitual = () => {
             <p className="font-handwritten text-xl text-black/50 mb-6">
               Begin your transformation
             </p>
-            <Button variant="default" size="xl" asChild className="shadow-xl">
-              <Link href="/editor" className="flex items-center gap-3">
+            <Button variant="default" size="xl" onClick={handleAction} className="shadow-xl">
+              <span className="flex items-center gap-3">
                 Start The Ritual
                 <Sparkles className="w-5 h-5" />
-              </Link>
+              </span>
             </Button>
           </div>
         </div>
@@ -687,13 +702,13 @@ const CustomizeRitual = () => {
               <Button
                 variant="accent"
                 size="xl"
-                asChild
+                onClick={handleAction}
                 className="cta-button group text-lg px-10 py-7"
               >
-                <Link href="/editor" className="flex items-center gap-3">
+                <div className="flex items-center gap-3">
                   Create Your Book
                   <ArrowRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
-                </Link>
+                </div>
               </Button>
             </div>
 

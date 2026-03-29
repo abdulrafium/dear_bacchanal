@@ -43,7 +43,7 @@ export function SignInForm() {
 
       toast.success("Signed in successfully!");
       closeModal();
-      router.push("/book");
+      window.location.href = "/editor";
     } catch (error) {
       toast.error("Something went wrong. Please try again.");
     } finally {
@@ -54,8 +54,8 @@ export function SignInForm() {
   const handleGoogleSignIn = async () => {
     try {
       setIsGoogleLoading(true);
-      // Redirect to /book after Google sign-in
-      await signIn("google", { callbackUrl: "/book" });
+      // Redirect to /editor after Google sign-in
+      await signIn("google", { callbackUrl: "/editor" });
     } catch (error) {
       toast.error("Failed to sign in with Google");
       setIsGoogleLoading(false);

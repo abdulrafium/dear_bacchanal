@@ -26,6 +26,7 @@ const Navbar = () => {
     { path: "/", label: "Home" },
     { path: "/customize", label: "Customize" },
     { path: "/faqs", label: "FAQs" },
+    ...(isAuthenticated ? [{ path: "/templates", label: "My Books" }] : []),
   ];
 
   return (

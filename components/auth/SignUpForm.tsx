@@ -62,7 +62,7 @@ export function SignUpForm() {
       }
 
       closeModal();
-      router.push("/book");
+      window.location.href = "/editor";
     } catch (error) {
       toast.error("Something went wrong. Please try again.");
     } finally {
@@ -73,8 +73,8 @@ export function SignUpForm() {
   const handleGoogleSignUp = async () => {
     try {
       setIsGoogleLoading(true);
-      // Redirect to /book after Google sign-up
-      await signIn("google", { callbackUrl: "/book" });
+      // Redirect to /editor after Google sign-up
+      await signIn("google", { callbackUrl: "/editor" });
     } catch (error) {
       toast.error("Failed to sign up with Google");
       setIsGoogleLoading(false);

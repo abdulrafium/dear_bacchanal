@@ -18,7 +18,8 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const session = await auth();
-    if (!session?.user?.id && !session?.user?.email && process.env.NODE_ENV !== "development") {
+    const isAdmin = session?.user?.isAdmin || process.env.NODE_ENV === "development";
+    if (!isAdmin) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

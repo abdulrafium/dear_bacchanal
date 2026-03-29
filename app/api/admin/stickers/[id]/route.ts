@@ -10,7 +10,8 @@ export async function DELETE(
   try {
     const { id } = await params;
     const session = await auth();
-    if (!session?.user?.id && !session?.user?.email && process.env.NODE_ENV !== "development") {
+    const isAdmin = session?.user?.isAdmin || process.env.NODE_ENV === "development";
+    if (!isAdmin) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 

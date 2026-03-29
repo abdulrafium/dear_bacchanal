@@ -10,6 +10,7 @@ export async function GET(req: NextRequest) {
     const session = await auth();
     const isAdmin = req.nextUrl.searchParams.get("isAdmin") === "true";
     const templateName = req.nextUrl.searchParams.get("templateName");
+    const isNew = req.nextUrl.searchParams.get("new") === "true";
 
     if (!session?.user?.id && !session?.user?.email && process.env.NODE_ENV !== "development") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -19,39 +20,95 @@ export async function GET(req: NextRequest) {
     const db = await getDatabase();
 
     if (isAdmin) {
+      if (isNew) {
+        const { createBlankTemplate } = await import('@/lib/book-templates');
+        const blank = createBlankTemplate();
+        return NextResponse.json({ 
+          template: {
+            templateName: "New Template",
+            description: "Custom template created via editor",
+            spreads: blank.spreads,
+            currentSpreadIndex: 0
+          }
+        }, { status: 200 });
+      }
+
       const templatesCollection = db.collection("global_templates");
-      const template = await templatesCollection.findOne({ templateName: templateName || "New Template" });
+      let template = null;
+      
+      if (templateName) {
+        template = await templatesCollection.findOne({ templateName });
+      }
+      
+      if (!template) {
+        // Fallback to Bacchanal if no specific template requested or found
+        template = await templatesCollection.findOne({ 
+          templateName: { $in: ["Bacchanal 2026", "Bacchanal"] } 
+        });
+      }
       
       return NextResponse.json({ template }, { status: 200 });
     } else {
       const userBooksCollection = db.collection("user_books");
-      let book = await userBooksCollection.findOne({ userId });
+      const templatesCollection = db.collection("global_templates");
       
-      if (!book) {
-        // Find the canonical template in DB first (so admin fixes are live)
-        const templatesCollection = db.collection("global_templates");
-        const dbTemplate = await templatesCollection.findOne({ templateName: "Bacchanal 2026" });
-        
-        let initialSpreads = [];
-        let templateName = "Bacchanal 2026";
+      if (isNew) {
+        const { createBlankTemplate } = await import('@/lib/book-templates');
+        const blank = createBlankTemplate();
+        const book = {
+          userId,
+          spreads: blank.spreads,
+          activeTemplateName: "Untitled Book",
+          currentSpreadIndex: 0,
+          templateDescription: "Custom blank canvas"
+        };
+        return NextResponse.json({ book }, { status: 200 });
+      }
 
+      let query: any = { userId };
+      if (templateName) {
+        query.activeTemplateName = templateName;
+      }
+      
+      let book = await userBooksCollection.findOne(query);
+      
+      // FOR TESTING & SYNC: In development or for new users, only try to pull the latest Bacchanal template if no specific template is requested
+      const isDevUser = userId === "anonymous-dev-user";
+      
+      if (!book || (isDevUser && !templateName)) {
+        // Find the canonical template in DB (Admin's latest work)
+        const dbTemplate = await templatesCollection.findOne({ 
+            templateName: { $in: ["Bacchanal 2026", "Bacchanal"] } 
+        });
+        
         if (dbTemplate && dbTemplate.spreads) {
-          initialSpreads = dbTemplate.spreads;
-          templateName = dbTemplate.templateName;
-        } else {
-          // Hard fallback to code definition
+          // If it's a dev user, we want to see the latest admin changes even if we had a book before
+          if (isDevUser && book) {
+             book.spreads = dbTemplate.spreads;
+             book.activeTemplateName = dbTemplate.templateName;
+          } else if (!book) {
+            book = {
+              _id: "preview-id" as any,
+              userId,
+              spreads: dbTemplate.spreads,
+              activeTemplateName: dbTemplate.templateName,
+              currentSpreadIndex: 0,
+              templateDescription: dbTemplate.description
+            } as any;
+          }
+        } else if (!book) {
+          // Hard fallback to code definition if DB is empty
           const { getAvailableTemplates } = await import('@/lib/book-templates');
           const defaultTemplate = getAvailableTemplates().find(t => t.id === "bacchanal-2026");
-          initialSpreads = defaultTemplate?.spreads || [];
+          book = {
+            _id: "preview-id" as any,
+            userId,
+            spreads: defaultTemplate?.spreads || [],
+            activeTemplateName: defaultTemplate?.name || "Bacchanal 2026",
+            currentSpreadIndex: 0,
+            templateDescription: defaultTemplate?.description
+          } as any;
         }
-        
-        book = {
-          _id: "preview-id" as any,
-          userId,
-          spreads: initialSpreads,
-          activeTemplateName: templateName,
-          currentSpreadIndex: 0
-        } as any;
       }
       
       return NextResponse.json({ book }, { status: 200 });

@@ -12,6 +12,7 @@ import {
   Share2,
   Image,
   Sparkles,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -114,13 +115,13 @@ const TemplatesPage = () => {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8 sm:mb-12 animate-in fade-in slide-in-from-top duration-700">
-          <Link href="/book">
+          <Link href="/editor">
             <Button
               variant="outline"
               className="mb-6 border-2 border-coral/60 hover:border-coral hover:bg-coral/10 transition-all duration-300 group"
             >
               <ArrowLeft className="w-4 h-4 mr-2 group-hover:-translate-x-1 transition-transform duration-300" />
-              Back to Book
+              Back to Editor
             </Button>
           </Link>
 
@@ -141,22 +142,31 @@ const TemplatesPage = () => {
           </p>
 
           {templates.length > 0 && (
-            <div className="mt-6 ml-4 flex items-center gap-6 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2 px-4 py-2  backdrop-blur-sm rounded-full border border-coral/20">
-                <Book className="w-4 h-4 text-coral" />
-                <span className="font-semibold">{templates.length}</span>
-                <span>{templates.length === 1 ? "Book" : "Books"}</span>
+            <div className="mt-6 ml-4 flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6">
+              <div className="flex items-center gap-6 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2 px-4 py-2 backdrop-blur-sm rounded-full border border-coral/20">
+                  <Book className="w-4 h-4 text-coral" />
+                  <span className="font-semibold">{templates.length}</span>
+                  <span>{templates.length === 1 ? "Book" : "Books"}</span>
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 backdrop-blur-sm rounded-full border border-teal/20">
+                  <Image className="w-4 h-4 text-teal" />
+                  <span className="font-semibold">
+                    {templates.reduce(
+                      (acc, t) => acc + getImageCount(t.images),
+                      0
+                    )}
+                  </span>
+                  <span>Total Images</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2 px-4 py-2  backdrop-blur-sm rounded-full border border-teal/20">
-                <Image className="w-4 h-4 text-teal" />
-                <span className="font-semibold">
-                  {templates.reduce(
-                    (acc, t) => acc + getImageCount(t.images),
-                    0
-                  )}
-                </span>
-                <span>Total Images</span>
-              </div>
+              
+              <Link href="/editor?new=true">
+                <Button className="bg-gradient-to-r from-coral to-teal text-white hover:shadow-lg transition-all duration-300 rounded-full px-6">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create New Book
+                </Button>
+              </Link>
             </div>
           )}
         </div>
@@ -180,7 +190,7 @@ const TemplatesPage = () => {
                 asChild
                 className="bg-gradient-to-r from-coral via-teal to-yellow text-white hover:shadow-lg hover:scale-105 transition-all duration-300 text-base px-8 py-6 rounded-xl"
               >
-                <Link href="/book">
+                <Link href="/editor?new=true">
                   <Sparkles className="w-4 h-4 mr-2" />
                   Create Your First Book
                 </Link>
@@ -249,7 +259,7 @@ const TemplatesPage = () => {
                       className="flex-1 border-coral/60 text-coral hover:bg-coral hover:text-white hover:border-coral transition-all duration-300 hover:shadow-md"
                       asChild
                     >
-                      <Link href="/book">
+                      <Link href={`/editor?templateName=${encodeURIComponent(template.bookName)}`}>
                         <Sparkles className="w-4 h-4 mr-2" />
                         Continue Editing
                       </Link>

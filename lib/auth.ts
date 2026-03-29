@@ -1,17 +1,17 @@
 import NextAuth, { NextAuthConfig } from "next-auth";
-import GoogleProvider from "next-auth/providers/google";
-import CredentialsProvider from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
+import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { getDatabase } from "./db";
 import { signInSchema } from "./validators";
 
 export const authConfig: NextAuthConfig = {
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
     }),
-    CredentialsProvider({
+    Credentials({
       name: "credentials",
       credentials: {
         email: { label: "Email", type: "email" },
@@ -145,6 +145,10 @@ export const authConfig: NextAuthConfig = {
           if (dbUser) {
             token.id = dbUser._id.toString();
             token.isPurchased = !!dbUser.isPurchased;
+            // Admin Check
+            const adminEmails = ["admin@dearbacchanal.com", "dearbacchanal@gmail.com"];
+            token.isAdmin = adminEmails.includes(email.toLowerCase());
+
             if (account?.provider === "google") {
               token.provider = "google";
             }
@@ -162,12 +166,14 @@ export const authConfig: NextAuthConfig = {
         session.user.id = token.id as string;
         session.user.provider = token.provider as "credentials" | "google";
         session.user.isPurchased = token.isPurchased as boolean;
+        session.user.isAdmin = token.isAdmin as boolean;
       }
 
       return session;
     },
   },
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "your-development-secret-is-set-here-for-localhost-only",
+  trustHost: true,
 };
 
 export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);

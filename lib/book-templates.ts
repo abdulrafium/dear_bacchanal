@@ -148,15 +148,48 @@ export function createBacchanaleTemplate(): BookTemplate {
         { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 80, y: 300, width: 120, height: 160, rotation: 8, shapeFill: "#2d2d2d", stroke: "#ffffff", strokeWidth: 8, isLocked: false },
       ]),
     },
-    // Spread 5 - Costume Photos
+    // Spread 5 - We Limin' Design (Page 9 & 10)
     {
       id: uuidv4(),
-      leftPage: createPage("Page 9", "#111111", [
-        {...createBgImage("/assets/layer-20.png"), isLocked: true},
-        createText("ROAD\nREADY", 40, PAGE_HEIGHT - 120, 42, "#ffffff"),
+      leftPage: createPage("Page 9", "#74913c", [
+        // Background Lime Pattern
+        { id: uuidv4(), type: "image", src: "/assets/lime.png", x: -80, y: -40, width: 200, height: 200, rotation: -15, isLocked: true, opacity: 0.3 },
+        { id: uuidv4(), type: "image", src: "/assets/lime.png", x: PAGE_WIDTH - 120, y: -80, width: 250, height: 250, rotation: 140, isLocked: true, opacity: 0.2 },
+        { id: uuidv4(), type: "image", src: "/assets/lime.png", x: -100, y: 200, width: 300, height: 300, rotation: 15, isLocked: true, opacity: 0.2 },
+        { id: uuidv4(), type: "image", src: "/assets/lime.png", x: PAGE_WIDTH - 150, y: PAGE_HEIGHT - 180, width: 280, height: 280, rotation: -30, isLocked: true, opacity: 0.3 },
+        { id: uuidv4(), type: "image", src: "/assets/lime.png", x: -50, y: PAGE_HEIGHT - 120, width: 180, height: 180, rotation: 45, isLocked: true, opacity: 0.4 },
+
+        // Heading "We Limin'"
+        { ...createText("We", 80, 50, 85, "#fac041", 200, "left"), fontFamily: "Poppins" },
+        { ...createText("LIMIN'", 100, 70, 85, "#ffffff", 300, "center"), fontFamily: "Poppins", rotation: 5 },
+        
+        // Definition
+        { ...createText("Trinidadian slang (pronounced lime-in) means to hang out in relaxed leisurely manner, often with food, drinks and music without specific agenda.", 40, 180, 18, "#ffffff", PAGE_WIDTH - 80, "center"), fontFamily: "Kalam" },
+
+        // Prompts
+        { ...createText("My drink of choice this Carnival:", 40, 270, 15, "#ffffff", PAGE_WIDTH - 80, "left"), fontFamily: "Poppins" },
+        { ...createText("Who I limed with the most:", 40, 310, 15, "#ffffff", PAGE_WIDTH - 80, "left"), fontFamily: "Poppins" },
+        { ...createText("I spent this epic time with:", 40, 350, 15, "#ffffff", PAGE_WIDTH - 80, "left"), fontFamily: "Poppins" },
+        { ...createText("The best part of Carnival I'll be telling stories about for years:", 40, 390, 15, "#ffffff", PAGE_WIDTH - 80, "left"), fontFamily: "Poppins" },
+
+        // Writing Lines (Shapes)
+        { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 40, y: 460, width: PAGE_WIDTH - 80, height: 1, rotation: 0, shapeFill: "#ffffff", opacity: 0.6 },
+        { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 40, y: 495, width: PAGE_WIDTH - 80, height: 1, rotation: 0, shapeFill: "#ffffff", opacity: 0.6 },
+        { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 40, y: 530, width: PAGE_WIDTH - 80, height: 1, rotation: 0, shapeFill: "#ffffff", opacity: 0.6 },
       ]),
-      rightPage: createPage("Page 10", "#111111", [
-         {...createBgImage("/assets/layer-10.png"), isLocked: true},
+      rightPage: createPage("Page 10", "#74913c", [
+        // Background Lime Pattern (Symmetrical)
+        { id: uuidv4(), type: "image", src: "/assets/lime.png", x: -40, y: -40, width: 220, height: 220, rotation: 45, isLocked: true, opacity: 0.3 },
+        { id: uuidv4(), type: "image", src: "/assets/lime.png", x: PAGE_WIDTH - 150, y: -60, width: 200, height: 200, rotation: -15, isLocked: true, opacity: 0.2 },
+        { id: uuidv4(), type: "image", src: "/assets/lime.png", x: PAGE_WIDTH / 2, y: PAGE_HEIGHT / 2, width: 350, height: 350, rotation: 10, isLocked: true, opacity: 0.1 },
+        
+        { ...createText("LIME MOMENTS", 40, 40, 32, "#fac041", PAGE_WIDTH - 80, "center"), fontFamily: "Poppins" },
+        
+        // Large Polaroid-style frame for the photo
+        { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 30, y: 110, width: PAGE_WIDTH - 60, height: PAGE_HEIGHT - 180, rotation: -2, shapeFill: "#ffffff", stroke: "#000000", strokeWidth: 1 },
+        { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 45, y: 125, width: PAGE_WIDTH - 90, height: PAGE_HEIGHT - 260, rotation: -2, shapeFill: "#2d2d2d" }, // Photo Area
+        
+        { ...createText("❝ Good times & tan lines ❞", 40, PAGE_HEIGHT - 120, 24, "#ffffff", PAGE_WIDTH - 80, "center"), fontFamily: "Kalam", rotation: -2 },
       ]),
     },
     // Spread 6
@@ -205,4 +238,22 @@ export function createBacchanaleTemplate(): BookTemplate {
 // All available templates
 export function getAvailableTemplates(): BookTemplate[] {
   return [createBacchanaleTemplate()];
+}
+
+export function createBlankTemplate(): BookTemplate {
+  return {
+    id: "blank-template",
+    name: "New Template",
+    description: "Start from scratch with a blank book.",
+    thumbnail: "/assets/layer-12.png",
+    year: 2026,
+    country: "Trinidad",
+    spreads: [
+      {
+        id: uuidv4(),
+        leftPage: createPage("Page 1", "#ffffff", []),
+        rightPage: createPage("Page 2", "#ffffff", []),
+      }
+    ],
+  };
 }

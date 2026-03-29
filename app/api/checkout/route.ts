@@ -30,8 +30,8 @@ export async function POST(req: NextRequest) {
                     quantity: 1,
                 }
             ],
-            success_url: `${baseUrl}/book/payment-status?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${baseUrl}/book/payment-status?canceled=true`,
+            success_url: `${baseUrl}/editor/payment-status?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${baseUrl}/editor/payment-status?canceled=true`,
             ...(user?.email
                 ? { customer_email: user.email, metadata: { userId: user.id, orderType } }
                 : { metadata: { orderType } }),
