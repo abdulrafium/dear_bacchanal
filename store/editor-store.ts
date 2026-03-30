@@ -106,7 +106,7 @@ interface EditorState {
   duplicateSpread: (index: number) => void;
   removeSpread: (index: number) => void;
   updatePageBackground: (pageId: string, background: string) => void;
-  loadTemplate: (spreads: BookSpread[], name: string, description?: string | null, id?: string | null, country?: string | null, year?: string | null) => void;
+  loadTemplate: (spreads: BookSpread[], name: string, description?: string | null, country?: string | null, year?: string | null, id?: string | null) => void;
   setTemplateMetadata: (name: string | null, description: string | null, country?: string | null, year?: string | null) => void;
 
   // Actions - UI
@@ -345,7 +345,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     });
   },
 
-  loadTemplate: (spreads: BookSpread[], name: string, description?: string | null, id?: string | null, country?: string | null, year?: string | null) => {
+  loadTemplate: (spreads: BookSpread[], name: string, description?: string | null, country?: string | null, year?: string | null, id?: string | null) => {
     set({
       spreads: JSON.parse(JSON.stringify(spreads)),
       currentSpreadIndex: 0,

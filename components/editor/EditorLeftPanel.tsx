@@ -370,16 +370,15 @@ function TemplatesPanel() {
           const data = await res.json();
           const dbTemplates = data.templates || [];
           
-          // Merge hard templates with DB ones (DB wins on name match)
-          const merged = [...dbTemplates];
+          const rawMerged = [...dbTemplates];
           hardTemplates.forEach(ht => {
-            const exists = merged.find(m => 
+            const exists = rawMerged.find(m => 
               m._id === ht.id || 
               (m.templateName || m.name) === ht.name
             );
             
             if (!exists) {
-              merged.push({
+              rawMerged.push({
                 _id: ht.id,
                 templateName: ht.name,
                 thumbnail: ht.thumbnail,
@@ -391,6 +390,20 @@ function TemplatesPanel() {
               });
             }
           });
+
+          // Final UI de-duplication - DB entries with updatedBy win
+          const unique = new Map();
+          rawMerged.forEach(m => {
+            const id = m._id || m.id;
+            const name = (m.templateName || m.name || "").toLowerCase().trim();
+            const existing = unique.get(name) || unique.get(id);
+            if (!existing || m.updatedBy || !m.isHardCoded) {
+              unique.set(name, m);
+              if (id) unique.set(id, m);
+            }
+          });
+          
+          setTemplates(Array.from(new Set(unique.values())));
           
           // Only show active templates for non-admins
           let filtered = merged;

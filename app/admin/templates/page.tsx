@@ -20,16 +20,15 @@ export default function AdminTemplatesPage() {
         const hardTemplates = getAvailableTemplates();
         
         // Merge - DB wins on name
-        const merged = [...dbTemplates];
+        const rawMerged = [...dbTemplates];
         hardTemplates.forEach(ht => {
-          // Find by ID first (most stable) then fallback to name
-          const exists = merged.find(m => 
+          const exists = rawMerged.find(m => 
             m._id === ht.id || 
             (m.templateName || m.name) === ht.name
           );
           
           if (!exists) {
-            merged.push({
+            rawMerged.push({
               _id: ht.id, 
               templateName: ht.name,
               thumbnail: ht.thumbnail,
@@ -42,8 +41,22 @@ export default function AdminTemplatesPage() {
             });
           }
         });
+
+        // Final de-duplication by Name (Case-insensitive) to be absolutely sure
+        const unique = new Map();
+        rawMerged.forEach(m => {
+          const name = (m.templateName || m.name || "").toLowerCase().trim();
+          const id = m._id || m.id;
+          
+          // Prefers database entries (those with ObjectID or updated flag)
+          const existing = unique.get(name) || unique.get(id);
+          if (!existing || (!existing.updatedBy && m.updatedBy) || (!existing.isHardCoded && m.isHardCoded === false)) {
+             unique.set(name, m);
+             if (id) unique.set(id, m);
+          }
+        });
         
-        setTemplates(merged);
+        setTemplates(Array.from(new Set(unique.values())));
       }
     } catch (err) {
       toast.error("Failed to load templates");
