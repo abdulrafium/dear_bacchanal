@@ -78,7 +78,10 @@ export async function PATCH(
 
       const result = await templatesCollection.updateOne(
         { templateName: decodedName },
-        { $set: updateData },
+        { 
+          $set: updateData,
+          $setOnInsert: { _id: decodedName } // Use decodedName or hardcoded ID as _id
+        },
         { upsert: true }
       );
       if (!result.acknowledged) {

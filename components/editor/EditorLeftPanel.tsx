@@ -373,7 +373,12 @@ function TemplatesPanel() {
           // Merge hard templates with DB ones (DB wins on name match)
           const merged = [...dbTemplates];
           hardTemplates.forEach(ht => {
-            if (!merged.find(m => (m.templateName || m.name) === ht.name)) {
+            const exists = merged.find(m => 
+              m._id === ht.id || 
+              (m.templateName || m.name) === ht.name
+            );
+            
+            if (!exists) {
               merged.push({
                 _id: ht.id,
                 templateName: ht.name,
