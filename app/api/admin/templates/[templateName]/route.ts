@@ -9,8 +9,7 @@ export async function DELETE(
   try {
     const { templateName } = await params;
     const session = await auth();
-    const isAdmin = session?.user?.isAdmin || process.env.NODE_ENV === "development";
-    if (!isAdmin) {
+    if (!session?.user?.id && !session?.user?.email && process.env.NODE_ENV !== "development") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -30,8 +29,7 @@ export async function PATCH(
   try {
     const { templateName } = await params;
     const session = await auth();
-    const isAdmin = session?.user?.isAdmin || process.env.NODE_ENV === "development";
-    if (!isAdmin) {
+    if (!session?.user?.id && !session?.user?.email && process.env.NODE_ENV !== "development") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -40,8 +38,7 @@ export async function PATCH(
 
     await db.collection("global_templates").updateOne(
       { templateName: decodeURIComponent(templateName) },
-      { $set: { isActive } },
-      { upsert: true }
+      { $set: { isActive } }
     );
 
     return NextResponse.json({ message: "Template updated" }, { status: 200 });

@@ -4,9 +4,6 @@ import { Button } from "@/components/ui/button";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { ChevronDown, ArrowUpRight, Search, Sparkles } from "lucide-react";
-import { useAuth } from "@/hooks/useAuth";
-import { useAuthModal } from "@/hooks/useAuthModal";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -26,17 +23,7 @@ const FAQs = () => {
   const heroRef = useRef<HTMLDivElement>(null);
   const faqRef = useRef<HTMLDivElement>(null);
 
-  const { isAuthenticated } = useAuth();
-  const { openModal } = useAuthModal();
-  const router = useRouter();
-
-  const handleAction = () => {
-    if (isAuthenticated) {
-      router.push("/editor");
-    } else {
-      openModal("signup");
-    }
-  };
+  
 
   const faqs: FAQ[] = [
     {
@@ -343,13 +330,13 @@ const FAQs = () => {
               </Button>
               <Button
                 size="lg"
-                onClick={handleAction}
                 className="bg-primary-foreground text-primary hover:bg-primary-foreground/90 text-lg px-8 py-6"
+                asChild
               >
-                <div className="flex items-center gap-3">
+                <Link href="/book" className="gap-3">
                   Start Creating
                   <ArrowUpRight className="w-5 h-5" />
-                </div>
+                </Link>
               </Button>
             </div>
           </div>

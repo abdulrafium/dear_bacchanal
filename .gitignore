@@ -55,8 +55,8 @@ next-env.d.ts
 /public/assets/*.backup
 
 # Large documentation folders
-"bacchanal doc/"
-"bacchanal doc.zip"
+bacchanal\ doc/
+bacchanal\ doc.zip
 *.psd
 *.zip
 *.rar
