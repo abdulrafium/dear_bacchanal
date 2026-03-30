@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { v4 as uuidv4 } from "uuid";
+import Konva from "konva";
 
 // Element types that can be placed on a page
 export type ElementType = "image" | "text" | "shape" | "sticker" | "qrcode";
@@ -30,6 +31,8 @@ export interface EditorElement {
   shapeFill?: string;
   // QR Code
   qrData?: string;
+  // Others
+  opacity?: number;
 }
 
 export interface BookPage {
@@ -61,8 +64,11 @@ interface EditorState {
 
   // Template
   templateLoaded: boolean;
+  activeTemplateId: string | null;
   activeTemplateName: string | null;
   templateDescription: string | null;
+  templateCountry: string | null;
+  templateYear: string | null;
 
   // UI state
   isAdmin: boolean;
@@ -73,10 +79,13 @@ interface EditorState {
   zoom: number;
   showThumbnails: boolean;
   viewMode: "spread" | "single";
+  previewElement: { id: string, updates: Partial<EditorElement> } | null;
+  stageRef: Konva.Stage | null;
 
   // History
   history: HistoryEntry[];
   historyIndex: number;
+  version: number;
 
   // Actions - Navigation
   setCurrentSpread: (index: number, skipDirty?: boolean) => void;
@@ -88,6 +97,7 @@ interface EditorState {
   updateElement: (pageId: string, elementId: string, updates: Partial<EditorElement>) => void;
   removeElement: (pageId: string, elementId: string) => void;
   selectElement: (elementId: string | null) => void;
+  setPreviewElement: (elementId: string | null, updates: Partial<EditorElement> | null) => void;
   toggleElementLock: (pageId: string, elementId: string) => void;
   applyLayout: (pageId: string, frames: { x: number; y: number; width: number; height: number; type: "image" | "text" }[]) => void;
 
@@ -96,7 +106,8 @@ interface EditorState {
   duplicateSpread: (index: number) => void;
   removeSpread: (index: number) => void;
   updatePageBackground: (pageId: string, background: string) => void;
-  loadTemplate: (spreads: BookSpread[], name: string, description?: string | null) => void;
+  loadTemplate: (spreads: BookSpread[], name: string, description?: string | null, id?: string | null, country?: string | null, year?: string | null) => void;
+  setTemplateMetadata: (name: string | null, description: string | null, country?: string | null, year?: string | null) => void;
 
   // Actions - UI
   setSidebarPanel: (panel: SidebarPanel) => void;
@@ -106,6 +117,7 @@ interface EditorState {
   setViewMode: (mode: "spread" | "single") => void;
   togglePreview: () => void;
   setIsAdmin: (isAdmin: boolean) => void;
+  setStageRef: (ref: Konva.Stage | null) => void;
 
   // Actions - History
   undo: () => void;
@@ -113,8 +125,8 @@ interface EditorState {
   pushHistory: () => void;
   isDirty: boolean;
   setDirty: (dirty: boolean) => void;
-  setTemplateMetadata: (name: string | null, description: string | null) => void;
   resetEditor: () => void;
+  save: (isAdmin?: boolean) => Promise<boolean>;
 }
 
 function createDefaultPage(label: string, isLocked = false): BookPage {
@@ -139,8 +151,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   spreads: [],
   currentSpreadIndex: 0,
   templateLoaded: false,
+  activeTemplateId: null,
   activeTemplateName: null,
   templateDescription: null,
+  templateCountry: "Trinidad",
+  templateYear: "2026",
   isAdmin: false,
   isPreviewMode: false,
   selectedElementId: null,
@@ -149,10 +164,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   zoom: 100,
   showThumbnails: true,
   viewMode: "spread",
+  previewElement: null,
+  stageRef: null,
   history: [],
   historyIndex: -1,
+  version: 0,
   isDirty: false,
   setDirty: (dirty) => set({ isDirty: dirty }),
+  setStageRef: (ref) => set({ stageRef: ref }),
 
   // Navigation
   setCurrentSpread: (index, skipDirty = false) => set((s) => ({ 
@@ -224,6 +243,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   selectElement: (elementId) => set({ selectedElementId: elementId }),
+
+  setPreviewElement: (elementId, updates) => set({ 
+    previewElement: elementId ? { id: elementId, updates: updates || {} } : null 
+  }),
 
   toggleElementLock: (pageId, elementId) => {
     const state = get();
@@ -322,26 +345,71 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     });
   },
 
-  loadTemplate: (spreads: BookSpread[], name: string, description?: string | null) => {
+  loadTemplate: (spreads: BookSpread[], name: string, description?: string | null, id?: string | null, country?: string | null, year?: string | null) => {
     set({
       spreads: JSON.parse(JSON.stringify(spreads)),
       currentSpreadIndex: 0,
       templateLoaded: true,
+      activeTemplateId: id || null,
       activeTemplateName: name,
       templateDescription: description || null,
+      templateCountry: country || "Trinidad",
+      templateYear: year || "2026",
       selectedElementId: null,
       history: [],
       historyIndex: -1,
+      version: get().version + 1,
       isDirty: false,
       activeSidebarPanel: "layouts",
     });
   },
 
-  setTemplateMetadata: (name: string | null, description: string | null) => set({ 
-    activeTemplateName: name, 
-    templateDescription: description, 
-    isDirty: true 
-  }),
+  setTemplateMetadata: (name: string | null, description: string | null, country?: string | null, year?: string | null) => set((s) => ({ 
+    activeTemplateName: name !== null ? name : s.activeTemplateName, 
+    templateDescription: description !== null ? description : s.templateDescription, 
+    templateCountry: country !== undefined ? country : s.templateCountry,
+    templateYear: year !== undefined ? year : s.templateYear,
+    isDirty: true,
+    version: s.version + 1
+  })),
+
+  save: async (isAdminParam) => {
+    const { spreads, isAdmin, activeTemplateId, activeTemplateName, templateDescription, templateCountry, templateYear, currentSpreadIndex, version: startVersion } = get();
+    
+    try {
+      const res = await fetch("/api/editor/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          spreads, 
+          isAdmin: isAdminParam !== undefined ? isAdminParam : isAdmin, 
+          activeTemplateId, 
+          activeTemplateName, 
+          templateDescription,
+          templateCountry,
+          templateYear,
+          currentSpreadIndex 
+        }),
+      });
+
+      if (!res.ok) throw new Error("Failed to save");
+      const data = await res.json();
+      
+      // If we didn't have an ID before and the server returned one, save it
+      if (!activeTemplateId && data.templateId) {
+        set({ activeTemplateId: data.templateId });
+      }
+      
+      // Only mark clean if no changes were made during the save
+      if (get().version === startVersion) {
+        set({ isDirty: false });
+      }
+      return true;
+    } catch (error) {
+      console.error("Save error:", error);
+      return false;
+    }
+  },
 
   // UI
   setSidebarPanel: (panel) => set((s) => ({ activeSidebarPanel: s.activeSidebarPanel === panel ? null : panel })),

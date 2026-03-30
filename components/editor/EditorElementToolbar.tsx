@@ -13,6 +13,7 @@ export function EditorElementToolbar() {
   const toggleElementLock = useEditorStore((s) => s.toggleElementLock);
   const isPreviewMode = useEditorStore((s) => s.isPreviewMode);
   const isAdmin = useEditorStore((s) => s.isAdmin);
+  const setPreviewElement = useEditorStore((s) => s.setPreviewElement);
 
   if (isPreviewMode || !selectedElementId) return null;
 
@@ -67,10 +68,12 @@ export function EditorElementToolbar() {
         <select
           value={element.fontFamily || "Arial"}
           onChange={(e) => update({ fontFamily: e.target.value })}
+          onMouseEnter={() => setPreviewElement(element.id, { fontFamily: element.fontFamily || "Arial" })}
+          onMouseLeave={() => setPreviewElement(null, null)}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         >
           {fonts.map(f => (
-            <option key={f} value={f}>{f}</option>
+            <option key={f} value={f} onMouseEnter={() => setPreviewElement(element.id, { fontFamily: f })}>{f}</option>
           ))}
         </select>
         <span className="text-[11px] md:text-sm text-gray-700 truncate font-serif" style={{ fontFamily: element.fontFamily }}>
@@ -84,6 +87,8 @@ export function EditorElementToolbar() {
         <select
           value={element.fontSize || 18}
           onChange={(e) => update({ fontSize: parseInt(e.target.value) })}
+          onMouseEnter={() => setPreviewElement(element.id, { fontSize: element.fontSize || 18 })}
+          onMouseLeave={() => setPreviewElement(null, null)}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         >
           {sizes.map(s => (
