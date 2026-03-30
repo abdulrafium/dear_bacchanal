@@ -36,20 +36,30 @@ export async function PATCH(
     }
 
     const { isActive } = await req.json();
+    console.log(`Updating template status: "${decodedName}" -> ${isActive}`);
+    
     const db = await getDatabase();
     const templatesCollection = db.collection("global_templates");
 
+    // Escape decodedName for regex
+    const escapedName = decodedName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
     // Case-insensitive check and find existing
     const existing = await templatesCollection.findOne({
-      templateName: { $regex: new RegExp(`^${decodedName}$`, "i") }
+      templateName: { $regex: new RegExp(`^${escapedName}$`, "i") }
     });
 
     if (existing) {
-      await templatesCollection.updateOne(
+      console.log(`Found existing template in DB: "${existing.templateName}" (_id: ${existing._id})`);
+      const result = await templatesCollection.updateOne(
         { _id: existing._id },
         { $set: { isActive, updatedAt: new Date() } }
       );
+      if (!result.acknowledged) {
+        throw new Error("Database update not acknowledged");
+      }
     } else {
+      console.log(`Template not in DB, creating from defaults: "${decodedName}"`);
       // First time activating a hardcoded template - need to upsert with full data
       const { getAvailableTemplates } = await import("@/lib/book-templates");
       const hardcoded = getAvailableTemplates().find(t => t.name.toLowerCase() === decodedName.toLowerCase());
@@ -66,16 +76,22 @@ export async function PATCH(
         spreads: hardcoded?.spreads || [],
       };
 
-      await templatesCollection.updateOne(
+      const result = await templatesCollection.updateOne(
         { templateName: decodedName },
         { $set: updateData },
         { upsert: true }
       );
+      if (!result.acknowledged) {
+        throw new Error("Database upsert not acknowledged");
+      }
     }
 
-    return NextResponse.json({ message: "Template updated successfully" }, { status: 200 });
-  } catch (error) {
-    console.error("Template PATCH error:", error);
-    return NextResponse.json({ error: "Failed to update" }, { status: 500 });
+    return NextResponse.json({ message: "Template status updated successfully" }, { status: 200 });
+  } catch (error: any) {
+    console.error("Failed to update template status:", error);
+    return NextResponse.json({ 
+      error: "Failed to update template status", 
+      details: error.message 
+    }, { status: 500 });
   }
 }

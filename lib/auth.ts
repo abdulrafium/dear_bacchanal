@@ -145,9 +145,17 @@ export const authConfig: NextAuthConfig = {
           if (dbUser) {
             token.id = dbUser._id.toString();
             token.isPurchased = !!dbUser.isPurchased;
-            // Admin Check
-            const adminEmails = ["admin@dearbacchanal.com", "dearbacchanal@gmail.com"];
-            token.isAdmin = adminEmails.includes(email.toLowerCase());
+            // Admin Check - environment variable, fallback hardcoded, or db flag
+            const envAdmins = process.env.ADMIN_EMAIL ? process.env.ADMIN_EMAIL.split(',') : [];
+            const hardcodedAdmins = [
+              "admin@dearbacchanal.com", 
+              "dearbacchanal@gmail.com", 
+              "hello@bacchanal.com",
+              "aamirtwo001@gmail.com"
+            ];
+            const allAdmins = [...envAdmins, ...hardcodedAdmins].map(e => e.trim().toLowerCase());
+            
+            token.isAdmin = !!dbUser.isAdmin || allAdmins.includes(email.toLowerCase());
 
             if (account?.provider === "google") {
               token.provider = "google";
