@@ -403,12 +403,13 @@ function TemplatesPanel() {
             }
           });
           
-          setTemplates(Array.from(new Set(unique.values())));
+          const finalTemplates = Array.from(new Set(unique.values()));
+          setTemplates(finalTemplates);
           
           // Only show active templates for non-admins
-          let filtered = merged;
+          let filtered = finalTemplates;
           if (!isAdmin) {
-             filtered = merged.filter(t => t.isActive !== false);
+             filtered = finalTemplates.filter((t: any) => t.isActive !== false);
           }
           
           setTemplates(filtered);
