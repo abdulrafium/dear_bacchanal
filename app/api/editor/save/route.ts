@@ -17,7 +17,17 @@ export async function POST(req: NextRequest) {
 
     const userId = session?.user?.id || session?.user?.email || "anonymous-dev-user";
     const body = await req.json();
-    const { isAdmin, spreads, activeTemplateName, templateDescription, currentSpreadIndex } = body;
+    const { 
+      isAdmin, 
+      spreads, 
+      activeTemplateId,
+      activeTemplateName, 
+      templateDescription, 
+      templateCountry,
+      templateYear,
+      currentSpreadIndex 
+    } = body;
+    
     const finalName = (activeTemplateName && activeTemplateName !== "undefined") ? activeTemplateName : "New Template";
     const finalDesc = (templateDescription && templateDescription !== "undefined") ? templateDescription : "Custom template created via editor";
 
@@ -26,12 +36,27 @@ export async function POST(req: NextRequest) {
     if (isAdmin) {
       // Save to global templates
       const templatesCollection = db.collection("global_templates");
-      await templatesCollection.updateOne(
-        { templateName: finalName },
+      
+      const { ObjectId } = await import('mongodb');
+      let query: any = { templateName: finalName };
+      
+      // Use ID if available for precision and to allow renaming
+      if (activeTemplateId && typeof activeTemplateId === 'string') {
+        if (activeTemplateId.length === 24) {
+          query = { _id: new ObjectId(activeTemplateId) };
+        } else {
+          query = { _id: activeTemplateId }; // Hardcoded string ID
+        }
+      }
+
+      const result = await templatesCollection.updateOne(
+        query,
         {
           $set: {
             templateName: finalName,
             description: finalDesc,
+            country: templateCountry || "Trinidad",
+            year: templateYear || "2026",
             spreads: spreads || [],
             currentSpreadIndex: currentSpreadIndex || 0,
             updatedAt: new Date(),
@@ -40,14 +65,17 @@ export async function POST(req: NextRequest) {
           $setOnInsert: {
             createdAt: new Date(),
             thumbnail: "/img/templates/bacchanal-classic.jpg",
-            country: "Unknown",
-            year: "2026",
           },
         },
         { upsert: true }
       );
 
-      return NextResponse.json({ message: "Template saved successfully!" }, { status: 200 });
+      const templateId = result.upsertedId || (query._id ? query._id.toString() : null);
+
+      return NextResponse.json({ 
+        message: "Template saved successfully!", 
+        templateId 
+      }, { status: 200 });
     } else {
       // Save to user books
       const userBooksCollection = db.collection("user_books");

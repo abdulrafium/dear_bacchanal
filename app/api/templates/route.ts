@@ -68,10 +68,10 @@ export async function POST(req: NextRequest) {
     }
 
     const db = await getDatabase();
-    const templatesCollection = db.collection("book_templates");
+    const userBooksCollection = db.collection("user_books");
 
     // Update or create the user's single book template (upsert)
-    const result = await templatesCollection.updateOne(
+    const result = await userBooksCollection.updateOne(
       { userId }, // Find by userId
       {
         $set: {

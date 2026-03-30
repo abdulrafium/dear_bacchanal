@@ -18,9 +18,9 @@ export async function GET(
         }
 
         const db = await getDatabase();
-        const templatesCollection = db.collection("book_templates");
+        const userBooksCollection = db.collection("user_books");
 
-        const template = await templatesCollection.findOne({ shareId });
+        const template = await userBooksCollection.findOne({ shareId, isPublic: true });
 
         if (!template) {
             return NextResponse.json(

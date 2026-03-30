@@ -26,7 +26,7 @@ export async function PATCH(req: Request) {
     if (!isAdmin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { id, templateName, country, year } = await req.json();
-    if (!id) return NextResponse.json({ error: "ID is required" }, { status: 400 });
+    if (!id && !templateName) return NextResponse.json({ error: "ID or templateName is required" }, { status: 400 });
 
     const db = await getDatabase();
     
@@ -37,19 +37,39 @@ export async function PATCH(req: Request) {
     update.updatedAt = new Date();
 
     const { ObjectId } = await import('mongodb');
-    let query = { _id: id } as any;
+    let query: any = { _id: id };
+    
+    // Try to use templateName as fallback or if id is not an ObjectId
     try {
       if (typeof id === 'string' && id.length === 24) {
         query = { _id: new ObjectId(id) };
+      } else if (templateName) {
+        // Find existing by name if ID isn't a valid ObjectId
+        const existing = await db.collection("global_templates").findOne({ 
+          $or: [{ templateName: templateName }, { name: templateName }] 
+        });
+        if (existing) {
+          query = { _id: existing._id };
+        } else if (typeof id === 'string' && id.length > 0) {
+          query = { _id: id }; // Use string ID as-is (e.g. "bacchanal-2026")
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("Query buildup error:", e);
+    }
 
-    await db.collection("global_templates").updateOne(
+    const result = await db.collection("global_templates").updateOne(
       query,
-      { $set: update }
+      { $set: update },
+      { upsert: true }
     );
 
-    return NextResponse.json({ message: "Template updated successfully" });
+    console.log("Template update result:", { query, update, matched: result.matchedCount, upserted: result.upsertedId });
+
+    return NextResponse.json({ 
+      message: "Template updated successfully", 
+      id: result.upsertedId || id 
+    });
   } catch (error) {
     console.error("Error updating template:", error);
     return NextResponse.json({ error: "Error updating template" }, { status: 500 });

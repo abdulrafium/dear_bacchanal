@@ -17,10 +17,10 @@ export async function POST(req: NextRequest) {
 
         const userId = session.user.id;
         const db = await getDatabase();
-        const templatesCollection = db.collection("book_templates");
+        const userBooksCollection = db.collection("user_books");
 
         // Check if user has a template
-        const template = await templatesCollection.findOne({ userId });
+        const template = await userBooksCollection.findOne({ userId });
 
         if (!template) {
             return NextResponse.json(
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
         let shareId = template.shareId;
         if (!shareId) {
             shareId = uuidv4();
-            await templatesCollection.updateOne(
+            await userBooksCollection.updateOne(
                 { _id: template._id },
                 {
                     $set: {
@@ -81,9 +81,9 @@ export async function PATCH(req: NextRequest) {
         const { isPublic } = body;
 
         const db = await getDatabase();
-        const templatesCollection = db.collection("book_templates");
+        const userBooksCollection = db.collection("user_books");
 
-        const result = await templatesCollection.updateOne(
+        const result = await userBooksCollection.updateOne(
             { userId },
             { $set: { isPublic } }
         );
