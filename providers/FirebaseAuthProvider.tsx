@@ -9,7 +9,8 @@ import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword
 } from "firebase/auth";
-import { auth, googleProvider } from "@/lib/firebase";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { auth, googleProvider, db } from "@/lib/firebase";
 import { toast } from "sonner";
 
 interface AuthUser {
@@ -64,9 +65,19 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
                 
                 // Keep for API requests
                 const token = await firebaseUser.getIdToken();
-                localStorage.setItem("fb_user_email", firebaseUser.email || "");
                 localStorage.setItem("fb_user_id", authedUser.id || "");
                 localStorage.setItem("fb_token", token);
+
+                // Sync to Firestore for real-time dashboard
+                await setDoc(doc(db, "users", firebaseUser.uid), {
+                    email: firebaseUser.email,
+                    name: firebaseUser.displayName,
+                    image: firebaseUser.photoURL,
+                    provider: firebaseUser.providerData[0]?.providerId || "credentials",
+                    isPurchased: !!data.user.isPurchased,
+                    lastLogin: serverTimestamp(),
+                    updatedAt: serverTimestamp()
+                }, { merge: true });
             }
         } catch (error) {
             console.error("User sync error:", error);

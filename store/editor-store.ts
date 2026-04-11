@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { v4 as uuidv4 } from "uuid";
 import Konva from "konva";
 
@@ -423,6 +425,21 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       if (get().version === startVersion) {
         set({ isDirty: false });
       }
+      // Sync to Firestore for real-time dashboard tracking
+      const userRef = localStorage.getItem("fb_user_id");
+      if (userRef) {
+          try {
+              await setDoc(doc(db, "books", activeTemplateId || "default_book"), {
+                  userId: userRef,
+                  templateName: activeTemplateName || "Unnamed Book",
+                  updatedAt: serverTimestamp(),
+                  isDeleted: false
+              }, { merge: true });
+          } catch (fsError) {
+              console.error("Firestore sync error:", fsError);
+          }
+      }
+
       return true;
     } catch (error) {
       console.error("Save error:", error);

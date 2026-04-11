@@ -867,13 +867,13 @@ function StickersPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-2">
           {(activeTab === "premium" ? premiumStickers : stickers).map((sticker, idx) => (
             <div
               key={`${sticker.url}-${idx}`}
               draggable
               onDragStart={(e) => handleStickerDragStart(e, sticker.url)}
-              className="group relative aspect-square bg-white rounded-2xl overflow-hidden cursor-grab border border-gray-100 hover:border-teal/30 hover:shadow-xl transition-all p-3"
+              className="group relative aspect-square bg-white rounded-xl overflow-hidden cursor-grab border border-gray-100 hover:border-teal/30 hover:shadow-lg transition-all p-1.5"
               onClick={() => {
                 const page = targetSide === "left" ? currentSpread?.leftPage : currentSpread?.rightPage;
                 if (page && !page.isLocked) {
@@ -976,7 +976,7 @@ function CalendarPanel() {
               <select 
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-[10px] font-bold focus:ring-1 focus:ring-teal outline-none"
+                className="w-full bg-white border border-gray-200 rounded-lg px-1.5 py-1 text-[10px] font-bold focus:ring-1 focus:ring-teal outline-none"
               >
                 {months.map((m, i) => (
                   <option key={m} value={i}>{m}</option>
@@ -988,7 +988,7 @@ function CalendarPanel() {
               <select 
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-[10px] font-bold focus:ring-1 focus:ring-teal outline-none"
+                className="w-full bg-white border border-gray-200 rounded-lg px-1.5 py-1 text-[10px] font-bold focus:ring-1 focus:ring-teal outline-none"
               >
                 {years.map(y => (
                   <option key={y} value={y}>{y}</option>
