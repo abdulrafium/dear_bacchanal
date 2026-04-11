@@ -28,7 +28,7 @@ export default function EditorWorkspace() {
   
   const [loading, setLoading] = useState(true);
   const lastLoadedRef = useRef<string | null>(null);
-  const [sidebarWidth, setSidebarWidth] = useState(260); 
+  const [sidebarWidth, setSidebarWidth] = useState(220); 
   const [bottomBarHeight, setBottomBarHeight] = useState(140);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [isResizingBottom, setIsResizingBottom] = useState(false);

@@ -384,57 +384,57 @@ const CustomizeRitual = () => {
         <div className="absolute top-1/2 right-1/4 w-[300px] h-[300px] bg-accent/20 rounded-full blur-3xl" />
 
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="flex flex-col lg:flex-row gap-12 lg:gap-20 items-center justify-between min-h-[calc(100vh-80px)] py-12">
+          <div className="flex flex-col lg:flex-row gap-16 lg:gap-24 items-center justify-between min-h-[calc(100vh-80px)] py-12 lg:py-20 lg:text-left">
             {/* Left Content */}
-            <div className="w-full lg:w-3/5 text-center lg:text-left order-2 lg:order-1">
+            <div className="w-full lg:w-[55%] space-y-8 animate-slide-up order-2 lg:order-1">
               {/* Tag */}
-              <div className="hero-tag inline-flex items-center gap-3 mb-6">
+              <div className="hero-tag inline-flex items-center gap-3">
                 <span className="w-8 h-1 bg-primary rounded-full" />
-                <span className="font-body text-xs tracking-[0.3em] uppercase text-primary font-medium">
-                  Bacchanal Books
+                <span className="font-body text-xs tracking-[0.4em] uppercase text-primary font-bold">
+                  The Premium Keep-Sake
                 </span>
               </div>
 
               {/* Title */}
-              <h1 className="hero-title font-display leading-[1.1] mb-8 pb-3">
-                <span className="hero-title-word block text-5xl sm:text-6xl md:text-7xl lg:text-8xl text-foreground">
+              <h1 className="hero-title font-display leading-[1.1]">
+                <span className="hero-title-word block text-5xl sm:text-6xl md:text-7xl lg:text-[100px] text-foreground tracking-tight">
                   YOUR
                 </span>
-                <span className="hero-title-word block text-5xl sm:text-6xl md:text-7xl lg:text-8xl text-primary">
+                <span className="hero-title-word block text-5xl sm:text-6xl md:text-7xl lg:text-[100px] text-primary tracking-tight">
                   CARNIVAL
                 </span>
-                <span className="hero-title-word block text-5xl sm:text-6xl md:text-7xl lg:text-8xl text-foreground">
+                <span className="hero-title-word block text-5xl sm:text-6xl md:text-7xl lg:text-[100px] text-foreground tracking-tight">
                   STORY
                 </span>
               </h1>
 
               {/* Description */}
-              <p className="hero-desc font-body text-lg md:text-xl text-muted-foreground mb-10 max-w-xl mx-auto lg:mx-0">
+              <p className="hero-desc font-body text-xl md:text-2xl text-muted-foreground max-w-2xl leading-relaxed">
                 Transform your carnival memories into a beautiful photo book
-                keepsake that lasts forever. Expertly designed to showcase your best moments.
+                keepsake that lasts forever. Each page captures the rhythm of your street.
               </p>
 
               {/* CTAs */}
-              <div className="hero-cta flex flex-col sm:flex-row items-center lg:items-start justify-center lg:justify-start gap-4">
+              <div className="hero-cta flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-6 pt-4">
                   <Button
                     variant="carnival"
                     size="xl"
                     onClick={handleAction}
-                    className="hero-cta-btn w-full sm:w-auto text-base px-10 py-7 shadow-carnival"
+                    className="hero-cta-btn w-full sm:w-auto text-lg px-12 py-8 shadow-carnival hover:shadow-primary/30"
                   >
                     <span className="flex items-center gap-3">
                       Create Your Book
-                      <ArrowRight className="w-5 h-5" />
+                      <ArrowRight className="w-6 h-6" />
                     </span>
                   </Button>
                 <Button
                   variant="outline"
                   size="xl"
                   asChild
-                  className="hero-cta-btn w-full sm:w-auto border-2 border-foreground/20 hover:bg-foreground/5 py-7"
+                  className="hero-cta-btn w-full sm:w-auto border-2 border-primary/20 hover:bg-primary/5 text-lg py-8 bg-background/50 backdrop-blur"
                 >
                   <Link href="/templates" className="flex items-center justify-center gap-2">
-                    <Play className="w-4 h-4" />
+                    <Play className="w-5 h-5" />
                     Watch Preview
                   </Link>
                 </Button>
@@ -442,42 +442,47 @@ const CustomizeRitual = () => {
             </div>
 
             {/* Right Visual - Clean Stacked Books */}
-            <div className="w-full lg:w-2/5 relative flex items-center justify-center order-1 lg:order-2 mb-12 lg:mb-0">
-              {/* Background shape */}
-              <div className="absolute w-[280px] sm:w-[400px] h-[280px] sm:h-[400px] bg-primary/10 rounded-full blur-3xl animate-pulse" />
+            <div className="w-full lg:w-[45%] relative flex items-center justify-center order-1 lg:order-2">
+              <div className="relative w-[280px] sm:w-[350px] lg:w-[400px] aspect-[3/4]">
+                {/* Background Glows */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150%] h-[150%] bg-primary/20 rounded-full blur-[100px] animate-pulse-subtle" />
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-secondary/10 rounded-full blur-[80px]" />
 
-              {/* Stacked book cards */}
-              <div className="relative w-[240px] sm:w-[300px] h-[320px] sm:h-[400px]">
-                {/* Back card */}
-                <div className="absolute top-6 -left-6 w-full h-full rounded-2xl bg-secondary/20 shadow-lg rotate-[-6deg] transition-transform hover:rotate-[-8deg]" />
-
-                {/* Middle card */}
-                <div className="absolute top-3 -left-3 w-full h-full rounded-2xl bg-accent/30 shadow-lg rotate-[-3deg] transition-transform hover:rotate-[-5deg]" />
-
-                {/* Front card - main book */}
-                <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-2xl border-4 border-background group cursor-pointer transition-all hover:scale-[1.02]">
-                  <img
-                    src="https://images.unsplash.com/photo-1544450181-29a848a25358?q=80&w=2070&auto=format&fit=crop"
-                    alt="Carnival Photo Book"
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                  />
-
-                  {/* Overlay gradient */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
-
-                  {/* Book label */}
-                  <div className="absolute bottom-6 left-6 right-6">
-                    <span className="font-handwritten text-3xl text-white block mb-1">
-                      Your Story
-                    </span>
-                    <p className="font-body text-sm text-white/80 font-medium tracking-widest uppercase">
-                      Carnival 2026
-                    </p>
+                {/* Main Book visual - improved spacing to prevent overlap */}
+                <div className="relative w-full h-full transform hover:scale-[1.03] transition-transform duration-700 animate-float translate-x-4">
+                   {/* Layered Effect */}
+                  <div className="absolute top-10 -left-10 w-full h-full rounded-2xl bg-secondary/30 shadow-2xl rotate-[-8deg] backdrop-blur-sm border border-white/10" />
+                  <div className="absolute top-5 -left-5 w-full h-full rounded-2xl bg-accent/20 shadow-2xl rotate-[-4deg] border border-white/10" />
+                  
+                  {/* The actual book */}
+                  <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 group">
+                    <img
+                      src="https://images.unsplash.com/photo-1544450181-29a848a25358?q=80&w=2070&auto=format&fit=crop"
+                      alt="Carnival Photo Book"
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                    
+                    {/* Floating Labels */}
+                    <div className="absolute bottom-8 left-8 right-8">
+                      <div className="space-y-1">
+                        <span className="font-handwritten text-4xl sm:text-5xl text-accent block animate-slide-up">
+                          Your Story
+                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className="w-8 h-px bg-white/50" />
+                          <p className="font-body text-sm sm:text-base text-white/90 font-bold tracking-[0.2em] uppercase">
+                            Carnival 2026
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+        </div>
         </div>
       </section>
 
