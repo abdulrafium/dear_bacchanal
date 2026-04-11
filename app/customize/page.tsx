@@ -384,9 +384,9 @@ const CustomizeRitual = () => {
         <div className="absolute top-1/2 right-1/4 w-[300px] h-[300px] bg-accent/20 rounded-full blur-3xl" />
 
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center min-h-screen py-20">
+          <div className="flex flex-col lg:flex-row gap-12 lg:gap-20 items-center justify-between min-h-[calc(100vh-80px)] py-12">
             {/* Left Content */}
-            <div className="text-center lg:text-left">
+            <div className="w-full lg:w-3/5 text-center lg:text-left order-2 lg:order-1">
               {/* Tag */}
               <div className="hero-tag inline-flex items-center gap-3 mb-6">
                 <span className="w-8 h-1 bg-primary rounded-full" />
@@ -396,7 +396,7 @@ const CustomizeRitual = () => {
               </div>
 
               {/* Title */}
-              <h1 className="hero-title font-display leading-[0.9] mb-6">
+              <h1 className="hero-title font-display leading-[1.1] mb-8 pb-3">
                 <span className="hero-title-word block text-5xl sm:text-6xl md:text-7xl lg:text-8xl text-foreground">
                   YOUR
                 </span>
@@ -409,9 +409,9 @@ const CustomizeRitual = () => {
               </h1>
 
               {/* Description */}
-              <p className="hero-desc font-body text-lg md:text-xl text-muted-foreground mb-8 max-w-md mx-auto lg:mx-0">
+              <p className="hero-desc font-body text-lg md:text-xl text-muted-foreground mb-10 max-w-xl mx-auto lg:mx-0">
                 Transform your carnival memories into a beautiful photo book
-                keepsake that lasts forever.
+                keepsake that lasts forever. Expertly designed to showcase your best moments.
               </p>
 
               {/* CTAs */}
@@ -420,7 +420,7 @@ const CustomizeRitual = () => {
                     variant="carnival"
                     size="xl"
                     onClick={handleAction}
-                    className="hero-cta-btn text-base px-8 py-6 shadow-carnival"
+                    className="hero-cta-btn w-full sm:w-auto text-base px-10 py-7 shadow-carnival"
                   >
                     <span className="flex items-center gap-3">
                       Create Your Book
@@ -431,9 +431,9 @@ const CustomizeRitual = () => {
                   variant="outline"
                   size="xl"
                   asChild
-                  className="hero-cta-btn border-2 border-foreground/20 hover:bg-foreground/5"
+                  className="hero-cta-btn w-full sm:w-auto border-2 border-foreground/20 hover:bg-foreground/5 py-7"
                 >
-                  <Link href="/templates" className="flex items-center gap-2">
+                  <Link href="/templates" className="flex items-center justify-center gap-2">
                     <Play className="w-4 h-4" />
                     Watch Preview
                   </Link>
@@ -442,35 +442,35 @@ const CustomizeRitual = () => {
             </div>
 
             {/* Right Visual - Clean Stacked Books */}
-            <div className="relative hidden lg:flex items-center justify-center">
+            <div className="w-full lg:w-2/5 relative flex items-center justify-center order-1 lg:order-2 mb-12 lg:mb-0">
               {/* Background shape */}
-              <div className="absolute w-[400px] h-[400px] bg-primary/10 rounded-full" />
+              <div className="absolute w-[280px] sm:w-[400px] h-[280px] sm:h-[400px] bg-primary/10 rounded-full blur-3xl animate-pulse" />
 
               {/* Stacked book cards */}
-              <div className="relative w-[300px] h-[400px]">
+              <div className="relative w-[240px] sm:w-[300px] h-[320px] sm:h-[400px]">
                 {/* Back card */}
-                <div className="absolute top-8 -left-8 w-[260px] h-[340px] rounded-2xl bg-secondary/20 shadow-lg" />
+                <div className="absolute top-6 -left-6 w-full h-full rounded-2xl bg-secondary/20 shadow-lg rotate-[-6deg] transition-transform hover:rotate-[-8deg]" />
 
                 {/* Middle card */}
-                <div className="absolute top-4 -left-4 w-[260px] h-[340px] rounded-2xl bg-accent/30 shadow-lg" />
+                <div className="absolute top-3 -left-3 w-full h-full rounded-2xl bg-accent/30 shadow-lg rotate-[-3deg] transition-transform hover:rotate-[-5deg]" />
 
                 {/* Front card - main book */}
-                <div className="relative w-[260px] h-[340px] rounded-2xl overflow-hidden shadow-2xl border-4 border-background">
+                <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-2xl border-4 border-background group cursor-pointer transition-all hover:scale-[1.02]">
                   <img
-                    src="/book-cover.jpg"
+                    src="https://images.unsplash.com/photo-1544450181-29a848a25358?q=80&w=2070&auto=format&fit=crop"
                     alt="Carnival Photo Book"
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                   />
 
                   {/* Overlay gradient */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-foreground/40 via-transparent to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent" />
 
                   {/* Book label */}
-                  <div className="absolute bottom-4 left-4 right-4">
-                    <span className="font-handwritten text-2xl text-background">
+                  <div className="absolute bottom-6 left-6 right-6">
+                    <span className="font-handwritten text-3xl text-white block mb-1">
                       Your Story
                     </span>
-                    <p className="font-body text-xs text-background/70">
+                    <p className="font-body text-sm text-white/80 font-medium tracking-widest uppercase">
                       Carnival 2026
                     </p>
                   </div>
