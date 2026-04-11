@@ -326,7 +326,9 @@ function CalendarElement({
       <Rect
         width={el.width}
         height={el.height}
-        fill="#009d94"
+        fill="transparent"
+        stroke="#000"
+        strokeWidth={1}
         cornerRadius={8}
       />
       
@@ -405,7 +407,7 @@ function CalendarElement({
                 x={2}
                 y={18}
                 fontSize={8}
-                fill="#fff"
+                fill="#000"
                 fontStyle="italic"
                 wrap="char"
               />
