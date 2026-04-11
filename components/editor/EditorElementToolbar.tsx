@@ -232,6 +232,21 @@ export function EditorElementToolbar() {
               {element.align === "center" ? <AlignCenter className="w-5 h-5" /> : element.align === "right" ? <AlignRight className="w-5 h-5" /> : <AlignLeft className="w-5 h-5" />}
             </button>
 
+            {/* Color Picker */}
+            <div className="relative w-10 h-10 rounded-lg border border-transparent hover:bg-gray-50 flex items-center justify-center transition-colors shrink-0 group cursor-pointer overflow-hidden">
+              <div 
+                className="w-6 h-6 rounded-full border border-gray-200 shadow-sm" 
+                style={{ backgroundColor: element.fill || "#000" }} 
+              />
+              <input
+                type="color"
+                value={element.fill || "#000000"}
+                onChange={(e) => update({ fill: e.target.value })}
+                className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                title="Change color"
+              />
+            </div>
+
             <div className="w-[1px] h-6 bg-gray-200 mx-1" />
           </>
         )}

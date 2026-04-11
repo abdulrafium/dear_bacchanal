@@ -86,7 +86,7 @@ export function EditorPageTools({ pageId, align }: { pageId: string, align: "lef
 
   return (
     <div 
-      className={`absolute z-30 flex ${isCenter ? "flex-row top-[-70px] left-1/2 -translate-x-1/2" : "flex-col top-[10%]"} gap-2`}
+      className={`absolute z-30 flex ${isCenter ? "flex-row top-[-70px] left-1/2 -translate-x-1/2" : "flex-col top-[10%]"} gap-2 pointer-events-auto`}
       style={{
         left: isCenter ? "50%" : align === "left" ? 0 : "auto",
         right: align === "right" ? 0 : "auto",
