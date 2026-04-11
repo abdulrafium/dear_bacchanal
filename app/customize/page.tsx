@@ -383,46 +383,48 @@ const CustomizeRitual = () => {
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-secondary/20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/4" />
         <div className="absolute top-1/2 right-1/4 w-[300px] h-[300px] bg-accent/20 rounded-full blur-3xl" />
 
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="flex flex-col lg:flex-row gap-16 lg:gap-24 items-center justify-between min-h-[calc(100vh-80px)] py-12 lg:py-20 lg:text-left">
-            {/* Left Content */}
-            <div className="w-full lg:w-[55%] space-y-8 animate-slide-up order-2 lg:order-1">
+        <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-12 relative z-10 w-full">
+          <div className="flex flex-col lg:flex-row gap-12 lg:gap-20 items-center justify-center lg:items-stretch lg:justify-between min-h-[calc(100vh-100px)] py-12 lg:py-24">
+            {/* Left Content Column */}
+            <div className="w-full lg:w-1/2 flex flex-col items-center lg:items-start text-center lg:text-left space-y-10 animate-slide-up self-center">
               {/* Tag */}
-              <div className="hero-tag inline-flex items-center gap-3">
-                <span className="w-8 h-1 bg-primary rounded-full" />
-                <span className="font-body text-xs tracking-[0.4em] uppercase text-primary font-bold">
+              <div className="hero-tag inline-flex items-center gap-3 bg-white/5 border border-white/10 px-5 py-2 rounded-full">
+                <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+                <span className="font-body text-[11px] tracking-[0.5em] uppercase text-primary font-black">
                   The Premium Keep-Sake
                 </span>
               </div>
 
-              {/* Title */}
-              <h1 className="hero-title font-display leading-[1.1]">
-                <span className="hero-title-word block text-5xl sm:text-6xl md:text-7xl lg:text-[100px] text-foreground tracking-tight">
-                  YOUR
-                </span>
-                <span className="hero-title-word block text-5xl sm:text-6xl md:text-7xl lg:text-[100px] text-primary tracking-tight">
-                  CARNIVAL
-                </span>
-                <span className="hero-title-word block text-5xl sm:text-6xl md:text-7xl lg:text-[100px] text-foreground tracking-tight">
-                  STORY
-                </span>
-              </h1>
+              {/* Title - responsive sizing */}
+              <div className="space-y-2">
+                <h1 className="font-display leading-[0.95] tracking-tighter">
+                  <span className="block text-6xl sm:text-7xl md:text-8xl xl:text-[100px] text-foreground">
+                    YOUR
+                  </span>
+                  <span className="block text-6xl sm:text-7xl md:text-8xl xl:text-[100px] text-primary">
+                    CARNIVAL
+                  </span>
+                  <span className="block text-6xl sm:text-7xl md:text-8xl xl:text-[100px] text-foreground underline decoration-primary/20">
+                    STORY
+                  </span>
+                </h1>
+              </div>
 
               {/* Description */}
-              <p className="hero-desc font-body text-xl md:text-2xl text-muted-foreground max-w-2xl leading-relaxed">
+              <p className="hero-desc font-body text-lg md:text-xl text-muted-foreground max-w-lg leading-relaxed lg:pr-8">
                 Transform your carnival memories into a beautiful photo book
                 keepsake that lasts forever. Each page captures the rhythm of your street.
               </p>
 
               {/* CTAs */}
-              <div className="hero-cta flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-6 pt-4">
+              <div className="hero-cta flex flex-col sm:flex-row items-center gap-6 pt-4 w-full sm:w-auto">
                   <Button
                     variant="carnival"
                     size="xl"
                     onClick={handleAction}
-                    className="hero-cta-btn w-full sm:w-auto text-lg px-12 py-8 shadow-carnival hover:shadow-primary/30"
+                    className="hero-cta-btn w-full sm:w-auto text-xl px-12 py-9 shadow-2xl hover:scale-105 transition-all"
                   >
-                    <span className="flex items-center gap-3">
+                    <span className="flex items-center gap-4">
                       Create Your Book
                       <ArrowRight className="w-6 h-6" />
                     </span>
@@ -431,47 +433,47 @@ const CustomizeRitual = () => {
                   variant="outline"
                   size="xl"
                   asChild
-                  className="hero-cta-btn w-full sm:w-auto border-2 border-primary/20 hover:bg-primary/5 text-lg py-8 bg-background/50 backdrop-blur"
+                  className="hero-cta-btn w-full sm:w-auto border-2 border-primary/20 hover:bg-white/5 text-xl py-9"
                 >
-                  <Link href="/templates" className="flex items-center justify-center gap-2">
-                    <Play className="w-5 h-5" />
+                  <Link href="/templates" className="flex items-center justify-center gap-3">
+                    <Play className="w-5 h-5 fill-primary" />
                     Watch Preview
                   </Link>
                 </Button>
               </div>
             </div>
 
-            {/* Right Visual - Clean Stacked Books */}
-            <div className="w-full lg:w-[45%] relative flex items-center justify-center order-1 lg:order-2">
-              <div className="relative w-[280px] sm:w-[350px] lg:w-[400px] aspect-[3/4]">
+            {/* Right Visual Column */}
+            <div className="w-full lg:w-1/2 relative flex items-center justify-center lg:justify-end mt-12 lg:mt-0">
+              <div className="relative w-full max-w-[350px] sm:max-w-[400px] lg:max-w-[480px] aspect-[4/5] lg:aspect-square flex items-center justify-center">
                 {/* Background Glows */}
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150%] h-[150%] bg-primary/20 rounded-full blur-[100px] animate-pulse-subtle" />
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[120%] bg-secondary/10 rounded-full blur-[80px]" />
+                <div className="absolute w-[140%] h-[140%] bg-primary/20 rounded-full blur-[100px] animate-pulse-subtle" />
+                <div className="absolute w-[100%] h-[100%] bg-secondary/10 rounded-full blur-[80px]" />
 
-                {/* Main Book visual - improved spacing to prevent overlap */}
-                <div className="relative w-full h-full transform hover:scale-[1.03] transition-transform duration-700 animate-float translate-x-4">
-                   {/* Layered Effect */}
-                  <div className="absolute top-10 -left-10 w-full h-full rounded-2xl bg-secondary/30 shadow-2xl rotate-[-8deg] backdrop-blur-sm border border-white/10" />
-                  <div className="absolute top-5 -left-5 w-full h-full rounded-2xl bg-accent/20 shadow-2xl rotate-[-4deg] border border-white/10" />
+                {/* Book Representation */}
+                <div className="relative w-full h-[85%] lg:h-full flex items-center justify-center">
+                  {/* Floating cards for depth */}
+                  <div className="absolute top-1/2 left-1/2 -translate-x-[60%] -translate-y-[55%] w-[80%] h-[80%] rounded-3xl bg-secondary/30 shadow-2xl skew-y-3 -rotate-6 backdrop-blur-sm border border-white/10" />
+                  <div className="absolute top-1/2 left-1/2 -translate-x-[55%] -translate-y-[50%] w-[80%] h-[80%] rounded-3xl bg-accent/20 shadow-2xl skew-y-2 -rotate-3 border border-white/10" />
                   
-                  {/* The actual book */}
-                  <div className="relative w-full h-full rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 group">
+                  {/* The main book cover */}
+                  <div className="relative w-[85%] h-[85%] lg:w-[90%] lg:h-[90%] rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(0,0,0,0.6)] border-2 border-white/10 group">
                     <img
                       src="https://images.unsplash.com/photo-1544450181-29a848a25358?q=80&w=2070&auto=format&fit=crop"
                       alt="Carnival Photo Book"
-                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                      className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/100 via-black/20 to-transparent opacity-80" />
                     
                     {/* Floating Labels */}
-                    <div className="absolute bottom-8 left-8 right-8">
-                      <div className="space-y-1">
-                        <span className="font-handwritten text-4xl sm:text-5xl text-accent block animate-slide-up">
+                    <div className="absolute bottom-10 left-10 right-10 text-left">
+                      <div className="space-y-2">
+                        <span className="font-handwritten text-4xl sm:text-6xl text-accent block">
                           Your Story
                         </span>
                         <div className="flex items-center gap-3">
-                          <span className="w-8 h-px bg-white/50" />
-                          <p className="font-body text-sm sm:text-base text-white/90 font-bold tracking-[0.2em] uppercase">
+                          <span className="w-8 h-px bg-white/40" />
+                          <p className="font-body text-xs sm:text-sm text-white font-bold tracking-[0.4em] uppercase">
                             Carnival 2026
                           </p>
                         </div>
@@ -482,7 +484,6 @@ const CustomizeRitual = () => {
               </div>
             </div>
           </div>
-        </div>
         </div>
       </section>
 
