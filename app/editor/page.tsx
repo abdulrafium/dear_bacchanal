@@ -24,16 +24,13 @@ export default function EditorPage() {
   const { openModal } = useAuthModal();
   const router = useRouter();
 
-  /* Temporarily commented out auth redirect for dev
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.push("/");
       openModal("signin");
     }
   }, [isAuthenticated, isLoading, router, openModal]);
-  */
 
-  /*
   if (isLoading || !isAuthenticated) {
     return (
       <div className="min-h-screen bg-[#f0f0f0] flex items-center justify-center">
@@ -46,7 +43,6 @@ export default function EditorPage() {
       </div>
     );
   }
-  */
 
   return (
     <Suspense fallback={

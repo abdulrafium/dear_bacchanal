@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
-import { X } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { X, Calendar, Edit3, Trash2, Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import gsap from "gsap";
 
 interface CalendarEventModalProps {
     isOpen: boolean;
@@ -21,108 +22,172 @@ export const CalendarEventModal: React.FC<CalendarEventModalProps> = ({
     isReadOnly = false,
 }) => {
     const [eventName, setEventName] = useState(initialEventName);
+    const modalRef = useRef<HTMLDivElement>(null);
+    const backdropRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (isOpen) {
+            setEventName(initialEventName);
+            // Animation for modal opening
+            if (modalRef.current && backdropRef.current) {
+                gsap.fromTo(backdropRef.current, 
+                    { opacity: 0 }, 
+                    { opacity: 1, duration: 0.3 }
+                );
+                gsap.fromTo(modalRef.current, 
+                    { scale: 0.8, opacity: 0, y: 20 }, 
+                    { scale: 1, opacity: 1, y: 0, duration: 0.4, ease: "back.out(1.7)" }
+                );
+            }
+        }
+    }, [isOpen, initialEventName]);
 
     const handleSave = () => {
         onSave(eventName);
-        onClose();
+        handleClose();
     };
 
     const handleDelete = () => {
         onSave("");
-        onClose();
+        handleClose();
+    };
+
+    const handleClose = () => {
+        if (modalRef.current && backdropRef.current) {
+            gsap.to(modalRef.current, { scale: 0.8, opacity: 0, y: 20, duration: 0.3 });
+            gsap.to(backdropRef.current, { opacity: 0, duration: 0.3, onComplete: onClose });
+        } else {
+            onClose();
+        }
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center pointer-events-auto">
             {/* Backdrop */}
             <div
-                className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-                onClick={onClose}
+                ref={backdropRef}
+                className="absolute inset-0 bg-black/60 backdrop-blur-md"
+                onClick={handleClose}
             />
 
             {/* Modal */}
-            <div className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
-                {/* Close button */}
-                <button
-                    onClick={onClose}
-                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
-                    aria-label="Close modal"
-                >
-                    <X className="w-6 h-6" />
-                </button>
+            <div 
+                ref={modalRef}
+                className="relative bg-white rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] max-w-md w-full mx-4 overflow-hidden border border-white/20"
+            >
+                {/* Carnival Gradient Top Bar */}
+                <div className="h-2 bg-gradient-to-r from-[#fbba00] via-[#d22e56] to-[#009d94]" />
 
-                {/* Header */}
-                <h2 className="text-2xl font-display font-bold text-gray-900 mb-2">
-                    {date.month} {date.day}
-                </h2>
-                <p className="text-sm text-gray-500 mb-6">
-                    {isReadOnly
-                        ? "Event details"
-                        : initialEventName
-                            ? "Edit or remove party name"
-                            : "Add party name to this date"}
-                </p>
+                <div className="p-8">
+                    {/* Close button */}
+                    <button
+                        onClick={handleClose}
+                        className="absolute top-6 right-6 p-2 rounded-full hover:bg-gray-100 text-gray-400 hove:text-gray-900 transition-all duration-200"
+                        aria-label="Close modal"
+                    >
+                        <X className="w-6 h-6" />
+                    </button>
 
-                {/* Input */}
-                {!isReadOnly && (
-                    <div className="mb-6">
-                        <label
-                            htmlFor="eventName"
-                            className="block text-sm font-medium text-gray-700 mb-2"
-                        >
-                            Party Name
-                        </label>
-                        <input
-                            id="eventName"
-                            type="text"
-                            value={eventName}
-                            onChange={(e) => setEventName(e.target.value)}
-                            placeholder="e.g., Vale Fete, J'Ouvert, Tribe Lunch..."
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg outline-none text-black transition-all font-handwritten text-lg"
-                            autoFocus
-                        />
+                    {/* Header */}
+                    <div className="flex items-center gap-4 mb-8">
+                        <div className="w-16 h-16 bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl flex items-center justify-center border border-gray-100 shadow-sm relative group overflow-hidden">
+                            <Calendar className="w-8 h-8 text-[#d22e56]" />
+                            <div className="absolute inset-0 bg-gradient-to-tr from-white/0 to-white/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                        <div>
+                            <h2 className="text-3xl font-black text-gray-900 tracking-tight leading-none">
+                                {date.day} {date.month}
+                            </h2>
+                            <p className="text-gray-500 font-medium text-sm mt-1 flex items-center gap-1.5 uppercase tracking-widest">
+                                <Sparkles className="w-3.5 h-3.5 text-[#fbba00]" />
+                                {isReadOnly ? "View Note" : initialEventName ? "Edit Note" : "Add Note"}
+                            </p>
+                        </div>
                     </div>
-                )}
 
-                {isReadOnly && (
-                    <div className="mb-6">
-                        <p className="text-lg font-handwritten text-gray-900">
-                            {eventName || "No event scheduled"}
-                        </p>
-                    </div>
-                )}
+                    {/* Input Section */}
+                    {!isReadOnly ? (
+                        <div className="space-y-4 mb-8">
+                            <div className="flex items-center justify-between">
+                                <label
+                                    htmlFor="eventName"
+                                    className="block text-xs font-black text-gray-400 uppercase tracking-[0.2em]"
+                                >
+                                    Write Your Notes
+                                </label>
+                                <Edit3 className="w-3.5 h-3.5 text-gray-300" />
+                            </div>
+                            <div className="relative group">
+                                <textarea
+                                    id="eventName"
+                                    value={eventName}
+                                    onChange={(e) => setEventName(e.target.value)}
+                                    placeholder="Add something special about this day..."
+                                    className="w-full h-32 px-6 py-5 bg-gray-50 border-2 border-gray-100 rounded-3xl outline-none text-black transition-all focus:border-[#009d94] focus:ring-4 focus:ring-[#009d94]/10 font-handwritten text-xl resize-none placeholder:text-gray-300"
+                                    autoFocus
+                                />
+                                <div className="absolute bottom-4 right-4 text-[10px] font-bold text-gray-300">
+                                    {eventName.length} characters
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="mb-10 p-8 bg-gray-50 rounded-[2rem] border border-gray-100 min-h-[120px] relative">
+                             <div className="absolute top-4 left-4 text-gray-200">
+                                <Edit3 className="w-8 h-8 opacity-10" />
+                             </div>
+                            <p className="text-2xl font-handwritten text-gray-900 text-center leading-relaxed">
+                                {eventName || "No notes available for this day"}
+                            </p>
+                        </div>
+                    )}
 
-                {/* Actions */}
-                {!isReadOnly && (
-                    <div className="flex gap-3">
-                        {initialEventName && (
-                            <Button
-                                onClick={handleDelete}
-                                variant="outline"
-                                className="flex-1"
+                    {/* Actions */}
+                    {!isReadOnly ? (
+                        <div className="flex gap-4">
+                            {initialEventName && (
+                                <button
+                                    onClick={handleDelete}
+                                    className="px-6 h-14 rounded-2xl border-2 border-red-50 hover:bg-red-50 text-red-500 transition-all font-bold flex items-center justify-center gap-2 group"
+                                >
+                                    <Trash2 className="w-5 h-5 group-hover:shake" />
+                                </button>
+                            )}
+                            <button
+                                onClick={handleSave}
+                                disabled={!eventName.trim() && !initialEventName}
+                                className={`flex-1 h-14 rounded-2xl bg-black text-white font-black uppercase tracking-widest text-sm transition-all flex items-center justify-center gap-2 shadow-xl shadow-black/10 active:scale-95 ${
+                                    !eventName.trim() && !initialEventName ? "opacity-30 grayscale cursor-not-allowed" : "hover:bg-gray-900 hover:-translate-y-0.5"
+                                }`}
                             >
-                                Remove
-                            </Button>
-                        )}
-                        <Button
-                            onClick={handleSave}
-                            variant="carnival"
-                            className="flex-1"
-                            disabled={!eventName.trim() && !initialEventName}
+                                <Check className="w-5 h-5" />
+                                {initialEventName ? "Update" : "Save Note"}
+                            </button>
+                        </div>
+                    ) : (
+                        <button 
+                            onClick={handleClose} 
+                            className="w-full h-14 rounded-2xl border-2 border-gray-100 text-gray-900 font-bold hover:bg-gray-50 transition-all active:scale-95"
                         >
-                            {initialEventName ? "Update" : "Save"}
-                        </Button>
-                    </div>
-                )}
-
-                {isReadOnly && (
-                    <Button onClick={onClose} variant="outline" className="w-full">
-                        Close
-                    </Button>
-                )}
+                            Close
+                        </button>
+                    )}
+                </div>
             </div>
+            
+            <style jsx>{`
+                @keyframes shake {
+                    0% { transform: rotate(0deg); }
+                    25% { transform: rotate(10deg); }
+                    75% { transform: rotate(-10deg); }
+                    100% { transform: rotate(0deg); }
+                }
+                .group:hover .group-hover\:shake {
+                    animation: shake 0.3s ease-in-out infinite;
+                }
+            `}</style>
         </div>
     );
 };

@@ -15,8 +15,10 @@ const Navbar = () => {
   const [scrolled, setScrolled] = useState(false);
   const { isAuthenticated } = useAuth();
   const { openModal } = useAuthModal();
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    setMounted(true);
     const handleScroll = () => setScrolled(window.scrollY > 50);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
@@ -26,14 +28,14 @@ const Navbar = () => {
     { path: "/", label: "Home" },
     { path: "/customize", label: "Customize" },
     { path: "/faqs", label: "FAQs" },
-    ...(isAuthenticated ? [{ path: "/templates", label: "My Books" }] : []),
+    ...(mounted && isAuthenticated ? [{ path: "/templates", label: "My Books" }] : []),
   ];
 
   return (
     <nav
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${scrolled
-          ? "bg-black/60 backdrop-blur-md m-2 md:m-5 rounded-xl"
-          : "bg-black/40 backdrop-blur-sm lg:bg-transparent lg:backdrop-blur-none rounded-xl top-8"
+        ? "bg-black/60 backdrop-blur-md m-2 md:m-5 rounded-xl"
+        : "bg-black/40 backdrop-blur-sm lg:bg-transparent lg:backdrop-blur-none rounded-xl top-8"
         }`}
     >
       <div className="w-full px-4 md:px-8 lg:px-10">
@@ -60,8 +62,8 @@ const Navbar = () => {
                 key={link.path}
                 href={link.path}
                 className={`relative font-display text-sm uppercase tracking-[0.2em] transition-all py-2 ${pathname === link.path
-                    ? "text-primary font-black drop-shadow-[0_0_8px_hsl(var(--primary)/0.4)]"
-                    : "text-white/70 hover:text-white"
+                  ? "text-primary font-black drop-shadow-[0_0_8px_hsl(var(--primary)/0.4)]"
+                  : "text-white/70 hover:text-white"
                   }`}
               >
                 {link.label}
@@ -70,7 +72,7 @@ const Navbar = () => {
                 )}
               </Link>
             ))}
-            {isAuthenticated ? (
+            {mounted && isAuthenticated ? (
               <UserAvatar />
             ) : (
               <button
@@ -102,14 +104,14 @@ const Navbar = () => {
                   href={link.path}
                   onClick={() => setIsOpen(false)}
                   className={`font-display text-lg uppercase tracking-widest py-3 transition-colors ${pathname === link.path
-                      ? "text-primary font-black"
-                      : "text-white/80 hover:text-white"
+                    ? "text-primary font-black"
+                    : "text-white/80 hover:text-white"
                     }`}
                 >
                   {link.label}
                 </Link>
               ))}
-              {isAuthenticated ? (
+              {mounted && isAuthenticated ? (
                 <UserAvatar />
               ) : (
                 <button

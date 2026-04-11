@@ -9,7 +9,7 @@ import { EditorElementToolbar } from "./EditorElementToolbar";
 import { useEditorStore } from "@/store/editor-store";
 import { useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Edit3, LayoutGrid, Layout } from "lucide-react";
 
 import { useFirebase } from "@/providers/FirebaseAuthProvider";
 
@@ -178,13 +178,17 @@ export default function EditorWorkspace() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isAdmin, templateName, loadTemplate, setCurrentSpread, searchParams, isAdminParam]);
 
+  const downloadTriggeredRef = useRef(false);
+
   // Handle auto-download after payment
   useEffect(() => {
     const isPaymentSuccess = searchParams.get("payment") === "success";
     const isLoaded = useEditorStore.getState().templateLoaded;
     const stage = useEditorStore.getState().stageRef;
 
-    if (isPaymentSuccess && isLoaded && stage && !loading) {
+    if (isPaymentSuccess && isLoaded && stage && !loading && !downloadTriggeredRef.current) {
+      downloadTriggeredRef.current = true;
+      
       const triggerDownload = async () => {
         const { generatePdfBook } = useEditorStore.getState();
         const { toast } = await import("sonner");
@@ -193,18 +197,23 @@ export default function EditorWorkspace() {
           duration: 5000,
         });
 
-        await generatePdfBook();
-        await refreshUser();
+        try {
+          await generatePdfBook();
+          await refreshUser();
 
-        // Clean up URL
-        const url = new URL(window.location.href);
-        url.searchParams.delete("payment");
-        window.history.replaceState({}, "", url.toString());
+          // Clean up URL
+          const url = new URL(window.location.href);
+          url.searchParams.delete("payment");
+          window.history.replaceState({}, "", url.toString());
+        } catch (err) {
+            console.error("Auto-download failed:", err);
+            downloadTriggeredRef.current = false; // Allow retry if it failed
+        }
       };
 
       triggerDownload();
     }
-  }, [searchParams, loading, useEditorStore((s) => s.templateLoaded), useEditorStore((s) => s.stageRef)]);
+  }, [searchParams, loading]);
 
   // Sync templateName, isAdmin, and currentSpreadIndex with URL and handle beforeunload
   useEffect(() => {
@@ -279,12 +288,18 @@ export default function EditorWorkspace() {
 
         {!isPreviewMode && activeSidebarPanel && (
           <div 
-            style={{ width: sidebarWidth }}
-            className="absolute inset-x-0 bottom-0 top-auto z-40 md:relative md:inset-auto md:z-auto h-[60vh] md:h-auto border-t md:border-t-0 border-gray-200 shadow-2xl md:shadow-none animate-in slide-in-from-bottom md:animate-none text-black flex flex-row shrink-0 bg-white"
+            style={{ width: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : sidebarWidth }}
+            className="absolute inset-x-0 bottom-0 top-auto z-40 md:relative md:inset-auto md:z-auto h-[65vh] md:h-auto border-t md:border-t-0 border-gray-200 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] md:shadow-none animate-in slide-in-from-bottom md:animate-none text-black flex flex-row shrink-0 bg-white rounded-t-3xl md:rounded-none overflow-hidden"
           >
              <div className="flex-1 flex flex-col h-full overflow-hidden">
-                <div className="flex justify-end p-2 bg-white md:hidden">
-                    <button onClick={() => useEditorStore.getState().setSidebarPanel(null)} className="text-sm font-bold text-gray-500">Close</button>
+                <div className="flex flex-col items-center bg-white md:hidden border-b border-gray-50">
+                    <div className="w-12 h-1 bg-gray-200 rounded-full mt-3 mb-2" />
+                    <button 
+                      onClick={() => useEditorStore.getState().setSidebarPanel(null)} 
+                      className="w-full py-2 text-[10px] font-black text-gray-400 uppercase tracking-widest"
+                    >
+                      Dismiss Tools
+                    </button>
                 </div>
                 <EditorLeftPanel />
              </div>
@@ -328,8 +343,34 @@ export default function EditorWorkspace() {
         </div>
       )}
 
+      {/* Mobile Tool Navigation */}
       {!isPreviewMode && (
-        <div className="md:hidden border-t border-gray-200 h-[60px]">
+        <div className="md:hidden fixed bottom-[70px] left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-xl border border-gray-200 rounded-full shadow-2xl z-50 transition-all active:scale-95">
+           <button 
+             onClick={() => useEditorStore.getState().setSidebarPanel("stickers")}
+             className={`p-2 rounded-full transition-colors ${activeSidebarPanel === "stickers" ? "bg-black text-white" : "text-gray-500"}`}
+           >
+             <LayoutGrid className="w-5 h-5" />
+           </button>
+           <div className="w-px h-4 bg-gray-200" />
+           <button 
+             onClick={() => useEditorStore.getState().setSidebarPanel("text")}
+             className={`p-2 rounded-full transition-colors ${activeSidebarPanel === "text" ? "bg-black text-white" : "text-gray-500"}`}
+           >
+            <Edit3 className="w-5 h-5" />
+           </button>
+           <div className="w-px h-4 bg-gray-200" />
+           <button 
+             onClick={() => useEditorStore.getState().setSidebarPanel("layouts")}
+             className={`p-2 rounded-full transition-colors ${activeSidebarPanel === "layouts" ? "bg-black text-white" : "text-gray-500"}`}
+           >
+             <Layout className="w-5 h-5" />
+           </button>
+        </div>
+      )}
+
+      {!isPreviewMode && (
+        <div className="md:hidden border-t border-gray-200 h-[60px] bg-white">
            <EditorBottomBar />
         </div>
       )}

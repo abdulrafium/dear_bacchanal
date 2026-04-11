@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { getServerAuth } from "@/lib/server-auth";
 
 // GET - Retrieve all book text data for the current user
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth();
-    const userId = session?.user?.id;
+    const user = await getServerAuth(req);
+    const userId = user?.id;
 
     if (!userId) {
       return NextResponse.json({ data: {} }, { status: 200 });
@@ -35,8 +35,8 @@ export async function GET(req: NextRequest) {
 // POST - Save or update book text data
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth();
-    const userId = session?.user?.id;
+    const user = await getServerAuth(req);
+    const userId = user?.id;
 
     if (!userId) {
       return NextResponse.json(

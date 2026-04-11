@@ -1,9 +1,9 @@
 "use client";
-
 import { useEffect, useState, use } from "react";
 import { BookDataProvider } from "@/components/book/BookDataContext";
 import { BookFlip } from "@/components/book/BookFlip";
 import { Loader2 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 // Import all pages
 import FirstPage from "@/components/book/FirstPage";
@@ -33,10 +33,13 @@ interface SharedBookPageProps {
 
 export default function SharedBookPage({ params }: SharedBookPageProps) {
   const { shareId } = use(params);
+  const { user } = useAuth();
   const [bookData, setBookData] = useState<{
     textData: Record<string, string>;
     images: Record<string, string>;
     bookName: string;
+    userId: string;
+    ownerId?: string;
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +94,8 @@ export default function SharedBookPage({ params }: SharedBookPageProps) {
   }
 
   if (!bookData) return null;
+
+  const isOwner = user?.id === bookData.userId;
 
   // Pages for PDF generation (without download button to avoid circular reference)
   const pagesForPDF = [
@@ -162,13 +167,13 @@ export default function SharedBookPage({ params }: SharedBookPageProps) {
       images={bookData.images}
       boxData={boxData}
       dynamicBoxes={dynamicBoxes}
-      isReadOnly={true}
+      isReadOnly={!isOwner}
     >
       <div className="w-full h-screen bg-gray-900 flex flex-col items-center justify-center">
         {/* Optional Header for Shared View */}
         <div className="absolute top-4 left-0 right-0 z-50 text-center pointer-events-none">
           <span className="bg-black/50 text-white px-4 py-2 rounded-full text-sm backdrop-blur-sm">
-            Viewing: {bookData.bookName}
+            {isOwner ? "You are viewing your own book" : `Viewing: ${bookData.bookName}`}
           </span>
         </div>
         <BookFlip pages={pages} />

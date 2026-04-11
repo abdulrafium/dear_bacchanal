@@ -7,12 +7,11 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  const isAdmin = session?.user?.isAdmin || process.env.NODE_ENV === "development";
+  const user = await getServerAuth(req);
+  const isAdmin = user?.isAdmin || process.env.NODE_ENV === "development";
   
   if (!isAdmin) {
-    const authError = adminAuthMiddleware(req);
-    if (authError) return authError;
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
   }
 
   try {

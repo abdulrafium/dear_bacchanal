@@ -9,6 +9,10 @@ const firebaseAdmin = admin.apps.length
         projectId: process.env.FIREBASE_PROJECT_ID || "dear-bacchanal",
     });
 
+// Memory cache for user sessions to speed up requests
+const userCache = new Map<string, { data: any, timestamp: number }>();
+const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
+
 export async function getServerAuth(req: NextRequest) {
     // 1. Try Firebase Token (Most Secure)
     const authHeader = req.headers.get("Authorization");
@@ -16,14 +20,34 @@ export async function getServerAuth(req: NextRequest) {
         const idToken = authHeader.split("Bearer ")[1];
         try {
             const decodedToken = await firebaseAdmin.auth().verifyIdToken(idToken);
-            return {
-                id: decodedToken.uid,
+            const uid = decodedToken.uid;
+
+            // Check cache first
+            const cached = userCache.get(uid);
+            if (cached && (Date.now() - cached.timestamp < CACHE_TTL)) {
+                return cached.data;
+            }
+            
+            // Look up in MongoDB to get the _id and other fields (isAdmin, isPurchased)
+            const { getDatabase } = await import("@/lib/db");
+            const db = await getDatabase();
+            const dbUser = await db.collection("users").findOne({ firebaseUid: uid });
+
+            const userData = {
+                id: dbUser ? dbUser._id.toString() : uid,
                 email: decodedToken.email,
                 name: decodedToken.name,
                 image: decodedToken.picture,
-                uid: decodedToken.uid,
+                uid: uid,
+                isAdmin: dbUser?.isAdmin || false,
+                isPurchased: dbUser?.isPurchased || false,
                 isFirebase: true
             };
+
+            // Update cache
+            userCache.set(uid, { data: userData, timestamp: Date.now() });
+
+            return userData;
         } catch (error) {
             console.error("Firebase Token Verification Failed:", error);
             // Fallback to NextAuth or Headers if verification fails

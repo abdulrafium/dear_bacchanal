@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { getDatabase } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
     try {
@@ -10,39 +9,51 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: "Missing email" }, { status: 400 });
         }
 
-        // Get document reference
-        const userRef = doc(db, "users", uid);
-        const userDoc = await getDoc(userRef);
+        const db = await getDatabase();
+        const usersCollection = db.collection("users");
 
-        let userData;
-        if (userDoc.exists()) {
-            userData = userDoc.data();
-            // Update lastLogin and name/image if provided
-            await updateDoc(userRef, {
-                name: name || userData.name,
-                image: image || userData.image,
-                lastLogin: serverTimestamp(),
-                updatedAt: serverTimestamp()
+        // Check if user already exists
+        const existingUser = await usersCollection.findOne({ email });
+
+        if (existingUser) {
+            // Update user details but keep isPurchased and isAdmin status
+            const updateResult = await usersCollection.updateOne(
+                { email },
+                {
+                    $set: {
+                        name: name || existingUser.name,
+                        image: image || existingUser.image,
+                        firebaseUid: uid, // Track firebase UID
+                        updatedAt: new Date(),
+                    }
+                }
+            );
+
+            return NextResponse.json({
+                success: true,
+                user: {
+                    ...existingUser,
+                    name: name || existingUser.name,
+                    image: image || existingUser.image,
+                }
             });
-            userData = { ...userData, id: uid };
         } else {
-            // Create new
-            userData = {
-                id: uid,
+            // Create new user (default isPurchased to false)
+            const newUser = {
                 email,
                 name: name || email.split("@")[0],
                 image: image || null,
+                firebaseUid: uid,
                 provider: "firebase",
                 isPurchased: false,
                 isAdmin: false,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-                lastLogin: serverTimestamp()
+                createdAt: new Date(),
+                updatedAt: new Date(),
             };
-            await setDoc(userRef, userData);
-        }
 
-        return NextResponse.json({ success: true, user: userData });
+            await usersCollection.insertOne(newUser);
+            return NextResponse.json({ success: true, user: newUser });
+        }
     } catch (error: any) {
         console.error("Sync user error:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });

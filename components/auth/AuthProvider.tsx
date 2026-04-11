@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useState, ReactNode } from "react";
+import { createContext, useState, ReactNode, useCallback } from "react";
 import { AuthModalState } from "@/types/auth";
 
 interface AuthModalContextType extends AuthModalState {
@@ -19,20 +19,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     view: "signin",
   });
 
-  const openModal = (view: "signin" | "signup") => {
+  const openModal = useCallback((view: "signin" | "signup") => {
     setModalState({ isOpen: true, view });
-  };
+  }, []);
 
-  const closeModal = () => {
+  const closeModal = useCallback(() => {
     setModalState((prev) => ({ ...prev, isOpen: false }));
-  };
+  }, []);
 
-  const toggleView = () => {
+  const toggleView = useCallback(() => {
     setModalState((prev) => ({
       ...prev,
       view: prev.view === "signin" ? "signup" : "signin",
     }));
-  };
+  }, []);
 
   return (
     <AuthModalContext.Provider

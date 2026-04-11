@@ -42,6 +42,7 @@ export async function GET(
                 bookName: template.bookName,
                 images: template.images || {},
                 textData: template.textData || {},
+                userId: template.userId, // Return owner ID
             },
             { status: 200 }
         );

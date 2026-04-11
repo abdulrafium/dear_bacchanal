@@ -77,7 +77,7 @@ export function EditorTopToolbar() {
       {/* Left Section */}
       <div className="flex items-center gap-0.5 sm:gap-1">
         <button
-          onClick={() => router.push("/templates")}
+          onClick={() => router.push("/customize")}
           className="p-1.5 sm:p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-800 transition-colors"
           title="Back"
         >
@@ -120,12 +120,12 @@ export function EditorTopToolbar() {
           </div>
         </div>
 
-        <div className="w-px h-6 bg-gray-200 mx-0.5 sm:mx-1" />
+        <div className="w-px h-6 bg-gray-200 mx-0.5 sm:mx-1 hidden sm:block" />
 
         <button
           onClick={undo}
           disabled={historyIndex < 0}
-          className="flex flex-col items-center gap-0.5 px-1.5 sm:px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30"
+          className="flex flex-col items-center gap-0.5 px-2 sm:px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30"
           title="Undo"
         >
           <Undo2 className="w-4 h-4 text-gray-600" />
@@ -135,7 +135,7 @@ export function EditorTopToolbar() {
         <button
           onClick={redo}
           disabled={historyIndex >= historyLength - 1}
-          className="flex flex-col items-center gap-0.5 px-1.5 sm:px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30"
+          className="flex flex-col items-center gap-0.5 px-2 sm:px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-30"
           title="Redo"
         >
           <Redo2 className="w-4 h-4 text-gray-600" />

@@ -17,6 +17,7 @@ import {
   FileBox,
   Ticket,
 } from "lucide-react";
+import { UserAvatar } from "@/components/auth/UserAvatar";
 
 const navItems = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -149,13 +150,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </nav>
 
         {/* Logout */}
-        <div className="p-4 border-t border-white/5">
+        <div className="p-4 border-t border-white/5 bg-black/20">
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium text-white/40 hover:text-red-400 hover:bg-red-500/5 transition-all w-full"
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-black text-red-500/60 hover:text-red-400 hover:bg-red-500/10 transition-all w-full group"
           >
-            <LogOut className="w-5 h-5" />
-            <span>Sign Out</span>
+            <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform duration-300" />
+            <span className="uppercase tracking-widest">Sign Out</span>
           </button>
         </div>
       </aside>
@@ -177,10 +178,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </h2>
           </div>
 
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-600 to-orange-600 flex items-center justify-center text-white text-xs font-bold">
-              A
-            </div>
+          <div className="flex items-center gap-4">
+            <UserAvatar />
           </div>
         </header>
 

@@ -1,74 +1,130 @@
+import { useState, useRef, useEffect } from "react";
 import { useFirebase } from "@/providers/FirebaseAuthProvider";
-import { User, LogOut } from "lucide-react";
+import { User, LogOut, Settings, LayoutDashboard, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { signOut as nextSignOut } from "next-auth/react";
+import Link from "next/link";
 
 export function UserAvatar() {
   const { user, loading, logout } = useFirebase();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   if (loading) {
     return (
-      <div className="flex items-center gap-3 px-4 py-2 rounded-full bg-white/5 backdrop-blur-sm border border-white/20">
-        <div className="w-8 h-8 rounded-full bg-gradient-to-r from-coral via-teal to-yellow animate-pulse"></div>
-      </div>
+      <div className="w-10 h-10 rounded-full bg-white/10 animate-pulse border border-white/20" />
     );
   }
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   const handleSignOut = async () => {
     try {
+      setIsMenuOpen(false);
       await logout();
+      try {
+        await nextSignOut({ redirect: false });
+      } catch (e) {
+        console.error("NextAuth signout error:", e);
+      }
+      localStorage.removeItem("fb_token");
+      localStorage.removeItem("fb_user_id");
+      localStorage.removeItem("fb_user_email");
       window.location.href = "/";
     } catch (error) {
       console.error("Sign out error:", error);
+      toast.error("Error during logout");
     }
   };
 
   return (
-    <div className="flex items-center gap-2 sm:gap-3">
-      {/* User Info - Hidden on mobile */}
-      <div className="hidden md:flex items-center gap-3 px-4 py-2 rounded-full bg-white/5 backdrop-blur-sm border border-white/20">
-        <div className="w-8 h-8 rounded-full bg-gradient-to-r from-coral via-teal to-yellow flex items-center justify-center">
-          {user.photoURL ? (
-            <img
-              src={user.photoURL}
-              alt={user.displayName || "User"}
-              className="w-full h-full rounded-full object-cover"
-            />
-          ) : (
-            <User className="w-4 h-4 text-white" />
-          )}
-        </div>
-        <div className="hidden lg:block">
-          <p className="text-sm font-semibold text-white">{user.displayName}</p>
-          <p className="text-xs text-neutral-400">{user.email}</p>
-        </div>
-      </div>
-
-      {/* Mobile User Icon */}
-      <div className="flex md:hidden w-10 h-10 rounded-full bg-gradient-to-r from-coral via-teal to-yellow items-center justify-center">
-        {user.photoURL ? (
-          <img
-            src={user.photoURL}
-            alt={user.displayName || "User"}
-            className="w-full h-full rounded-full object-cover"
-          />
-        ) : (
-          <User className="w-5 h-5 text-white" />
-        )}
-      </div>
-
-      {/* Sign Out Button */}
+    <div className="relative" ref={menuRef}>
+      {/* Trigger Button */}
       <button
-        onClick={handleSignOut}
-        className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 hover:border-red-500/50 text-red-400 hover:text-red-300 transition-all duration-200"
-        aria-label="Sign out"
+        onClick={() => setIsMenuOpen(!isMenuOpen)}
+        className="flex items-center gap-2 p-1 pl-1 pr-3 rounded-full bg-white/5 hover:bg-white/10 border border-white/10 transition-all duration-300 group overflow-hidden"
       >
-        <LogOut className="w-4 h-4" />
-        <span className="hidden sm:inline text-sm font-semibold">Sign Out</span>
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-coral via-teal to-yellow p-[2px]">
+          <div className="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden">
+            {user.photoURL ? (
+              <img
+                src={user.photoURL}
+                alt={user.displayName || "User"}
+                className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+              />
+            ) : (
+              <User className="w-4 h-4 text-white" />
+            )}
+          </div>
+        </div>
+        
+        <div className="hidden sm:flex flex-col items-start leading-none text-left">
+          <span className="text-[11px] font-black uppercase tracking-widest text-white/90">
+            {user.displayName || "Explorer"}
+          </span>
+        </div>
+
+        <ChevronDown 
+          className={`w-3 h-3 text-white/50 transition-transform duration-300 ${isMenuOpen ? 'rotate-180' : ''}`} 
+        />
       </button>
+
+      {/* Premium Dropdown Menu */}
+      {isMenuOpen && (
+        <div className="absolute top-full right-0 mt-3 w-64 bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300 z-[100]">
+          {/* User Header */}
+          <div className="p-4 border-b border-white/5 bg-gradient-to-br from-white/5 to-transparent">
+            <p className="text-sm font-black text-white uppercase tracking-wider truncate">
+              {user.displayName}
+            </p>
+            <p className="text-[10px] text-neutral-400 truncate mt-1">
+              {user.email}
+            </p>
+          </div>
+
+          <div className="p-2">
+            <Link 
+              href="/templates" 
+              onClick={() => setIsMenuOpen(false)}
+              className="flex items-center gap-3 px-3 py-2.5 text-sm text-neutral-300 hover:text-white hover:bg-white/10 rounded-xl transition-all duration-200 group"
+            >
+              <Settings className="w-4 h-4 text-coral group-hover:rotate-45 transition-transform duration-500" />
+              My Books
+            </Link>
+
+            {user.isAdmin && (
+              <Link 
+                href="/admin/dashboard" 
+                onClick={() => setIsMenuOpen(false)}
+                className="flex items-center gap-3 px-3 py-2.5 text-sm text-neutral-300 hover:text-white hover:bg-white/10 rounded-xl transition-all duration-200 group"
+              >
+                <LayoutDashboard className="w-4 h-4 text-teal" />
+                Admin Dashboard
+              </Link>
+            )}
+
+            <div className="h-px bg-white/5 my-2" />
+
+            <button
+              onClick={handleSignOut}
+              className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition-all duration-200 group"
+            >
+              <LogOut className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+              Sign Out
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

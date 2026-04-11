@@ -152,10 +152,7 @@ const TemplatesPage = () => {
                 <div className="flex items-center gap-2 px-4 py-2 backdrop-blur-sm rounded-full border border-teal/20">
                   <Image className="w-4 h-4 text-teal" />
                   <span className="font-semibold">
-                    {templates.reduce(
-                      (acc, t) => acc + getImageCount(t.images),
-                      0
-                    )}
+                    {templates.reduce((acc, t) => acc + t.imageCount, 0)}
                   </span>
                   <span>Total Images</span>
                 </div>

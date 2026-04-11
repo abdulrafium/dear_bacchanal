@@ -1,26 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { getServerAuth } from "@/lib/server-auth";
 
 // GET - Retrieve all saved templates for the current user
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth();
+    const user = await getServerAuth(req);
 
-    if (!session?.user?.id) {
+    if (!user) {
       return NextResponse.json(
         { error: "Authentication required" },
         { status: 401 }
       );
     }
 
-    const userId = session.user.id;
+    const userId = user.id;
     const db = await getDatabase();
     const userBooksCollection = db.collection("user_books");
 
-    // Find all user books, sorted by update date (newest first)
+    // Find all user books, projecting only necessary fields for list view
     const templates = await userBooksCollection
       .find({ userId })
+      .project({ 
+        activeTemplateName: 1, 
+        createdAt: 1, 
+        updatedAt: 1, 
+        imageCount: 1 
+      })
       .sort({ updatedAt: -1 })
       .toArray();
 
@@ -28,8 +34,7 @@ export async function GET(req: NextRequest) {
     const formattedTemplates = templates.map(t => ({
       _id: t._id.toString(),
       bookName: t.activeTemplateName || "My Carnival Book",
-      images: {}, // images are now inside spreads, but we can't easily count them here without deep parsing
-      textData: {}, // same for text
+      imageCount: t.imageCount || 0,
       createdAt: t.createdAt,
       updatedAt: t.updatedAt,
     }));
@@ -47,16 +52,16 @@ export async function GET(req: NextRequest) {
 // POST - Save a new book template
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth();
+    const user = await getServerAuth(req);
 
-    if (!session?.user?.id) {
+    if (!user?.id) {
       return NextResponse.json(
         { error: "Authentication required. Please log in to save your book." },
         { status: 401 }
       );
     }
 
-    const userId = session.user.id;
+    const userId = user.id;
     const body = await req.json();
     const { bookName, images, textData } = body;
 

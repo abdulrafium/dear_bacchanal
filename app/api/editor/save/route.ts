@@ -75,6 +75,12 @@ export async function POST(req: NextRequest) {
         templateId 
       }, { status: 200 });
     } else {
+      // Calculate some statistics for fast metadata-only loading later
+      const totalImages = (spreads || []).reduce((acc: number, s: any) => {
+        return acc + (s.leftPage?.elements?.filter((e: any) => e.type === "image" || e.type === "sticker").length || 0)
+                   + (s.rightPage?.elements?.filter((e: any) => e.type === "image" || e.type === "sticker").length || 0);
+      }, 0);
+
       // Save to user books
       const userBooksCollection = db.collection("user_books");
       await userBooksCollection.updateOne(
@@ -84,6 +90,7 @@ export async function POST(req: NextRequest) {
             spreads: spreads || [],
             activeTemplateName: activeTemplateName || null,
             currentSpreadIndex: currentSpreadIndex || 0,
+            imageCount: totalImages,
             updatedAt: new Date(),
           },
           $setOnInsert: {

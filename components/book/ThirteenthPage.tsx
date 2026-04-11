@@ -5,7 +5,7 @@ import Image from "next/image";
 import { CalendarEventModal } from "@/components/ui/CalendarEventModal";
 import { useBookData } from "./BookDataContext";
 import { toast } from "sonner";
-import { useSession } from "next-auth/react";
+import { useAuth } from "@/hooks/useAuth";
 import { useAuthModal } from "@/hooks/useAuthModal";
 
 interface CalendarEvent {
@@ -16,7 +16,7 @@ interface CalendarEvent {
 
 const ThirteenthPage = () => {
   const { data, isReadOnly } = useBookData();
-  const { data: session } = useSession();
+  const { user, isAuthenticated } = useAuth();
   const { openModal } = useAuthModal();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -51,7 +51,7 @@ const ThirteenthPage = () => {
   }, [data.textData, isReadOnly]);
 
   const handleDateClick = (day: number, month: string) => {
-    if (!session) {
+    if (!isAuthenticated && !isReadOnly) {
       openModal("signin");
       return;
     }
@@ -61,7 +61,7 @@ const ThirteenthPage = () => {
   };
 
   const handleSaveEvent = async (eventName: string) => {
-    if (!selectedDate) return;
+    if (!selectedDate || isReadOnly) return;
 
     const newEvents = events.filter(
       (e) => !(e.day === selectedDate.day && e.month === selectedDate.month)
@@ -79,10 +79,14 @@ const ThirteenthPage = () => {
 
     // Save to database
     try {
+      const token = await getToken(true);
       const response = await fetch('/api/book-data', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token || localStorage.getItem('fb_token') || ""}`,
+          'x-user-email': localStorage.getItem('fb_user_email') || "",
+          'x-user-id': localStorage.getItem('fb_user_id') || ""
         },
         body: JSON.stringify({
           fieldId: 'calendar-events',
@@ -109,67 +113,97 @@ const ThirteenthPage = () => {
 
     return (
       <div
-        className={`rounded-lg flex flex-col items-center justify-center h-16 ${!isReadOnly ? 'cursor-pointer hover:bg-white/10 transition-colors' : ''
-          } relative group`}
+        className={`rounded-xl flex flex-col items-center p-1.5 transition-all duration-300 relative group overflow-hidden ${
+          !isReadOnly 
+            ? 'cursor-pointer hover:bg-white/20 active:scale-95' 
+            : hasEvent ? 'cursor-pointer hover:bg-white/10' : ''
+        }`}
+        style={{ minHeight: '4.5rem' }}
         onClick={() => handleDateClick(day, month)}
       >
-        <span className="text-2xl text-black">{day}</span>
+        <div className="flex flex-col items-center w-full">
+          <span className={`text-2xl font-black leading-none mb-1 ${isSpecial ? 'text-white' : 'text-black/80'} group-hover:text-black transition-colors`}>
+            {day}
+          </span>
+          
+          {hasEvent && (
+            <div className="w-full flex flex-col items-center gap-1 mt-1">
+               <div className="w-4 h-0.5 bg-black/10 rounded-full" />
+               <span className="text-[9px] leading-[1.1] text-white bg-black/60 backdrop-blur-md rounded-md px-2 py-1 font-handwritten text-center break-words w-full line-clamp-2">
+                {event.eventName}
+              </span>
+            </div>
+          )}
+        </div>
+
         {hasEvent && (
-          <span className="text-[10px] sm:text-xs text-black font-handwritten font-bold truncate max-w-full px-1">
-            {event.eventName}
-          </span>
+          <div className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#d22e56] rounded-full border border-white shadow-sm animate-pulse" />
         )}
+        
         {isSpecial && specialLabel && (
-          <span
-            className={`${kalufira.className} text-white text-[15px] sm:text-lg font-black block -mt-1`}
-            style={{ WebkitTextStroke: "1px black" }}
-          >
-            {specialLabel}
-          </span>
+          <div className="flex flex-col items-center mt-auto pb-1 scale-90 sm:scale-100 origin-bottom">
+             <span
+              className={`${kalufira.className} text-white text-[11px] sm:text-[13px] font-black leading-none`}
+              style={{ WebkitTextStroke: "1px black" }}
+            >
+              {specialLabel.split(' ')[0]}
+            </span>
+            <span
+              className={`${kalufira.className} text-white text-[11px] sm:text-[13px] font-black leading-none`}
+              style={{ WebkitTextStroke: "1px black" }}
+            >
+              {specialLabel.split(' ')[1]}
+            </span>
+          </div>
         )}
       </div>
     );
   };
 
   const currentEvent = selectedDate ? getEventForDate(selectedDate.day, selectedDate.month) : null;
+  
   return (
     <>
-      {/* Thirteenth Page */}
-      <section className="min-h-screen relative w-full bg-[#009d94] p-8 overflow-hidden">
+      <section className="min-h-screen relative w-full bg-[#009d94] flex items-center justify-center p-4 sm:p-8 overflow-hidden">
         <Image
           src="/assets/layer-17.png"
           alt="Overlay"
           fill
-          className="object-cover absolute pointer-events-none"
+          className="object-cover absolute pointer-events-none opacity-80"
           priority
         />
-        <div className="max-w-7xl mx-auto relative">
+        
+        {/* Subtle texture overlay */}
+        <div className="absolute inset-0 bg-[radial-gradient(#ffffff1a_1px,transparent_1px)] [background-size:20px_20px] pointer-events-none" />
+
+        <div className="w-full max-w-7xl mx-auto relative z-10">
           {/* Header */}
-          <div className="text-center mb-12 ">
+          <div className="text-center mb-10 sm:mb-16">
             <h1
-              className={`${kalufira.className} text-5xl md:text-7xl font-black text-black mb-2 tracking-tight z-50 `}
+              className={`${kalufira.className} text-5xl md:text-8xl font-black text-black mb-2 tracking-tight drop-shadow-sm`}
             >
               CARNIVAL CALENDAR
             </h1>
+            <div className="h-1.5 w-32 bg-black mx-auto rounded-full opacity-20" />
           </div>
 
           {/* Calendar Grid */}
-          <div className="grid lg:grid-cols-2 gap-8 ">
+          <div className="grid lg:grid-cols-2 gap-12 lg:gap-20">
             {/* January */}
-            <div className=" rounded-3xl p-6  ">
+            <div className="relative group/month">
               <h2
-                className={`${kalufira.className} text-4xl font-black text-black mb-6 text-center`}
+                className={`${kalufira.className} text-4xl sm:text-5xl font-black text-black mb-8 text-center group-hover/month:scale-110 transition-transform duration-500`}
               >
                 JANUARY
               </h2>
 
               {/* Day Headers */}
-              <div className="grid grid-cols-7 gap-2 mb-4">
+              <div className="grid grid-cols-7 gap-2 mb-6">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
                   (day) => (
                     <div
                       key={day}
-                      className="text-center font-handwritten font-bold text-black text-2xl"
+                      className="text-center font-handwritten font-black text-black/40 text-sm uppercase tracking-widest"
                     >
                       {day}
                     </div>
@@ -178,8 +212,8 @@ const ThirteenthPage = () => {
               </div>
 
               {/* Calendar Days */}
-              <div className="grid grid-cols-7 gap-2">
-                {/* Week 1 */}
+              <div className="grid grid-cols-7 gap-x-1 gap-y-3 sm:gap-4">
+                {/* Week 1 padding */}
                 <div className="h-16"></div>
                 <div className="h-16"></div>
                 <div className="h-16"></div>
@@ -188,59 +222,26 @@ const ThirteenthPage = () => {
                 {renderCalendarDay(2, "January")}
                 {renderCalendarDay(3, "January")}
 
-                {/* Week 2 */}
-                {renderCalendarDay(4, "January")}
-                {renderCalendarDay(5, "January")}
-                {renderCalendarDay(6, "January")}
-                {renderCalendarDay(7, "January")}
-                {renderCalendarDay(8, "January")}
-                {renderCalendarDay(9, "January")}
-                {renderCalendarDay(10, "January")}
-
-                {/* Week 3 */}
-                {renderCalendarDay(11, "January")}
-                {renderCalendarDay(12, "January")}
-                {renderCalendarDay(13, "January")}
-                {renderCalendarDay(14, "January")}
-                {renderCalendarDay(15, "January")}
-                {renderCalendarDay(16, "January")}
-                {renderCalendarDay(17, "January")}
-
-                {/* Week 4 */}
-                {renderCalendarDay(18, "January")}
-                {renderCalendarDay(19, "January")}
-                {renderCalendarDay(20, "January")}
-                {renderCalendarDay(21, "January")}
-                {renderCalendarDay(22, "January")}
-                {renderCalendarDay(23, "January")}
-                {renderCalendarDay(24, "January")}
-
-                {/* Week 5 */}
-                {renderCalendarDay(25, "January")}
-                {renderCalendarDay(26, "January")}
-                {renderCalendarDay(27, "January")}
-                {renderCalendarDay(28, "January")}
-                {renderCalendarDay(29, "January")}
-                {renderCalendarDay(30, "January")}
-                {renderCalendarDay(31, "January")}
+                {/* Remaining Weeks */}
+                {Array.from({ length: 28 }, (_, i) => renderCalendarDay(i + 4, "January"))}
               </div>
             </div>
 
             {/* February */}
-            <div className=" rounded-3xl p-6  ">
+            <div className="relative group/month">
               <h2
-                className={`${kalufira.className} text-4xl font-black text-black mb-6 text-center`}
+                className={`${kalufira.className} text-4xl sm:text-5xl font-black text-black mb-8 text-center group-hover/month:scale-110 transition-transform duration-500`}
               >
                 FEBRUARY
               </h2>
 
               {/* Day Headers */}
-              <div className="grid grid-cols-7 gap-2 mb-4">
+              <div className="grid grid-cols-7 gap-2 mb-6">
                 {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
                   (day) => (
                     <div
                       key={day}
-                      className="text-center font-black text-black text-2xl font-handwritten"
+                      className="text-center font-handwritten font-black text-black/40 text-sm uppercase tracking-widest"
                     >
                       {day}
                     </div>
@@ -249,69 +250,16 @@ const ThirteenthPage = () => {
               </div>
 
               {/* Calendar Days */}
-              <div className="grid grid-cols-7 gap-2">
-                {/* Week 1 */}
-                {renderCalendarDay(1, "February")}
-                {renderCalendarDay(2, "February")}
-                {renderCalendarDay(3, "February")}
-                {renderCalendarDay(4, "February")}
-                {renderCalendarDay(5, "February")}
-                {renderCalendarDay(6, "February")}
-                {renderCalendarDay(7, "February")}
-
-                {/* Week 2 */}
-                {renderCalendarDay(8, "February")}
-                {renderCalendarDay(9, "February")}
-                {renderCalendarDay(10, "February")}
-                {renderCalendarDay(11, "February")}
-                {renderCalendarDay(12, "February")}
-                {renderCalendarDay(13, "February")}
-                {renderCalendarDay(14, "February")}
-
-                {/* Week 3 - Carnival Days */}
-                {renderCalendarDay(15, "February")}
-                <div className=" rotate-[-8deg] ">
-                  <span
-                    className={`${kalufira.className} text-white hidden sm:block text-[15px] sm:text-lg font-black `}
-                    style={{ WebkitTextStroke: "1px black" }}
-                  >
-                    Carnival
-                  </span>
-                  <span
-                    className={`${kalufira.className} text-white text-[15px] sm:text-lg font-black block -mt-1`}
-                    style={{ WebkitTextStroke: "1px black" }}
-                  >
-                    Monday
-                  </span>
-                </div>
-
-                <div className=" rotate-[-8deg] ">
-                  <span
-                    className={`${kalufira.className} text-white text-[15px] sm:text-lg font-black hidden sm:block `}
-                    style={{ WebkitTextStroke: "1px black" }}
-                  >
-                    Carnival
-                  </span>
-                  <span
-                    className={`${kalufira.className} text-white text-[15px] sm:text-lg font-black block -mt-1 relative top-5 sm:top-0`}
-                    style={{ WebkitTextStroke: "1px black" }}
-                  >
-                    Tuseday
-                  </span>
-                </div>
-                {renderCalendarDay(18, "February")}
-                {renderCalendarDay(19, "February")}
-                {renderCalendarDay(20, "February")}
-                {renderCalendarDay(21, "February")}
-
-                {/* Week 4 */}
-                {renderCalendarDay(22, "February")}
-                {renderCalendarDay(23, "February")}
-                {renderCalendarDay(24, "February")}
-                {renderCalendarDay(25, "February")}
-                {renderCalendarDay(26, "February")}
-                {renderCalendarDay(27, "February")}
-                {renderCalendarDay(28, "February")}
+              <div className="grid grid-cols-7 gap-x-1 gap-y-3 sm:gap-4">
+                {/* February 1-15 */}
+                {Array.from({ length: 15 }, (_, i) => renderCalendarDay(i + 1, "February"))}
+                
+                {/* Carnival Monday & Tuesday */}
+                {renderCalendarDay(16, "February", true, "Carnival Monday")}
+                {renderCalendarDay(17, "February", true, "Carnival Tuesday")}
+                
+                {/* February 18-28 */}
+                {Array.from({ length: 11 }, (_, i) => renderCalendarDay(i + 18, "February"))}
               </div>
             </div>
           </div>
@@ -329,6 +277,12 @@ const ThirteenthPage = () => {
           />
         )}
       </section>
+      
+      <style jsx>{`
+        section {
+            background: linear-gradient(135deg, #009d94 0%, #00857d 100%);
+        }
+      `}</style>
     </>
   );
 };

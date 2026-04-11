@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import { v4 as uuidv4 } from "uuid";
 import Konva from "konva";
 
@@ -393,11 +393,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     
     try {
       const state = get();
+      // Use cached token if valid, only refresh if necessary (faster)
+      const token = await auth.currentUser?.getIdToken();
+      
       const res = await fetch("/api/editor/save", {
         method: "POST",
         headers: { 
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${localStorage.getItem("fb_token") || ""}`,
+            "Authorization": `Bearer ${token || localStorage.getItem("fb_token") || ""}`,
             "x-user-email": localStorage.getItem("fb_user_email") || "",
             "x-user-id": localStorage.getItem("fb_user_id") || ""
         },
@@ -509,7 +512,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   isGeneratingPdf: false,
   generatePdfBook: async () => {
-    const { spreads, setCurrentSpread, stageRef, activeTemplateName, currentSpreadIndex } = get();
+    const { spreads, setCurrentSpread, stageRef, activeTemplateName, currentSpreadIndex, selectElement } = get();
     
     if (!stageRef) {
         return;
@@ -518,6 +521,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set({ isGeneratingPdf: true });
     const originalIndex = currentSpreadIndex;
     
+    // Clear selection so the transformer box doesn't appear in the PDF
+    selectElement(null);
+
     try {
         const { jsPDF } = await import("jspdf");
         const PAGE_WIDTH = 400;
@@ -533,16 +539,83 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         for (let i = 0; i < spreads.length; i++) {
             setCurrentSpread(i, true);
+            
+            // 1. Wait for React to switch and Konva to mount nodes
             await new Promise(resolve => setTimeout(resolve, 800)); 
             
-            const dataUrl = stageRef.toDataURL({ 
-                pixelRatio: 2,
-                mimeType: "image/jpeg",
-                quality: 0.95
-            });
+            // 2. Clear and Redraw
+            stageRef.batchDraw();
 
-            if (i > 0) pdf.addPage([spreadWidth, spreadHeight], "landscape");
-            pdf.addImage(dataUrl, 'JPEG', 0, 0, spreadWidth, spreadHeight);
+            // 3. Manually add a temporary white background coverage
+            const stageWidthExport = stageRef.width() / stageRef.scaleX();
+            const stageHeightExport = stageRef.height() / stageRef.scaleY();
+
+            const exportBg = new Konva.Rect({
+                x: 0,
+                y: 0,
+                width: stageWidthExport, 
+                height: stageHeightExport,
+                fill: 'white',
+                listening: false
+            });
+            
+            const layers = stageRef.getLayers();
+            if (layers.length > 0) {
+                const firstLayer = layers[0];
+                firstLayer.add(exportBg);
+                exportBg.moveToBottom();
+                
+                // 4. DEEP-WAIT FOR ALL ASSETS (Including Rect Patterns)
+                const nodes = stageRef.find('Image, Rect');
+                const assetPromises = nodes.map(node => {
+                    // Check for standard images
+                    if (node.getClassName() === 'Image') {
+                        const img = (node as any).image();
+                        if (img && !img.complete) {
+                            return new Promise(r => { 
+                                img.addEventListener('load', r, { once: true });
+                                img.addEventListener('error', r, { once: true });
+                                setTimeout(r, 6000); 
+                            });
+                        }
+                    }
+                    // Check for background patterns in Rects
+                    if (node.getClassName() === 'Rect') {
+                        const patternImg = (node as any).fillPatternImage();
+                        if (patternImg && !patternImg.complete) {
+                            return new Promise(r => {
+                                patternImg.addEventListener('load', r, { once: true });
+                                patternImg.addEventListener('error', r, { once: true });
+                                setTimeout(r, 6000);
+                            });
+                        }
+                    }
+                    return Promise.resolve();
+                });
+
+                await Promise.all(assetPromises);
+
+                // Final draw after all assets ready
+                firstLayer.batchDraw();
+                
+                // 5. Take high-precision snapshot with explicit bounds
+                const dataUrl = stageRef.toDataURL({ 
+                    x: 0,
+                    y: 0,
+                    width: stageWidthExport,
+                    height: stageHeightExport,
+                    pixelRatio: 4, 
+                    mimeType: "image/jpeg",
+                    quality: 1.0
+                });
+
+                // Clean up
+                exportBg.destroy();
+                firstLayer.batchDraw();
+
+                if (i > 0) pdf.addPage([spreadWidth, spreadHeight], "landscape");
+                pdf.addImage(dataUrl, 'JPEG', 0, 0, spreadWidth, spreadHeight);
+            }
         }
 
         const fileName = `${activeTemplateName?.replace(/\s+/g, '_') || 'Carnival_Book'}_Book.pdf`;
