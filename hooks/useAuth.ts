@@ -1,13 +1,13 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { useFirebase } from "@/providers/FirebaseAuthProvider";
 
 export function useAuth() {
-  const { data: session, status } = useSession();
+  const { user, loading, isAuthenticated } = useFirebase();
 
   return {
-    user: session?.user,
-    isLoading: status === "loading",
-    isAuthenticated: status === "authenticated",
+    user,
+    isLoading: loading,
+    isAuthenticated,
   };
 }

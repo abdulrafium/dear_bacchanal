@@ -29,11 +29,18 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchStats();
+    
+    // Set up polling interval for real-time updates
+    const interval = setInterval(() => {
+      fetchStats();
+    }, 5000); // 5 seconds polling
+
+    return () => clearInterval(interval);
   }, []);
 
   const fetchStats = async () => {
     try {
-      const res = await fetch("/api/admin/stats");
+      const res = await fetch(`/api/admin/stats?t=${Date.now()}`);
       if (!res.ok) throw new Error("Failed to fetch stats");
       const data = await res.json();
       setStats(data.stats);
@@ -62,9 +69,15 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-white mb-1">Dashboard</h1>
-        <p className="text-white/40 text-sm">Overview of your platform metrics</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white mb-1">Dashboard</h1>
+          <p className="text-white/40 text-sm">Overview of your platform metrics</p>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 rounded-full">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+          <span className="text-[10px] font-bold text-green-500 uppercase tracking-widest">Live Updates</span>
+        </div>
       </div>
 
       {/* Stat Cards */}

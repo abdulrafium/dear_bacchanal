@@ -3,8 +3,17 @@ import { v4 as uuidv4 } from "uuid";
 import Konva from "konva";
 
 // Element types that can be placed on a page
-export type ElementType = "image" | "text" | "shape" | "sticker" | "qrcode";
+export type ElementType = "image" | "text" | "shape" | "sticker" | "qrcode" | "calendar";
 export type ShapeType = "rectangle" | "ellipse";
+
+export interface CalendarSettings {
+  month: number; // 0-11
+  year: number;
+  data: Record<string, string>; // "YYYY-MM-DD" -> text
+  backgroundColor?: string;
+  textColor?: string;
+  titleColor?: string;
+}
 
 export interface EditorElement {
   id: string;
@@ -31,6 +40,8 @@ export interface EditorElement {
   shapeFill?: string;
   // QR Code
   qrData?: string;
+  // Calendar
+  calendarSettings?: CalendarSettings;
   // Others
   opacity?: number;
 }
@@ -49,7 +60,7 @@ export interface BookSpread {
   rightPage: BookPage;
 }
 
-export type SidebarPanel = "images" | "templates" | "layouts" | "backgrounds" | "stickers" | null;
+export type SidebarPanel = "images" | "templates" | "layouts" | "backgrounds" | "stickers" | "calendar" | null;
 export type RightTool = "text" | "photo" | "qrcode" | "layout" | "rectangle" | "ellipse" | null;
 
 interface HistoryEntry {
@@ -127,6 +138,8 @@ interface EditorState {
   setDirty: (dirty: boolean) => void;
   resetEditor: () => void;
   save: (isAdmin?: boolean) => Promise<boolean>;
+  isGeneratingPdf: boolean;
+  generatePdfBook: () => Promise<void>;
 }
 
 function createDefaultPage(label: string, isLocked = false): BookPage {
@@ -377,9 +390,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const { spreads, isAdmin, activeTemplateId, activeTemplateName, templateDescription, templateCountry, templateYear, currentSpreadIndex, version: startVersion } = get();
     
     try {
+      const state = get();
       const res = await fetch("/api/editor/save", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${localStorage.getItem("fb_token") || ""}`,
+            "x-user-email": localStorage.getItem("fb_user_email") || "",
+            "x-user-id": localStorage.getItem("fb_user_id") || ""
+        },
         body: JSON.stringify({ 
           spreads, 
           isAdmin: isAdminParam !== undefined ? isAdminParam : isAdmin, 
@@ -470,4 +489,67 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     historyIndex: -1,
     isDirty: false, // Reset should be clean
   }),
+
+  isGeneratingPdf: false,
+  generatePdfBook: async () => {
+    const { spreads, setCurrentSpread, stageRef, activeTemplateName, currentSpreadIndex } = get();
+    
+    if (!stageRef) {
+        return;
+    }
+
+    set({ isGeneratingPdf: true });
+    const originalIndex = currentSpreadIndex;
+    
+    try {
+        const { jsPDF } = await import("jspdf");
+        const PAGE_WIDTH = 400;
+        const PAGE_HEIGHT = 550;
+        const spreadWidth = PAGE_WIDTH * 2 + 8;
+        const spreadHeight = PAGE_HEIGHT;
+        
+        const pdf = new jsPDF({
+          orientation: "landscape",
+          unit: "px",
+          format: [spreadWidth, spreadHeight]
+        });
+
+        for (let i = 0; i < spreads.length; i++) {
+            setCurrentSpread(i, true);
+            await new Promise(resolve => setTimeout(resolve, 800)); 
+            
+            const dataUrl = stageRef.toDataURL({ 
+                pixelRatio: 2,
+                mimeType: "image/jpeg",
+                quality: 0.95
+            });
+
+            if (i > 0) pdf.addPage([spreadWidth, spreadHeight], "landscape");
+            pdf.addImage(dataUrl, 'JPEG', 0, 0, spreadWidth, spreadHeight);
+        }
+
+        const fileName = `${activeTemplateName?.replace(/\s+/g, '_') || 'Carnival_Book'}_Book.pdf`;
+        pdf.save(fileName);
+
+        // Consume purchase - MUST PAY AGAIN FOR NEXT DOWNLOAD
+        try {
+          await fetch("/api/auth/consume-purchase", {
+            method: "POST",
+            headers: { 
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${localStorage.getItem("fb_token") || ""}`,
+                "x-user-email": localStorage.getItem("fb_user_email") || "",
+                "x-user-id": localStorage.getItem("fb_user_id") || ""
+            }
+          });
+        } catch (consumeError) {
+          console.error("Failed to consume purchase:", consumeError);
+        }
+    } catch (err) {
+        console.error("PDF Export Error:", err);
+    } finally {
+        setCurrentSpread(originalIndex, true);
+        set({ isGeneratingPdf: false });
+    }
+  },
 }));

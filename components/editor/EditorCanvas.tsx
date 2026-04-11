@@ -6,7 +6,7 @@ import { Html } from "react-konva-utils";
 import { useEditorStore, EditorElement, BookPage } from "@/store/editor-store";
 import Konva from "konva";
 import { PAGE_LAYOUTS } from "@/lib/layouts";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar } from "lucide-react";
 import { EditorPageTools } from "./EditorPageTools";
 import { toast } from "sonner";
 
@@ -94,7 +94,8 @@ function PageElement({
             fontFamily={displayEl.fontFamily || "Arial"}
             fill={displayEl.fill || "#000000"}
             align={displayEl.align || "left"}
-            fontStyle={displayEl.fontStyle || "normal"}
+            fontStyle={`${displayEl.fontStyle || ""}`.includes("bold") && `${displayEl.fontStyle || ""}`.includes("italic") ? "bold italic" : (`${displayEl.fontStyle || ""}`.includes("bold") ? "bold" : (`${displayEl.fontStyle || ""}`.includes("italic") ? "italic" : "normal"))}
+            textDecoration={displayEl.fontStyle?.includes("underline") ? "underline" : "none"}
             padding={8}
             onDblClick={() => {
               if (!canInteract) return;
@@ -107,6 +108,12 @@ function PageElement({
 
       case "image":
         return <ImageElement {...commonProps} src={el.src || ""} />;
+
+      case "sticker":
+        return <ImageElement {...commonProps} src={el.src || ""} />;
+
+      case "calendar":
+        return <CalendarElement {...commonProps} el={el} pageId={pageId} canInteract={canInteract} />;
 
       case "shape":
         if (el.shapeType === "ellipse") {
@@ -223,8 +230,9 @@ function PageElement({
                      color: el.fill || "#000000",
                      textAlign: (el.align as any) || "left",
                      fontWeight: el.fontStyle?.includes("bold") ? "bold" : "normal",
-                     textDecoration: el.fontStyle?.includes("underline") ? "underline" : "none",
-                     background: (el.fill?.toLowerCase() === "#ffffff" || el.fill?.toLowerCase() === "white") ? "#1a1a1a" : "white",
+                     fontStyle: el.fontStyle?.includes("italic") ? "italic" : "normal",
+                      textDecoration: el.fontStyle?.includes("underline") ? "underline" : "none",
+                     background: (el.fill?.toLowerCase() === "#ffffff" || el.fill?.toLowerCase() === "white" || el.fill?.toLowerCase() === "#fff") ? "#1a1a1a" : "#f8fafc",
                      border: "2px solid #3b82f6",
                      borderRadius: "4px",
                      padding: "4px",
@@ -280,6 +288,181 @@ function ImageElement(props: any) {
   return <KonvaImage {...props} image={image} />;
 }
 
+function CalendarElement({
+  el,
+  pageId,
+  canInteract,
+  ...props
+}: {
+  el: EditorElement;
+  pageId: string;
+  canInteract: boolean;
+  [key: string]: any;
+}) {
+  const updateElement = useEditorStore((s) => s.updateElement);
+  const settings = el.calendarSettings || { month: 0, year: 2026, data: {} };
+  
+  const daysInMonth = (month: number, year: number) => new Date(year, month + 1, 0).getDate();
+  const firstDayOfMonth = (month: number, year: number) => new Date(year, month, 1).getDay();
+  
+  const days = Array.from({ length: daysInMonth(settings.month, settings.year) }, (_, i) => i + 1);
+  const blanks = Array.from({ length: firstDayOfMonth(settings.month, settings.year) }, (_, i) => i);
+  const weekDays = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+  
+  const cellWidth = el.width / 7;
+  const headerHeight = 40;
+  const subHeaderHeight = 25;
+  const gridY = headerHeight + subHeaderHeight;
+  const cellHeight = (el.height - gridY) / 6;
+
+  const [editingDate, setEditingDate] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+
+  const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+
+  return (
+    <Group {...props} x={el.x} y={el.y} width={el.width} height={el.height} rotation={el.rotation} draggable={canInteract}>
+      {/* Background with Grid */}
+      <Rect
+        width={el.width}
+        height={el.height}
+        fill="#009d94"
+        cornerRadius={8}
+      />
+      
+      {/* Title */}
+      <Text
+        text={months[settings.month]}
+        width={el.width}
+        y={10}
+        align="center"
+        fontSize={24}
+        fontStyle="bold"
+        fill="#000"
+        fontFamily="Boogaloo"
+      />
+
+      {/* WeekDays */}
+      {weekDays.map((day, i) => (
+        <Text
+          key={day}
+          text={day}
+          x={i * cellWidth}
+          y={headerHeight}
+          width={cellWidth}
+          align="center"
+          fontSize={10}
+          fontStyle="bold"
+          fill="#000"
+        />
+      ))}
+
+      {/* Days Grid */}
+      {blanks.map((_, i) => (
+        <Rect
+          key={`blank-${i}`}
+          x={(i % 7) * cellWidth}
+          y={gridY + Math.floor(i / 7) * cellHeight}
+          width={cellWidth}
+          height={cellHeight}
+          stroke="#ffffff22"
+          strokeWidth={1}
+        />
+      ))}
+
+      {days.map((day, i) => {
+        const index = i + blanks.length;
+        const x = (index % 7) * cellWidth;
+        const y = gridY + Math.floor(index / 7) * cellHeight;
+        const dateKey = `${settings.year}-${String(settings.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const note = settings.data[dateKey] || "";
+
+        return (
+          <Group key={day} x={x} y={y}>
+            <Rect
+              width={cellWidth}
+              height={cellHeight}
+              stroke="#ffffff44"
+              strokeWidth={1}
+              fill={note ? "rgba(255,255,255,0.2)" : "transparent"}
+              onClick={() => {
+                if (!canInteract) return;
+                setEditingDate(dateKey);
+                setEditValue(note);
+              }}
+            />
+            <Text
+              text={day.toString()}
+              width={cellWidth}
+              padding={4}
+              fontSize={14}
+              fill="#000"
+            />
+            {note && (
+              <Text
+                text={note}
+                width={cellWidth - 4}
+                x={2}
+                y={18}
+                fontSize={8}
+                fill="#fff"
+                fontStyle="italic"
+                wrap="char"
+              />
+            )}
+          </Group>
+        );
+      })}
+
+      {editingDate && (
+        <Html>
+          <div className="fixed inset-0 bg-black/50 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-200">
+              <h4 className="text-lg font-bold mb-4 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-blue-500" />
+                Note for {editingDate}
+              </h4>
+              <textarea
+                autoFocus
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                className="w-full h-32 p-3 border border-gray-200 rounded-xl mb-4 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                placeholder="What's happening today?..."
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setEditingDate(null)}
+                  className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-bold transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    const newData = { ...settings.data };
+                    if (editValue.trim()) {
+                      newData[editingDate] = editValue;
+                    } else {
+                      delete newData[editingDate];
+                    }
+                    updateElement(pageId, el.id, {
+                      calendarSettings: { ...settings, data: newData }
+                    });
+                    setEditingDate(null);
+                    toast.success("Note saved!");
+                  }}
+                  className="flex-1 py-2.5 bg-[#2d2d2d] hover:bg-black text-white rounded-xl text-sm font-bold transition-colors"
+                >
+                  Save Note
+                </button>
+              </div>
+            </div>
+          </div>
+        </Html>
+      )}
+    </Group>
+  );
+}
+
 function PageCanvas({
   page,
   offsetX,
@@ -306,28 +489,6 @@ function PageCanvas({
 
       {/* Clipped content area */}
       <Group clipX={0} clipY={0} clipWidth={PAGE_WIDTH} clipHeight={PAGE_HEIGHT}>
-        {/* Bleed area indicator */}
-        <Rect
-          x={BLEED}
-          y={BLEED}
-          width={PAGE_WIDTH - BLEED * 2}
-          height={PAGE_HEIGHT - BLEED * 2}
-          stroke="#e5e7eb"
-          strokeWidth={0.5}
-          dash={[4, 4]}
-        />
-
-        {/* Safe margin */}
-        <Rect
-          x={SAFE_MARGIN}
-          y={SAFE_MARGIN}
-          width={PAGE_WIDTH - SAFE_MARGIN * 2}
-          height={PAGE_HEIGHT - SAFE_MARGIN * 2}
-          stroke="#93c5fd"
-          strokeWidth={0.5}
-          dash={[2, 2]}
-        />
-
         {/* Page elements */}
         {page.elements.map((el) => (
           <PageElement
@@ -358,8 +519,23 @@ export function EditorCanvas() {
   const isPreviewMode = useEditorStore((s) => s.isPreviewMode);
   const activeTemplateName = useEditorStore((s) => s.activeTemplateName);
   const templateLoaded = useEditorStore((s) => s.templateLoaded);
-
   const currentSpread = spreads[currentSpreadIndex];
+
+  const stageRef = useRef<Konva.Stage>(null);
+  const setStageRefStore = useEditorStore((s) => s.setStageRef);
+
+  useEffect(() => {
+    if (stageRef.current) {
+      setStageRefStore(stageRef.current);
+    }
+  }, [setStageRefStore, spreads]); 
+
+  // Real-time canvas refresh on state changes
+  useEffect(() => {
+    if (stageRef.current) {
+      stageRef.current.batchDraw();
+    }
+  }, [spreads, useEditorStore((s) => s.previewElement)]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -474,6 +650,21 @@ export function EditorCanvas() {
         return;
       }
 
+      const stickerUrl = e.dataTransfer.getData("application/sticker-url");
+      if (stickerUrl) {
+        addElement(targetPage.id, {
+          type: "sticker",
+          x: dropPosInStage / scale - 50,
+          y: (e.clientY - rect.top - stageY) / scale - 50,
+          width: 100,
+          height: 100,
+          rotation: 0,
+          src: stickerUrl,
+        });
+        toast.success("Sticker added to page!");
+        return;
+      }
+
       const files = Array.from(e.dataTransfer.files);
       const imageFiles = files.filter((f) => f.type.startsWith("image/"));
 
@@ -483,8 +674,8 @@ export function EditorCanvas() {
           const url = URL.createObjectURL(file);
           addElement(targetPage!.id, {
             type: "image",
-            x: 50 + Math.random() * 100,
-            y: 50 + Math.random() * 100,
+            x: dropPosInStage / scale - 100,
+            y: (e.clientY - rect.top - stageY) / scale - 75,
             width: 200,
             height: 150,
             rotation: 0,
@@ -493,7 +684,7 @@ export function EditorCanvas() {
         });
       }
     },
-    [currentSpread, scale, containerSize.width, addElement, applyLayout, isSingle, mobilePage]
+    [currentSpread, scale, containerSize.width, addElement, applyLayout, isSingle, mobilePage, stageY]
   );
 
   if (!templateLoaded || !currentSpread) {
@@ -535,14 +726,7 @@ export function EditorCanvas() {
       )}
 
       <div className="flex-1 relative overflow-hidden">
-        {!isPreviewMode && (
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
-            <div className="bg-[#2d2d2d] text-white text-[10px] sm:text-xs px-4 py-2 rounded-full shadow-lg flex items-center gap-2">
-              <span className="w-2 h-2 bg-yellow-400 rounded-full" />
-              Keep content within safe margins.
-            </div>
-          </div>
-        )}
+
 
         {isPreviewMode && (
           <>
@@ -573,7 +757,7 @@ export function EditorCanvas() {
           }}
         >
           <Stage
-            ref={(ref) => useEditorStore.getState().setStageRef(ref)}
+            ref={stageRef}
             width={stageWidth}
             height={stageHeight}
             scaleX={scale}

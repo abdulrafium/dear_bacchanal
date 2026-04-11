@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { signIn } from "next-auth/react";
 import { toast } from "sonner";
 import { useAuthModal } from "@/hooks/useAuthModal";
 import { signInSchema, SignInInput } from "@/lib/validators";
@@ -11,11 +10,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { useFirebase } from "@/providers/FirebaseAuthProvider";
 
 export function SignInForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const { toggleView, closeModal } = useAuthModal();
+  const { loginWithGoogle } = useFirebase();
   const router = useRouter();
 
   const {
@@ -29,23 +32,14 @@ export function SignInForm() {
   const onSubmit = async (data: SignInInput) => {
     try {
       setIsLoading(true);
-
-      const result = await signIn("credentials", {
-        email: data.email,
-        password: data.password,
-        redirect: false,
-      });
-
-      if (result?.error) {
-        toast.error("Invalid email or password");
-        return;
-      }
-
+      if (!data.email || !data.password) return;
+      await signInWithEmailAndPassword(auth, data.email, data.password);
       toast.success("Signed in successfully!");
       closeModal();
       window.location.href = "/editor";
-    } catch (error) {
-      toast.error("Something went wrong. Please try again.");
+    } catch (error: any) {
+      console.error("Login Error:", error);
+      toast.error(error.message || "Invalid email or password");
     } finally {
       setIsLoading(false);
     }
@@ -54,10 +48,13 @@ export function SignInForm() {
   const handleGoogleSignIn = async () => {
     try {
       setIsGoogleLoading(true);
-      // Redirect to /editor after Google sign-in
-      await signIn("google", { callbackUrl: "/editor" });
+      await loginWithGoogle();
+      closeModal();
+      window.location.href = "/editor";
     } catch (error) {
+      console.error("Google Sign-In Error:", error);
       toast.error("Failed to sign in with Google");
+    } finally {
       setIsGoogleLoading(false);
     }
   };
@@ -145,16 +142,6 @@ export function SignInForm() {
         {isGoogleLoading ? "Connecting..." : "Continue with Google"}
       </button>
 
-      <div className="text-center text-sm">
-        <span className="text-neutral-400">Don't have an account? </span>
-        <button
-          type="button"
-          onClick={toggleView}
-          className="text-teal hover:text-coral transition-colors duration-200 font-semibold"
-        >
-          Sign up
-        </button>
-      </div>
     </div>
   );
 }

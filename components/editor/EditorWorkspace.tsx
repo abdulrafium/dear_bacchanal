@@ -11,6 +11,8 @@ import { useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
+import { useFirebase } from "@/providers/FirebaseAuthProvider";
+
 export default function EditorWorkspace() {
   const activeSidebarPanel = useEditorStore((s) => s.activeSidebarPanel);
   const isPreviewMode = useEditorStore((s) => s.isPreviewMode);
@@ -18,6 +20,7 @@ export default function EditorWorkspace() {
   const loadTemplate = useEditorStore((s) => s.loadTemplate);
   const setCurrentSpread = useEditorStore((s) => s.setCurrentSpread);
   const isAdmin = useEditorStore((s) => s.isAdmin);
+  const { refreshUser } = useFirebase();
   
   const searchParams = useSearchParams();
   const templateName = searchParams.get("templateName");
@@ -25,6 +28,10 @@ export default function EditorWorkspace() {
   
   const [loading, setLoading] = useState(true);
   const lastLoadedRef = useRef<string | null>(null);
+  const [sidebarWidth, setSidebarWidth] = useState(260); 
+  const [bottomBarHeight, setBottomBarHeight] = useState(140);
+  const [isResizingSidebar, setIsResizingSidebar] = useState(false);
+  const [isResizingBottom, setIsResizingBottom] = useState(false);
 
   // Sync isAdmin once from URL on mount
   useEffect(() => {
@@ -32,6 +39,37 @@ export default function EditorWorkspace() {
       useEditorStore.getState().setIsAdmin(true);
     }
   }, []);
+
+  const handleSidebarResize = (e: MouseEvent) => {
+    if (isResizingSidebar) {
+      const newWidth = Math.max(220, Math.min(600, e.clientX - 64)); 
+      setSidebarWidth(newWidth);
+    }
+  };
+
+  const handleBottomResize = (e: MouseEvent) => {
+    if (isResizingBottom) {
+      const newHeight = Math.max(80, Math.min(400, window.innerHeight - e.clientY));
+      setBottomBarHeight(newHeight);
+    }
+  };
+
+  useEffect(() => {
+    if (isResizingSidebar) window.addEventListener("mousemove", handleSidebarResize);
+    if (isResizingBottom) window.addEventListener("mousemove", handleBottomResize);
+    
+    const stopResizing = () => {
+      setIsResizingSidebar(false);
+      setIsResizingBottom(false);
+    };
+
+    window.addEventListener("mouseup", stopResizing);
+    return () => {
+      window.removeEventListener("mousemove", handleSidebarResize);
+      window.removeEventListener("mousemove", handleBottomResize);
+      window.removeEventListener("mouseup", stopResizing);
+    };
+  }, [isResizingSidebar, isResizingBottom]);
 
   useEffect(() => {
     const loadEditorState = async () => {
@@ -61,7 +99,12 @@ export default function EditorWorkspace() {
 
         const res = await fetch(`/api/editor/load?${query.toString()}&t=${Date.now()}`, {
           cache: "no-store",
-          headers: { "Pragma": "no-cache" }
+          headers: { 
+              "Pragma": "no-cache",
+              "Authorization": `Bearer ${localStorage.getItem("fb_token") || ""}`,
+              "x-user-email": localStorage.getItem("fb_user_email") || "",
+              "x-user-id": localStorage.getItem("fb_user_id") || ""
+          }
         });
 
         const spreadFromUrl = searchParams.get("spread");
@@ -135,6 +178,34 @@ export default function EditorWorkspace() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isAdmin, templateName, loadTemplate, setCurrentSpread, searchParams, isAdminParam]);
 
+  // Handle auto-download after payment
+  useEffect(() => {
+    const isPaymentSuccess = searchParams.get("payment") === "success";
+    const isLoaded = useEditorStore.getState().templateLoaded;
+    const stage = useEditorStore.getState().stageRef;
+
+    if (isPaymentSuccess && isLoaded && stage && !loading) {
+      const triggerDownload = async () => {
+        const { generatePdfBook } = useEditorStore.getState();
+        const { toast } = await import("sonner");
+        
+        toast.info("Payment verified! Starting your automatic book download...", {
+          duration: 5000,
+        });
+
+        await generatePdfBook();
+        await refreshUser();
+
+        // Clean up URL
+        const url = new URL(window.location.href);
+        url.searchParams.delete("payment");
+        window.history.replaceState({}, "", url.toString());
+      };
+
+      triggerDownload();
+    }
+  }, [searchParams, loading, useEditorStore((s) => s.templateLoaded), useEditorStore((s) => s.stageRef)]);
+
   // Sync templateName, isAdmin, and currentSpreadIndex with URL and handle beforeunload
   useEffect(() => {
     const state = useEditorStore.getState();
@@ -207,11 +278,27 @@ export default function EditorWorkspace() {
         )}
 
         {!isPreviewMode && activeSidebarPanel && (
-          <div className="absolute inset-x-0 bottom-0 top-auto z-40 md:relative md:inset-auto md:z-auto h-[60vh] md:h-auto border-t md:border-t-0 border-gray-200 shadow-2xl md:shadow-none animate-in slide-in-from-bottom md:animate-none text-black">
-             <div className="flex justify-end p-2 bg-white md:hidden">
-                <button onClick={() => useEditorStore.getState().setSidebarPanel(null)} className="text-sm font-bold text-gray-500">Close</button>
+          <div 
+            style={{ width: sidebarWidth }}
+            className="absolute inset-x-0 bottom-0 top-auto z-40 md:relative md:inset-auto md:z-auto h-[60vh] md:h-auto border-t md:border-t-0 border-gray-200 shadow-2xl md:shadow-none animate-in slide-in-from-bottom md:animate-none text-black flex flex-row shrink-0 bg-white"
+          >
+             <div className="flex-1 flex flex-col h-full overflow-hidden">
+                <div className="flex justify-end p-2 bg-white md:hidden">
+                    <button onClick={() => useEditorStore.getState().setSidebarPanel(null)} className="text-sm font-bold text-gray-500">Close</button>
+                </div>
+                <EditorLeftPanel />
              </div>
-            <EditorLeftPanel />
+
+             {/* Resize Handle */}
+             <div 
+                className="hidden md:flex w-1 bg-gray-100/50 hover:bg-teal/40 cursor-col-resize items-center justify-center group transition-colors"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  setIsResizingSidebar(true);
+                }}
+             >
+                <div className="w-[2px] h-8 bg-gray-300 group-hover:bg-teal rounded-full" />
+             </div>
           </div>
         )}
 
@@ -221,12 +308,31 @@ export default function EditorWorkspace() {
       </div>
 
       {!isPreviewMode && (
-        <div className="md:hidden border-t border-gray-200">
-           <EditorLeftSidebar />
+        <div 
+           style={{ height: bottomBarHeight }}
+           className="hidden md:block border-t border-gray-200 bg-white shrink-0 relative"
+        >
+           {/* Resize Handle */}
+           <div 
+              className="absolute -top-[3px] inset-x-0 h-[6px] bg-transparent hover:bg-teal/40 cursor-row-resize z-50 transition-colors flex items-center justify-center group"
+              onMouseDown={(e) => {
+                 e.preventDefault();
+                 setIsResizingBottom(true);
+              }}
+           >
+              <div className="h-[1.5px] w-12 bg-gray-300 group-hover:bg-teal rounded-full" />
+           </div>
+           <div className="h-full overflow-hidden">
+             <EditorBottomBar />
+           </div>
         </div>
       )}
 
-      <EditorBottomBar />
+      {!isPreviewMode && (
+        <div className="md:hidden border-t border-gray-200 h-[60px]">
+           <EditorBottomBar />
+        </div>
+      )}
     </div>
   );
 }

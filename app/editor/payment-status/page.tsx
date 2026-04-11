@@ -2,7 +2,6 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
 import { Loader2 } from "lucide-react";
 
 export default function PaymentStatusPage() {
@@ -27,6 +26,7 @@ function PaymentStatusContent() {
   const [status, setStatus] = useState<"loading" | "success" | "failed" | "canceled">(
     canceled ? "canceled" : "loading"
   );
+  const [reason, setReason] = useState<string | null>(null);
 
   useEffect(() => {
     if (!sessionId || canceled) return;
@@ -38,21 +38,6 @@ function PaymentStatusContent() {
 
         if (data.success) {
           setStatus("success");
-
-          if (data.oneTimeToken && data.email) {
-            try {
-              const result = await signIn("credentials", {
-                email: data.email,
-                oneTimeToken: data.oneTimeToken,
-                redirect: false,
-              });
-              if (result?.error) {
-                console.error("Post-payment sign-in failed:", result.error);
-              }
-            } catch (e) {
-              console.error("Post-payment sign-in error:", e);
-            }
-          }
 
           if (data.session?.shipping_details) {
             try {
@@ -67,9 +52,11 @@ function PaymentStatusContent() {
           }
         } else {
           setStatus("failed");
+          setReason(data.payment_status === "unpaid" ? `Status: ${data.status}` : data.error || "Payment was not confirmed.");
         }
-      } catch {
+      } catch (err: any) {
         setStatus("failed");
+        setReason(err.message || "An unexpected error occurred.");
       }
     };
 
@@ -77,10 +64,10 @@ function PaymentStatusContent() {
   }, [sessionId, canceled]);
 
   useEffect(() => {
-    if (status === "success" || status === "canceled") {
+    if (status === "success") {
       const timer = setTimeout(() => {
-        router.replace("/editor?auto_ship=true");
-      }, 3000);
+        router.replace("/editor?payment=success");
+      }, 5000); // 5 seconds to let them click manual download if they want
       return () => clearTimeout(timer);
     }
   }, [status, router]);
@@ -90,8 +77,8 @@ function PaymentStatusContent() {
       <div className="text-center max-w-lg w-full">
         {status === "loading" && (
            <div className="space-y-4">
-             <Loader2 className="w-12 h-12 animate-spin mx-auto text-coral" />
-             <p className="text-xl font-medium">Verifying your payment...</p>
+             <Loader2 className="w-12 h-12 animate-spin mx-auto text-[#9f2e2b]" />
+             <p className="text-xl font-medium tracking-tight">Verifying your legacy...</p>
            </div>
         )}
 
@@ -100,10 +87,19 @@ function PaymentStatusContent() {
             <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-green-500/20">
                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
             </div>
-            <h1 className="text-4xl font-display mb-4">Payment Successful!</h1>
-            <p className="text-lg text-white/70 mb-8">
-              Thank you for your purchase! We're redirecting you to your carnival book...
+            <h1 className="text-4xl font-black font-display mb-4 uppercase">Success!</h1>
+            <p className="text-lg text-white/70 mb-8 leading-relaxed">
+              Your payment is verified. Your carnival book is ready for generation.
             </p>
+            <div className="flex flex-col gap-3">
+              <button
+                onClick={() => router.replace("/editor?payment=success")}
+                className="w-full py-4 bg-[#9f2e2b] text-white font-black rounded-2xl hover:bg-[#c8413d] transition-all shadow-[0_10px_40px_rgba(159,46,43,0.3)] uppercase tracking-widest text-sm"
+              >
+                Download Book Now
+              </button>
+              <p className="text-[10px] text-white/30 uppercase font-bold tracking-[2px]">Automatic download in 5 seconds...</p>
+            </div>
           </div>
         )}
 
@@ -112,13 +108,18 @@ function PaymentStatusContent() {
             <div className="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-red-500/20">
                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
             </div>
-            <h1 className="text-4xl font-display mb-4">Payment Failed</h1>
-            <p className="text-lg text-white/70 mb-8">
-              Something went wrong with your transaction. Please try again or contact support.
+            <h1 className="text-4xl font-black font-display mb-4 uppercase">Payment Incomplete</h1>
+            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-8">
+               <p className="text-red-400 font-bold text-sm tracking-tight">
+                 REASON: {reason || "The transaction could not be verified by Stripe."}
+               </p>
+            </div>
+            <p className="text-sm text-white/50 mb-8 leading-relaxed">
+              Please try again or contact support if your account was charged.
             </p>
             <button
               onClick={() => router.push("/editor")}
-              className="px-8 py-3 bg-white text-black font-bold rounded-full hover:scale-105 transition-transform"
+              className="px-10 py-4 border border-white/20 text-white font-black rounded-2xl hover:bg-white/5 transition-all uppercase tracking-widest text-xs"
             >
               Back to Editor
             </button>

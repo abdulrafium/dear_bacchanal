@@ -1,14 +1,11 @@
-"use client";
-
-import { signOut } from "next-auth/react";
-import { useAuth } from "@/hooks/useAuth";
+import { useFirebase } from "@/providers/FirebaseAuthProvider";
 import { User, LogOut } from "lucide-react";
 import { toast } from "sonner";
 
 export function UserAvatar() {
-  const { user, isLoading } = useAuth();
+  const { user, loading, logout } = useFirebase();
 
-  if (isLoading) {
+  if (loading) {
     return (
       <div className="flex items-center gap-3 px-4 py-2 rounded-full bg-white/5 backdrop-blur-sm border border-white/20">
         <div className="w-8 h-8 rounded-full bg-gradient-to-r from-coral via-teal to-yellow animate-pulse"></div>
@@ -22,10 +19,10 @@ export function UserAvatar() {
 
   const handleSignOut = async () => {
     try {
-      await signOut({ callbackUrl: "/" });
-      toast.success("Signed out successfully");
+      await logout();
+      window.location.href = "/";
     } catch (error) {
-      toast.error("Failed to sign out");
+      console.error("Sign out error:", error);
     }
   };
 
@@ -34,10 +31,10 @@ export function UserAvatar() {
       {/* User Info - Hidden on mobile */}
       <div className="hidden md:flex items-center gap-3 px-4 py-2 rounded-full bg-white/5 backdrop-blur-sm border border-white/20">
         <div className="w-8 h-8 rounded-full bg-gradient-to-r from-coral via-teal to-yellow flex items-center justify-center">
-          {user.image ? (
+          {user.photoURL ? (
             <img
-              src={user.image}
-              alt={user.name || "User"}
+              src={user.photoURL}
+              alt={user.displayName || "User"}
               className="w-full h-full rounded-full object-cover"
             />
           ) : (
@@ -45,17 +42,17 @@ export function UserAvatar() {
           )}
         </div>
         <div className="hidden lg:block">
-          <p className="text-sm font-semibold text-white">{user.name}</p>
+          <p className="text-sm font-semibold text-white">{user.displayName}</p>
           <p className="text-xs text-neutral-400">{user.email}</p>
         </div>
       </div>
 
       {/* Mobile User Icon */}
       <div className="flex md:hidden w-10 h-10 rounded-full bg-gradient-to-r from-coral via-teal to-yellow items-center justify-center">
-        {user.image ? (
+        {user.photoURL ? (
           <img
-            src={user.image}
-            alt={user.name || "User"}
+            src={user.photoURL}
+            alt={user.displayName || "User"}
             className="w-full h-full rounded-full object-cover"
           />
         ) : (

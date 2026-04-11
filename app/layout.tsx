@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import ConditionalLayout from "@/components/layout/ConditionalLayout";
-import { SessionProvider } from "next-auth/react";
+import { FirebaseAuthProvider } from "@/providers/FirebaseAuthProvider";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { Toaster } from "sonner";
 
@@ -31,7 +31,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased `}
       >
-        <SessionProvider>
+        <FirebaseAuthProvider>
           <AuthProvider>
             <ConditionalLayout>{children}</ConditionalLayout>
             <Toaster
@@ -46,7 +46,7 @@ export default function RootLayout({
               }}
             />
           </AuthProvider>
-        </SessionProvider>
+        </FirebaseAuthProvider>
       </body>
     </html>
   );

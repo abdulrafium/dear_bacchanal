@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getServerAuth } from "@/lib/server-auth";
 import { stripe } from "@/lib/stripe";
 
 export async function POST(req: NextRequest) {
     try {
-        const session = await auth();
-        const user = session?.user;
-
+        const user = await getServerAuth(req);
         const body = await req.json().catch(() => ({}));
         const orderType = body.type || 'soft'; // 'hard' or 'soft'
 
         const unitAmount = orderType === 'hard' ? 3500 : 2500;
         const productName = orderType === 'hard' ? "Dear Bacchanal - Hard Copy (+ Shipping)" : "Dear Bacchanal - Soft Copy (Digital)";
 
-        const baseUrl = process.env.NEXTAUTH_URL || "";
+        const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
         const checkoutSessionOptions: any = {
             mode: "payment",
             payment_method_types: ["card"],

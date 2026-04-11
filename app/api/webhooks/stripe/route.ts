@@ -31,8 +31,19 @@ export async function POST(req: NextRequest) {
             const usersCollection = db.collection("users");
 
             if (userId) {
+                let query: any;
+                if (userId.length === 24) {
+                    try {
+                        query = { _id: new ObjectId(userId) };
+                    } catch {
+                        query = { firebaseUid: userId };
+                    }
+                } else {
+                    query = { firebaseUid: userId };
+                }
+
                 await usersCollection.updateOne(
-                    { _id: new ObjectId(userId) },
+                    query,
                     {
                         $set: {
                             isPurchased: true,

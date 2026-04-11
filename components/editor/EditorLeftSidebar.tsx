@@ -1,7 +1,7 @@
 "use client";
 
 import { useEditorStore, SidebarPanel } from "@/store/editor-store";
-import { Image, LayoutGrid, Grid3X3, Paintbrush, Sticker } from "lucide-react";
+import { Image, LayoutGrid, Grid3X3, Paintbrush, Sticker, Calendar } from "lucide-react";
 
 const sidebarItems: { panel: SidebarPanel; label: string; icon: React.ElementType }[] = [
   { panel: "images", label: "Images", icon: Image },
@@ -9,6 +9,7 @@ const sidebarItems: { panel: SidebarPanel; label: string; icon: React.ElementTyp
   { panel: "layouts", label: "Layouts", icon: Grid3X3 },
   { panel: "backgrounds", label: "Backgrounds", icon: Paintbrush },
   { panel: "stickers", label: "Stickers", icon: Sticker },
+  { panel: "calendar" as any, label: "Calendar", icon: Calendar },
 ];
 
 export function EditorLeftSidebar() {

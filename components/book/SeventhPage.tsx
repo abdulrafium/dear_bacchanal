@@ -28,26 +28,16 @@ const SeventhPage = () => {
           priority
         />
 
-        <div className="flex  flex-col lg:flex-row">
-          <div className="p-4 sm:p-6 lg:p-10 w-full lg:w-1/2">
-            <div className="flex gap-4 sm:gap-6 lg:gap-10 flex-wrap justify-center lg:justify-center">
-              <ImageBox id="box-7-left-1" rotation="rotate-[0deg]" size="xlarge" pageId="SeventhPage" />
-              <ImageBox id="box-7-left-2" rotation="rotate-[7deg]" size="xlarge" pageId="SeventhPage" />
-            </div>
-            <div className="flex gap-4 sm:gap-6 lg:gap-10 mt-6 sm:mt-8 lg:mt-10 flex-wrap justify-center lg:justify-center">
-              <ImageBox id="box-7-left-3" rotation="rotate-[5deg]" size="xlarge" pageId="SeventhPage" />
-              <ImageBox id="box-7-left-4" rotation="rotate-[-6deg]" size="xlarge" pageId="SeventhPage" />
-            </div>
-          </div>
-          <div className="p-4 sm:p-6 lg:p-10 w-full lg:w-1/2">
-            <div className="flex gap-4 sm:gap-6 lg:gap-10 flex-wrap justify-center lg:justify-start">
-              <ImageBox id="box-7-right-1" rotation="rotate-[-2deg]" size="xlarge" pageId="SeventhPage" />
-              <ImageBox id="box-7-right-2" rotation="rotate-[0deg]" size="xlarge" pageId="SeventhPage" />
-            </div>
-            <div className="flex gap-4 sm:gap-6 lg:gap-10 mt-6 sm:mt-8 lg:mt-10 flex-wrap justify-center lg:justify-start">
-              <ImageBox id="box-7-right-3" rotation="rotate-[5deg]" size="xlarge" pageId="SeventhPage" />
-              <ImageBox id="box-7-right-4" rotation="rotate-[5deg]" size="xlarge" pageId="SeventhPage" />
-            </div>
+        <div className="relative z-10 w-full h-full p-8 lg:p-12 overflow-y-auto custom-scrollbar">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-8 max-w-7xl mx-auto">
+            <ImageBox id="box-7-1" rotation="rotate-[2deg]" size="xlarge" pageId="SeventhPage" />
+            <ImageBox id="box-7-2" rotation="rotate-[-3deg]" size="xlarge" pageId="SeventhPage" />
+            <ImageBox id="box-7-3" rotation="rotate-[1deg]" size="xlarge" pageId="SeventhPage" />
+            <ImageBox id="box-7-4" rotation="rotate-[-2deg]" size="xlarge" pageId="SeventhPage" />
+            <ImageBox id="box-7-5" rotation="rotate-[-1deg]" size="xlarge" pageId="SeventhPage" />
+            <ImageBox id="box-7-6" rotation="rotate-[4deg]" size="xlarge" pageId="SeventhPage" />
+            <ImageBox id="box-7-7" rotation="rotate-[-2deg]" size="xlarge" pageId="SeventhPage" />
+            <ImageBox id="box-7-8" rotation="rotate-[3deg]" size="xlarge" pageId="SeventhPage" />
           </div>
         </div>
         <DynamicBoxRenderer pageId="SeventhPage" />

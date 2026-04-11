@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { signIn } from "next-auth/react";
 import { toast } from "sonner";
 import { useAuthModal } from "@/hooks/useAuthModal";
 import { signUpSchema, SignUpInput } from "@/lib/validators";
@@ -11,11 +10,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { auth } from "@/lib/firebase";
+import { useFirebase } from "@/providers/FirebaseAuthProvider";
 
 export function SignUpForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const { toggleView, closeModal } = useAuthModal();
+  const { loginWithGoogle } = useFirebase();
   const router = useRouter();
 
   const {
@@ -30,41 +33,21 @@ export function SignUpForm() {
     try {
       setIsLoading(true);
 
-      // Call registration API
-      const response = await fetch("/api/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
+      if (!data.email || !data.password) return;
+      // 1. Create user in Firebase
+      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+      
+      // 2. Update display name
+      await updateProfile(userCredential.user, {
+          displayName: data.name
       });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        toast.error(result.error || "Registration failed");
-        return;
-      }
 
       toast.success("Account created successfully!");
-
-      // Auto sign in after successful registration
-      const signInResult = await signIn("credentials", {
-        email: data.email,
-        password: data.password,
-        redirect: false,
-      });
-
-      if (signInResult?.error) {
-        toast.error("Failed to sign in. Please try signing in manually.");
-        toggleView();
-        return;
-      }
-
       closeModal();
       window.location.href = "/editor";
-    } catch (error) {
-      toast.error("Something went wrong. Please try again.");
+    } catch (error: any) {
+      console.error("Signup error:", error);
+      toast.error(error.message || "Registration failed. Please choose a stronger password.");
     } finally {
       setIsLoading(false);
     }
@@ -73,10 +56,13 @@ export function SignUpForm() {
   const handleGoogleSignUp = async () => {
     try {
       setIsGoogleLoading(true);
-      // Redirect to /editor after Google sign-up
-      await signIn("google", { callbackUrl: "/editor" });
+      await loginWithGoogle();
+      closeModal();
+      window.location.href = "/editor";
     } catch (error) {
+      console.error("Google Signup Error:", error);
       toast.error("Failed to sign up with Google");
+    } finally {
       setIsGoogleLoading(false);
     }
   };

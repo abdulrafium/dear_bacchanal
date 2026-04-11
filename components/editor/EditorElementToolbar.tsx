@@ -1,7 +1,7 @@
 "use client";
 
 import { useEditorStore } from "@/store/editor-store";
-import { Underline, AlignLeft, AlignCenter, AlignRight, Layers, Trash2, Bookmark, ChevronDown, Lock, Unlock } from "lucide-react";
+import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Layers, Trash2, Bookmark, ChevronDown, Lock, Unlock } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 
 export function EditorElementToolbar() {
@@ -14,6 +14,19 @@ export function EditorElementToolbar() {
   const isPreviewMode = useEditorStore((s) => s.isPreviewMode);
   const isAdmin = useEditorStore((s) => s.isAdmin);
   const setPreviewElement = useEditorStore((s) => s.setPreviewElement);
+
+  const [isFontOpen, setIsFontOpen] = useState(false);
+  const fontDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (fontDropdownRef.current && !fontDropdownRef.current.contains(event.target as Node)) {
+        setIsFontOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   if (isPreviewMode || !selectedElementId) return null;
 
@@ -35,7 +48,34 @@ export function EditorElementToolbar() {
 
   const { element, pageId } = selectedElementInfo;
 
-  const fonts = ["Arial", "Courier New", "Georgia", "Times New Roman", "Verdana", "Instrument Serif", "Kalam", "sans-serif", "serif"];
+  const fonts = [
+    "Arial", 
+    "Boogaloo",
+    "Fredoka One",
+    "Baloo 2",
+    "Titan One",
+    "Architects Daughter",
+    "Patrick Hand",
+    "Luckiest Guy", 
+    "Poppins", 
+    "Instrument Serif", 
+    "Kalam", 
+    "Caveat", 
+    "Pacifico", 
+    "Anton", 
+    "Bangers", 
+    "Lobster", 
+    "Montserrat", 
+    "Oswald", 
+    "Playfair Display", 
+    "Inter",
+    "Courier New", 
+    "Georgia", 
+    "Times New Roman", 
+    "Verdana", 
+    "sans-serif", 
+    "serif"
+  ];
   const sizes = [12, 14, 16, 18, 20, 24, 28, 36, 48, 60, 72, 96, 120];
 
   const update = (updates: Partial<typeof element>) => {
@@ -56,37 +96,58 @@ export function EditorElementToolbar() {
 
   return (
     <>
-      <style>
-        {`@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Kalam:wght@300;400;700&display=swap');`}
-      </style>
-      <div className="fixed md:absolute top-[80px] left-0 right-0 md:right-auto md:left-1/2 md:-translate-x-1/2 z-40 bg-white rounded-none md:rounded-xl shadow-lg border-b md:border border-gray-100 flex items-center p-2 gap-2 h-14 overflow-x-auto hide-scrollbar max-w-full">
+      <style dangerouslySetInnerHTML={{ __html: `
+        @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Kalam:wght@300;400;700&family=Poppins:wght@300;400;500;600;700;800;900&family=Luckiest+Guy&family=Caveat:wght@400;700&family=Pacifico&family=Anton&family=Bangers&family=Lobster&family=Montserrat:wght@400;700&family=Oswald:wght@400;700&family=Playfair+Display:wght@400;700&family=Inter:wght@400;700&family=Boogaloo&family=Fredoka+One&family=Baloo+2:wght@400;700&family=Titan+One&family=Architects+Daughter&family=Patrick+Hand&display=swap');
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
+      `}} />
+      <div className="fixed md:absolute top-[80px] left-0 right-0 md:right-auto md:left-1/2 md:-translate-x-1/2 z-40 bg-white rounded-none md:rounded-xl shadow-lg border-b md:border border-gray-100 flex items-center p-2 gap-2 h-14 max-w-full overflow-visible">
         
         {element.type === "text" && (
           <>
-            {/* Font Family */}
-      <div className="relative group flex items-center h-10 px-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg cursor-pointer transition-colors w-32 md:w-40 justify-between shrink-0">
-        <select
-          value={element.fontFamily || "Arial"}
-          onChange={(e) => update({ fontFamily: e.target.value })}
-          onMouseEnter={() => setPreviewElement(element.id, { fontFamily: element.fontFamily || "Arial" })}
-          onMouseLeave={() => setPreviewElement(null, null)}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            {/* Real-time Font Family Selector */}
+      <div ref={fontDropdownRef} className="relative shrink-0">
+        <button
+          onClick={() => setIsFontOpen(!isFontOpen)}
+          className="flex items-center h-10 px-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg cursor-pointer transition-colors w-32 md:w-40 justify-between gap-2"
         >
-          {fonts.map(f => (
-            <option key={f} value={f} onMouseEnter={() => setPreviewElement(element.id, { fontFamily: f })}>{f}</option>
-          ))}
-        </select>
-        <span className="text-[11px] md:text-sm text-gray-700 truncate font-serif" style={{ fontFamily: element.fontFamily }}>
-          {element.fontFamily || "Font"}
-        </span>
-        <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+          <span className="text-[11px] md:text-sm text-gray-700 truncate" style={{ fontFamily: element.fontFamily }}>
+            {element.fontFamily || "Font"}
+          </span>
+          <ChevronDown className={`w-3.5 h-3.5 text-gray-500 transition-transform ${isFontOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {isFontOpen && (
+          <div className="absolute top-full left-0 mt-2 w-56 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-[100] animate-in fade-in zoom-in-95 duration-200 max-h-[350px] overflow-y-auto custom-scrollbar">
+            {fonts.map((f) => (
+              <button
+                key={f}
+                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 transition-colors flex items-center justify-between group ${element.fontFamily === f ? 'bg-gray-50 text-black font-bold' : 'text-gray-600'}`}
+                onMouseEnter={() => setPreviewElement(element.id, { fontFamily: f })}
+                onMouseLeave={() => setPreviewElement(null, null)}
+                onClick={() => {
+                  update({ fontFamily: f });
+                  setIsFontOpen(false);
+                }}
+              >
+                <span style={{ fontFamily: f }}>{f}</span>
+                {element.fontFamily === f && <div className="w-1.5 h-1.5 rounded-full bg-red-500" />}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Font Size */}
       <div className="relative group flex items-center h-10 px-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg cursor-pointer transition-colors w-20 md:w-24 justify-between shrink-0">
         <select
           value={element.fontSize || 18}
-          onChange={(e) => update({ fontSize: parseInt(e.target.value) })}
+          onChange={(e) => {
+            const size = parseInt(e.target.value);
+            update({ fontSize: size });
+            setPreviewElement(null, null);
+          }}
           onMouseEnter={() => setPreviewElement(element.id, { fontSize: element.fontSize || 18 })}
           onMouseLeave={() => setPreviewElement(null, null)}
           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
@@ -114,14 +175,59 @@ export function EditorElementToolbar() {
 
       <div className="w-[1px] h-6 bg-gray-200 mx-1" />
 
-      {/* Underline */}
+      {/* Bold */}
       <button 
-        onClick={() => update({ fontStyle: element.fontStyle === "underline" ? "normal" : "underline" })}
+        onClick={() => {
+          const isBold = element.fontStyle?.includes("bold");
+          const nextStyle = isBold 
+            ? element.fontStyle?.replace("bold", "").trim() || "normal"
+            : `${element.fontStyle || ""} bold`.trim();
+          update({ fontStyle: nextStyle });
+        }}
         className={`w-10 h-10 rounded-lg flex items-center justify-center border transition-colors shrink-0 ${
-          element.fontStyle === "underline" 
+          element.fontStyle?.includes("bold") 
             ? "bg-gray-100 border-gray-300 text-gray-900" 
             : "border-transparent text-gray-600 hover:bg-gray-50"
         }`}
+        title="Bold"
+      >
+        <Bold className="w-5 h-5" />
+      </button>
+
+      {/* Italic */}
+      <button 
+        onClick={() => {
+          const isItalic = element.fontStyle?.includes("italic");
+          const nextStyle = isItalic 
+            ? element.fontStyle?.replace("italic", "").trim() || "normal"
+            : `${element.fontStyle || ""} italic`.trim();
+          update({ fontStyle: nextStyle });
+        }}
+        className={`w-10 h-10 rounded-lg flex items-center justify-center border transition-colors shrink-0 ${
+          element.fontStyle?.includes("italic") 
+            ? "bg-gray-100 border-gray-300 text-gray-900" 
+            : "border-transparent text-gray-600 hover:bg-gray-50"
+        }`}
+        title="Italic"
+      >
+        <Italic className="w-5 h-5" />
+      </button>
+
+      {/* Underline */}
+      <button 
+        onClick={() => {
+          const isUnderline = element.fontStyle?.includes("underline");
+          const nextStyle = isUnderline 
+            ? element.fontStyle?.replace("underline", "").trim() || "normal"
+            : `${element.fontStyle || ""} underline`.trim();
+          update({ fontStyle: nextStyle });
+        }}
+        className={`w-10 h-10 rounded-lg flex items-center justify-center border transition-colors shrink-0 ${
+          element.fontStyle?.includes("underline") 
+            ? "bg-gray-100 border-gray-300 text-gray-900" 
+            : "border-transparent text-gray-600 hover:bg-gray-50"
+        }`}
+        title="Underline"
       >
         <Underline className="w-5 h-5" />
       </button>

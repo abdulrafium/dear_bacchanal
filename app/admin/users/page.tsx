@@ -25,12 +25,24 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     fetchUsers();
+
+    // Set up polling for real-time updates when not searching
+    let interval: NodeJS.Timeout;
+    if (!search) {
+      interval = setInterval(() => {
+        fetchUsers(true); // pass true to indicate it's a silent background refresh
+      }, 10000); // 10 seconds polling
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [page, search]);
 
-  const fetchUsers = async () => {
-    setLoading(true);
+  const fetchUsers = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
-      const params = new URLSearchParams({ page: page.toString(), limit: "15", search });
+      const params = new URLSearchParams({ page: page.toString(), limit: "15", search, t: Date.now().toString() });
       const res = await fetch(`/api/admin/users?${params}`);
       const data = await res.json();
       setUsers(data.users);
@@ -39,7 +51,7 @@ export default function AdminUsersPage() {
     } catch (error) {
       console.error("Error:", error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -64,9 +76,17 @@ export default function AdminUsersPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Users</h1>
-          <p className="text-white/40 text-sm">{total} total users</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Users</h1>
+            <p className="text-white/40 text-sm">{total} total users</p>
+          </div>
+          {!search && (
+            <div className="flex items-center gap-2 px-2 py-1 bg-green-500/10 border border-green-500/20 rounded-full">
+              <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+              <span className="text-[9px] font-bold text-green-500 uppercase tracking-widest">Live</span>
+            </div>
+          )}
         </div>
 
         {/* Search */}

@@ -1,6 +1,6 @@
 import { useEditorStore } from "@/store/editor-store";
 import { getAvailableTemplates } from "@/lib/book-templates";
-import { ChevronDown, Star, Grid3X3, Image, Paintbrush, Sticker, LayoutGrid, BookOpen, CheckCircle2, Plus, Loader2, Trash2, Upload, Sparkles, Filter, MoreHorizontal, History } from "lucide-react";
+import { ChevronDown, Star, Grid3X3, Image, Paintbrush, Sticker, LayoutGrid, BookOpen, CheckCircle2, Plus, Loader2, Trash2, Upload, Sparkles, Filter, MoreHorizontal, History, Calendar } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 
 import { PAGE_LAYOUTS } from "@/lib/layouts";
@@ -799,6 +799,11 @@ function StickersPanel() {
     fetchStickers();
   }, [fetchStickers]);
 
+  const handleStickerDragStart = (e: React.DragEvent, url: string) => {
+    e.dataTransfer.setData("application/sticker-url", url);
+    e.dataTransfer.effectAllowed = "copy";
+  };
+
   const { startUpload, isUploading } = useUploadThing("stickerUploader", {
     onClientUploadComplete: async (res) => {
       for (const file of res) {
@@ -814,138 +819,202 @@ function StickersPanel() {
     onUploadError: (err) => { toast.error(`Bulk upload failed: ${err.message}`); },
   });
 
-  const selectedElementId = useEditorStore((s) => s.selectedElementId);
-
-  const handleStickerClick = (url: string) => {
-    if (!currentSpread) return;
-    
-    let targetPage = null;
-    if (selectedElementId) {
-      if (currentSpread.leftPage.elements.some((e) => e.id === selectedElementId)) {
-        targetPage = currentSpread.leftPage;
-      } else if (currentSpread.rightPage.elements.some((e) => e.id === selectedElementId)) {
-        targetPage = currentSpread.rightPage;
-      }
-    }
-
-    if (!targetPage) {
-       targetPage = targetSide === "left" ? currentSpread.leftPage : currentSpread.rightPage;
-    }
-
-    if (!targetPage || targetPage.isLocked) return;
-
-    addElement(targetPage.id, {
-      type: "image",
-      src: url,
-      x: 100,
-      y: 100,
-      width: 150,
-      height: 150,
-      rotation: 0,
-    });
-    toast.message("Sticker added to spread", {
-      description: "Graphic has been placed on the " + (targetPage === currentSpread.leftPage ? "left" : "right") + " page.",
-    });
-  };
-
-  const currentStickers = activeTab === "premium" ? premiumStickers : stickers;
-
   return (
     <div className="flex flex-col h-full bg-[#fafafa]">
-      <div className="border-b border-gray-100 px-5 py-4 bg-white shadow-sm">
-        <h3 className="text-sm font-bold text-[#2d2d2d] flex items-center gap-2">
-          <Sparkles className="w-4 h-4 text-orange-500" />
-          Graphics Library
-        </h3>
-        <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider mt-1.5">Premium Carnival Assets</p>
+      <div className="border-b border-gray-100 flex-shrink-0">
+        <div className="flex px-4 pt-1">
+          <button
+            onClick={() => setActiveTab("premium")}
+            className={`flex items-center gap-2 px-4 py-3 text-[11px] font-black uppercase tracking-widest border-b-2 transition-all ${
+              activeTab === "premium"
+                ? "border-[#9f2e2b] text-[#9f2e2b]"
+                : "border-transparent text-gray-400 hover:text-gray-600"
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Premium
+          </button>
+          <button
+            onClick={() => setActiveTab("custom")}
+            className={`flex items-center gap-2 px-4 py-3 text-[11px] font-black uppercase tracking-widest border-b-2 transition-all ${
+              activeTab === "custom"
+                ? "border-[#9f2e2b] text-[#9f2e2b]"
+                : "border-transparent text-gray-400 hover:text-gray-600"
+            }`}
+          >
+            <Grid3X3 className="w-3.5 h-3.5" />
+            Library
+          </button>
+        </div>
       </div>
 
-      <div className="px-5 pt-4 space-y-4 bg-white pb-4 border-b border-gray-100">
-        <div>
-          <label className="text-[9px] font-extrabold text-gray-400 uppercase tracking-widest block mb-1">Target Page</label>
-          <div className="grid grid-cols-2 bg-gray-50 border border-gray-100 p-1 rounded-xl">
+      <div className="px-5 py-3 border-b border-gray-100 space-y-3">
+          <label className="text-[9px] font-extrabold text-gray-400 uppercase tracking-widest block">Placement Target</label>
+          <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-50">
             <button 
               onClick={() => setTargetSide("left")}
-              className={`py-1 text-[9px] font-black rounded-lg transition-all ${targetSide === "left" ? "bg-white text-black shadow-sm ring-1 ring-gray-100" : "text-gray-400 hover:text-gray-600"}`}
+              className={`flex-1 py-1.5 text-[9px] font-black rounded-lg transition-all ${targetSide === "left" ? "bg-white text-black shadow-sm ring-1 ring-gray-100" : "text-gray-400 hover:text-gray-600"}`}
             >
               LEFT PAGE
             </button>
             <button 
               onClick={() => setTargetSide("right")}
-              className={`py-1 text-[9px] font-black rounded-lg transition-all ${targetSide === "right" ? "bg-white text-black shadow-sm ring-1 ring-gray-100" : "text-gray-400 hover:text-gray-600"}`}
+              className={`flex-1 py-1.5 text-[9px] font-black rounded-lg transition-all ${targetSide === "right" ? "bg-white text-black shadow-sm ring-1 ring-gray-100" : "text-gray-400 hover:text-gray-600"}`}
             >
               RIGHT PAGE
             </button>
           </div>
-        </div>
-
-        {isAdmin && (
-          <div>
-            <label className="text-[9px] font-extrabold text-orange-500 uppercase tracking-widest block mb-1">Admin Tools</label>
-            <label className={`w-full py-2 bg-orange-50 text-orange-600 border border-orange-200 border-dashed rounded-xl flex items-center justify-center gap-2 cursor-pointer hover:bg-orange-100 transition-all ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
-               {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-               <span className="text-[10px] font-bold uppercase tracking-tight">{isUploading ? 'Uploading...' : 'Bulk Add Graphics'}</span>
-               <input 
-                type="file" 
-                multiple 
-                accept="image/*" 
-                className="hidden" 
-                onChange={(e) => e.target.files?.length && startUpload(Array.from(e.target.files))}
-               />
-            </label>
-          </div>
-        )}
-
-        <div className="flex bg-gray-50 border border-gray-100 p-1 rounded-lg">
-          <button 
-            onClick={() => setActiveTab("premium")}
-            className={`flex-1 py-1 text-[10px] font-extrabold rounded-md transition-all ${activeTab === "premium" ? "bg-white text-black shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
-          >
-            PREMIUM
-          </button>
-          <button 
-            onClick={() => setActiveTab("custom")}
-            className={`flex-1 py-1 text-[10px] font-extrabold rounded-md transition-all ${activeTab === "custom" ? "bg-white text-black shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
-          >
-            CUSTOM ({stickers.length})
-          </button>
-        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-6">
-        {loading && activeTab === "custom" ? (
-          <div className="flex flex-col items-center justify-center py-20 opacity-40">
-            <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
-            <p className="text-[10px] uppercase font-bold tracking-widest mt-3">Syncing Graphics...</p>
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-4">
-              {currentStickers.map((sticker: any) => (
-                <div 
-                  key={sticker.id || sticker._id} 
-                  className="relative aspect-square group cursor-pointer border border-gray-100 bg-white rounded-2xl overflow-hidden hover:border-[#2d2d2d] hover:shadow-xl transition-all flex items-center justify-center p-3"
-                  onClick={() => handleStickerClick(sticker.url)}
-                >
-                  <img src={sticker.url} alt={sticker.name} className="w-full h-full object-contain pointer-events-none drop-shadow-sm group-hover:scale-110 transition-transform duration-500" />
-                  <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <Plus className="w-6 h-6 text-gray-400" />
-                  </div>
-                </div>
-              ))}
-            </div>
-            
-            {activeTab === "custom" && stickers.length === 0 && !loading && (
-              <div className="flex flex-col items-center justify-center py-20 text-center opacity-40">
-                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                  <Filter className="w-8 h-8 text-gray-400" />
-                </div>
-                <p className="text-[10px] font-extrabold uppercase tracking-widest text-[#2d2d2d]">No Custom Graphics</p>
-                <p className="text-[9px] font-medium text-gray-400 mt-2 px-4 italic leading-relaxed">Admins can upload graphics above.</p>
+      <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+        <div className="grid grid-cols-2 gap-4">
+          {(activeTab === "premium" ? premiumStickers : stickers).map((sticker, idx) => (
+            <div
+              key={`${sticker.url}-${idx}`}
+              draggable
+              onDragStart={(e) => handleStickerDragStart(e, sticker.url)}
+              className="group relative aspect-square bg-white rounded-2xl overflow-hidden cursor-grab border border-gray-100 hover:border-teal/30 hover:shadow-xl transition-all p-3"
+              onClick={() => {
+                const page = targetSide === "left" ? currentSpread?.leftPage : currentSpread?.rightPage;
+                if (page && !page.isLocked) {
+                  addElement(page.id, {
+                    type: "sticker",
+                    src: sticker.url,
+                    x: 50,
+                    y: 50,
+                    width: 150,
+                    height: 150,
+                    rotation: 0,
+                  });
+                }
+              }}
+            >
+              <img src={sticker.url} alt={sticker.name} className="w-full h-full object-contain filter drop-shadow-md group-hover:scale-110 transition-transform duration-300" />
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/40 to-transparent p-2 translate-y-full group-hover:translate-y-0 transition-transform">
+                <span className="text-[10px] text-white font-bold truncate block">{sticker.name}</span>
               </div>
-            )}
-          </>
-        )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalendarPanel() {
+  const addElement = useEditorStore((s) => s.addElement);
+  const spreads = useEditorStore((s) => s.spreads);
+  const currentSpreadIndex = useEditorStore((s) => s.currentSpreadIndex);
+  const currentSpread = spreads[currentSpreadIndex];
+  const [targetSide, setTargetSide] = useState<"left" | "right">("right");
+  const [selectedMonth, setSelectedMonth] = useState(0); // 0 = Jan
+  const [selectedYear, setSelectedYear] = useState(2026);
+
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  const years = [2025, 2026, 2027, 2028, 2029, 2030];
+
+  const addCalendar = () => {
+    const page = targetSide === "left" ? currentSpread?.leftPage : currentSpread?.rightPage;
+    if (page && !page.isLocked) {
+      addElement(page.id, {
+        type: "calendar",
+        x: 25,
+        y: 25,
+        width: 320,
+        height: 380,
+        rotation: 0,
+        calendarSettings: {
+          month: selectedMonth,
+          year: selectedYear,
+          data: {},
+          backgroundColor: "#009d94", // Caribbean Teal
+          textColor: "#000000",
+          titleColor: "#000000"
+        }
+      });
+      toast.success(`${months[selectedMonth]} ${selectedYear} added!`);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full bg-[#fafafa]">
+      <div className="border-b border-gray-100 px-4 py-3 bg-white shadow-sm flex-shrink-0">
+        <h3 className="text-[11px] font-black uppercase tracking-widest text-[#2d2d2d] flex items-center gap-2">
+          <Calendar className="w-3.5 h-3.5 text-[#9f2e2b]" />
+          Calendar Tool
+        </h3>
+        <p className="text-[9px] text-gray-400 font-bold uppercase tracking-wider mt-1">interactive schedules</p>
+      </div>
+
+      <div className="p-4 space-y-4 overflow-y-auto custom-scrollbar">
+        <div className="space-y-3">
+          <div>
+            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">Placement</label>
+            <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-50">
+              <button 
+                onClick={() => setTargetSide("left")}
+                className={`flex-1 py-1.5 text-[9px] font-black rounded-lg transition-all ${targetSide === "left" ? "bg-white text-black shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
+              >
+                LEFT
+              </button>
+              <button 
+                onClick={() => setTargetSide("right")}
+                className={`flex-1 py-1.5 text-[9px] font-black rounded-lg transition-all ${targetSide === "right" ? "bg-white text-black shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
+              >
+                RIGHT
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">Month</label>
+              <select 
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-[10px] font-bold focus:ring-1 focus:ring-teal outline-none"
+              >
+                {months.map((m, i) => (
+                  <option key={m} value={i}>{m}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1.5">Year</label>
+              <select 
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                className="w-full bg-white border border-gray-200 rounded-lg px-2 py-1.5 text-[10px] font-bold focus:ring-1 focus:ring-teal outline-none"
+              >
+                {years.map(y => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={addCalendar}
+          className="w-full py-3 bg-[#2d2d2d] text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-md flex items-center justify-center gap-2"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          Add Calendar
+        </button>
+
+        <div className="bg-teal/5 border border-teal/10 rounded-xl p-3">
+           <div className="flex items-center gap-2 mb-1.5">
+             <Star className="w-3 h-3 text-teal fill-teal" />
+             <p className="text-[9px] text-teal font-black uppercase tracking-widest">Interactive</p>
+           </div>
+           <p className="text-[10px] text-gray-600 leading-normal font-medium">
+             Add notes to any date by clicking on it once placed on the canvas.
+           </p>
+        </div>
       </div>
     </div>
   );
@@ -954,13 +1023,20 @@ function StickersPanel() {
 export function EditorLeftPanel() {
   const activeSidebarPanel = useEditorStore((s) => s.activeSidebarPanel);
 
-  return (
-    <div className="w-full md:w-72 h-full bg-white border-r border-gray-200 flex flex-col flex-shrink-0 overflow-hidden">
-      {activeSidebarPanel === "layouts" && <LayoutsPanel />}
-      {activeSidebarPanel === "images" && <ImagesPanel />}
-      {activeSidebarPanel === "templates" && <TemplatesPanel />}
-      {activeSidebarPanel === "backgrounds" && <BackgroundsPanel />}
-      {activeSidebarPanel === "stickers" && <StickersPanel />}
-    </div>
-  );
+  switch (activeSidebarPanel) {
+    case "templates":
+      return <TemplatesPanel />;
+    case "layouts":
+      return <LayoutsPanel />;
+    case "images":
+      return <ImagesPanel />;
+    case "backgrounds":
+      return <BackgroundsPanel />;
+    case "stickers":
+      return <StickersPanel />;
+    case "calendar":
+      return <CalendarPanel />;
+    default:
+      return null;
+  }
 }

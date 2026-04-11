@@ -50,7 +50,32 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       router.push("/admin/login");
       return;
     }
+    
+    // Auto Logout / Idle logic
+    let idleTimer: NodeJS.Timeout;
+    const resetTimer = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      // 30 minutes idle time
+      idleTimer = setTimeout(() => {
+        handleLogout();
+      }, 30 * 60 * 1000);
+    };
+
+    // Events to track activity
+    const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    activityEvents.forEach(event => {
+      document.addEventListener(event, resetTimer);
+    });
+
+    resetTimer();
     setIsAuthed(true);
+
+    return () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      activityEvents.forEach(event => {
+        document.removeEventListener(event, resetTimer);
+      });
+    };
   }, [pathname]);
 
   const handleLogout = () => {

@@ -1,22 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { getServerAuth } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth();
+    const user = await getServerAuth(req);
     const isAdmin = req.nextUrl.searchParams.get("isAdmin") === "true";
     const templateName = req.nextUrl.searchParams.get("templateName");
     const isNew = req.nextUrl.searchParams.get("new") === "true";
 
-    if (!session?.user?.id && !session?.user?.email && process.env.NODE_ENV !== "development") {
+    if (!user && process.env.NODE_ENV !== "development") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = session?.user?.id || session?.user?.email || "anonymous-dev-user";
+    const userId = user?.id || user?.email || "anonymous-dev-user";
     const db = await getDatabase();
 
     if (isAdmin) {

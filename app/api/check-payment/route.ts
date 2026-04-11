@@ -14,10 +14,7 @@ export async function GET(req: NextRequest) {
         }
 
         // const checkoutSession = await stripe.checkout.sessions.retrieve(sessionId);
-        const checkoutSession = await stripe.checkout.sessions.retrieve(
-  sessionId,
-  { expand: ["shipping_details"] }
-) as any;
+        const checkoutSession = await stripe.checkout.sessions.retrieve(sessionId) as any;
 
         if (checkoutSession.payment_status !== "paid") {
             return NextResponse.json({
@@ -33,8 +30,19 @@ export async function GET(req: NextRequest) {
         const email = (checkoutSession.customer_email || (checkoutSession.customer_details as any)?.email) as string | undefined;
 
         if (userId) {
+            let query: any;
+            if (userId.length === 24) {
+                try {
+                    query = { _id: new ObjectId(userId) };
+                } catch {
+                    query = { firebaseUid: userId };
+                }
+            } else {
+                query = { firebaseUid: userId };
+            }
+
             await usersCollection.updateOne(
-                { _id: new ObjectId(userId) },
+                query,
                 { $set: { isPurchased: true, updatedAt: new Date() } }
             );
             return NextResponse.json({

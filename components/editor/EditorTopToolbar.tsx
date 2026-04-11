@@ -54,7 +54,7 @@ export function EditorTopToolbar() {
         } else {
           setSaveStatus("modified");
         }
-      }, 3000); // 3 seconds of inactivity to auto-save
+      }, 1000); // 1 second of inactivity to auto-save
 
       return () => clearTimeout(timer);
     }

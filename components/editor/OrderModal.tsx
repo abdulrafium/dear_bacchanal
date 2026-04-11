@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useFirebase } from "@/providers/FirebaseAuthProvider";
+
 import {
   Dialog,
   DialogContent,
@@ -9,7 +11,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Book, Download, Truck, CreditCard, Check, Sparkles, FileText, Loader2 } from "lucide-react";
+import { Book, Download, Truck, Check, Sparkles, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useEditorStore } from "@/store/editor-store";
 import { jsPDF } from "jspdf";
@@ -24,106 +26,64 @@ interface OrderModalProps {
 
 export function OrderModal({ isOpen, onClose }: OrderModalProps) {
   const [loading, setLoading] = useState(false);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [selectedType, setSelectedType] = useState<"soft" | "hard">("soft");
+  const isGeneratingPdf = useEditorStore((s) => s.isGeneratingPdf);
+  const generatePdfBook = useEditorStore((s) => s.generatePdfBook);
+
+  const { user, refreshUser } = useFirebase();
+  const isPurchased = user?.isPurchased;
+
+  useEffect(() => {
+    if (isOpen) {
+      refreshUser();
+    }
+  }, [isOpen, refreshUser]);
 
   const handlePayment = async () => {
-    setLoading(true);
-    // BYPASS FOR TESTING: Skipping Stripe fetch
-    setTimeout(() => {
-        toast.success("Payment Bypass Active (TESTING MODE)");
-        toast.info("Your order is being processed automatically.");
-        setLoading(false);
-        if (selectedType === "soft") {
-            handleGeneratePdf();
-        } else {
-            toast.success("Hardcopy order simulated! We would now send it to the print queue.");
-        }
-    }, 1500);
-
-    /* Original Logic:
-    try {
-      const response = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: selectedType }),
-      });
-      const data = await response.json();
-      if (data.url) window.location.href = data.url;
-    } catch (error) { ... }
-    */
-  };
-
-  const handleGeneratePdf = async () => {
-    const { spreads, setCurrentSpread, stageRef, activeTemplateName, currentSpreadIndex } = useEditorStore.getState();
-    
-    if (!stageRef) {
-        toast.error("Export Error: Canvas stage not detected.");
+    if (isPurchased && selectedType === "soft") {
+        handleGeneratePdf();
         return;
     }
 
-    setIsGeneratingPdf(true);
-    const originalIndex = currentSpreadIndex;
+    setLoading(true);
     
-    toast.info("Preparing PDF Book Export...", {
-      description: `Processing ${spreads.length} spreads...`
-    });
-
     try {
-        // Dimensions for a landscape spread (2 pages + 8px spine)
-        const spreadWidth = PAGE_WIDTH * 2 + 8;
-        const spreadHeight = PAGE_HEIGHT;
-        
-        const pdf = new jsPDF({
-          orientation: "landscape",
-          unit: "px",
-          format: [spreadWidth, spreadHeight]
-        });
-
-        for (let i = 0; i < spreads.length; i++) {
-            // Update UI to show progress
-            toast.info(`Generating Spread ${i + 1} of ${spreads.length}`, { duration: 1000 });
-            
-            // Navigate to spread to trigger render
-            setCurrentSpread(i);
-            
-            // Wait for Konva to render assets (images/fonts)
-            await new Promise(resolve => setTimeout(resolve, 800)); 
-            
-            // Capture the stage at 2x quality for print
-            const dataUrl = stageRef.toDataURL({ 
-                pixelRatio: 2,
-                mimeType: "image/jpeg",
-                quality: 0.95
-            });
-
-            if (i > 0) pdf.addPage([spreadWidth, spreadHeight], "landscape");
-            
-            pdf.addImage(dataUrl, 'JPEG', 0, 0, spreadWidth, spreadHeight);
-        }
-
-        const fileName = `${activeTemplateName?.replace(/\s+/g, '_') || 'Carnival_Book'}_Book.pdf`;
-        pdf.save(fileName);
-        
-        toast.success("PDF Generated Successfully!", {
-          description: "Your digital book has been downloaded."
-        });
-    } catch (err) {
-        console.error("PDF Export Error:", err);
-        toast.error("Export Failed. Please try again.");
-    } finally {
-        // Restore original spread
-        setCurrentSpread(originalIndex);
-        setIsGeneratingPdf(false);
+      const response = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${localStorage.getItem("fb_token") || ""}`,
+            "x-user-email": localStorage.getItem("fb_user_email") || "",
+            "x-user-id": localStorage.getItem("fb_user_id") || ""
+        },
+        body: JSON.stringify({ type: selectedType }),
+      });
+      const data = await response.json();
+      if (data.url) {
+          window.location.href = data.url;
+      } else {
+          toast.error("Failed to initiate checkout");
+          setLoading(false);
+      }
+    } catch (error) {
+        console.error("Checkout error:", error);
+        toast.error("An error occurred during checkout");
+        setLoading(false);
     }
+  };
+
+
+  const handleGeneratePdf = async () => {
+    toast.info("Starting PDF generation...", { description: "Please don't close the browser." });
+    await generatePdfBook();
+    await refreshUser();
+    toast.success("Download complete! Purchase has been used.");
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-[95vw] sm:max-w-[550px] max-h-[90vh] sm:max-h-[92vh] rounded-[32px] p-0 bg-[#0a0a0a] border-white/10 text-white shadow-[0_0_100px_rgba(159,46,43,0.3)] flex flex-col overflow-hidden">
-        {/* Scrollable Container */}
         <div className="flex-1 overflow-y-auto custom-scrollbar overscroll-contain">
-          {/* Header area with gradient */}
           <div className="bg-gradient-to-br from-[#9f2e2b] to-[#1a1a1a] p-6 sm:p-8 pb-12 rounded-t-[31px]">
             <DialogHeader className="mb-0">
               <span className="text-[10px] font-black text-white/40 uppercase tracking-[4px] mb-4 block text-center">Checkout Portal</span>
@@ -138,7 +98,6 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
 
           <div className="p-5 sm:p-8 -mt-8 bg-[#0a0a0a] rounded-t-[32px] pb-12">
             <div className="grid grid-cols-1 gap-4 mb-8">
-              {/* Soft Copy */}
               <div 
                 onClick={() => setSelectedType("soft")}
                 className={`relative cursor-pointer rounded-3xl border-2 p-5 sm:p-6 transition-all duration-300 ${
@@ -173,7 +132,6 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
                 </div>
               </div>
 
-              {/* Hard Copy */}
               <div 
                 onClick={() => setSelectedType("hard")}
                 className={`relative cursor-pointer rounded-3xl border-2 p-5 sm:p-6 transition-all duration-300 ${
@@ -228,9 +186,14 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
                 ) : (
                   <>
                     <Sparkles className="w-6 h-6 group-hover:scale-110 transition-transform" />
-                    {selectedType === "soft" ? "DOWNLOAD PDF BOOK" : "ORDER PHYSICAL COPY"}
+                    {isPurchased && selectedType === "soft" 
+                      ? "DOWNLOAD PDF BOOK" 
+                      : selectedType === "soft" 
+                        ? "PAY TO DOWNLOAD PDF" 
+                        : "ORDER PHYSICAL COPY"}
                   </>
                 )}
+
               </Button>
 
               {selectedType === "soft" && (

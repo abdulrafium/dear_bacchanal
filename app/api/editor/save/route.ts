@@ -1,21 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";
-import { auth } from "@/lib/auth";
+import { getServerAuth } from "@/lib/server-auth";
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth();
+    const user = await getServerAuth(req);
 
-    if (!session?.user?.id && !session?.user?.email) {
-      if (process.env.NODE_ENV !== "development") {
-        return NextResponse.json(
-          { error: "Authentication required" },
-          { status: 401 }
-        );
-      }
+    if (!user && process.env.NODE_ENV !== "development") {
+      return NextResponse.json(
+        { error: "Authentication required" },
+        { status: 401 }
+      );
     }
 
-    const userId = session?.user?.id || session?.user?.email || "anonymous-dev-user";
+    const userId = user?.id || user?.email || "anonymous-dev-user";
     const body = await req.json();
     const { 
       isAdmin, 
