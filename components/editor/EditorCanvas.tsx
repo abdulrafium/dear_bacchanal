@@ -327,8 +327,6 @@ function CalendarElement({
         width={el.width}
         height={el.height}
         fill="transparent"
-        stroke="#000"
-        strokeWidth={1}
         cornerRadius={8}
       />
       
@@ -367,8 +365,7 @@ function CalendarElement({
           y={gridY + Math.floor(i / 7) * cellHeight}
           width={cellWidth}
           height={cellHeight}
-          stroke="#ffffff22"
-          strokeWidth={1}
+          fill="transparent"
         />
       ))}
 
@@ -384,8 +381,6 @@ function CalendarElement({
             <Rect
               width={cellWidth}
               height={cellHeight}
-              stroke="#ffffff44"
-              strokeWidth={1}
               fill={note ? "rgba(255,255,255,0.2)" : "transparent"}
               onClick={() => {
                 if (!canInteract) return;
