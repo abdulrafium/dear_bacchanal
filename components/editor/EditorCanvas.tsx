@@ -378,16 +378,20 @@ function CalendarElement({
         const note = settings.data[dateKey] || "";
 
         return (
-          <Group key={day} x={x} y={y}>
+          <Group 
+            key={day} 
+            x={x} 
+            y={y}
+            onClick={() => {
+              if (!canInteract) return;
+              setEditingDate(dateKey);
+              setEditValue(note);
+            }}
+          >
             <Rect
               width={cellWidth}
               height={cellHeight}
-              fill={note ? "rgba(255,255,255,0.2)" : "transparent"}
-              onClick={() => {
-                if (!canInteract) return;
-                setEditingDate(dateKey);
-                setEditValue(note);
-              }}
+              fill={note ? "rgba(251,186,0,0.2)" : "transparent"} // Use brand yellow for filled nodes
             />
             <Text
               text={day.toString()}
@@ -395,17 +399,19 @@ function CalendarElement({
               padding={4}
               fontSize={14}
               fill="#000"
+              fontFamily="Boogaloo"
             />
             {note && (
               <Text
                 text={note}
-                width={cellWidth - 4}
-                x={2}
-                y={18}
+                width={cellWidth - 8}
+                x={4}
+                y={22}
                 fontSize={8}
-                fill="#000"
-                fontStyle="italic"
+                fill="#2d2d2d"
+                fontStyle="normal"
                 wrap="char"
+                fontFamily="Outfit"
               />
             )}
           </Group>
