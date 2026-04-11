@@ -459,7 +459,7 @@ const CustomizeRitual = () => {
                   {/* The main book cover */}
                   <div className="relative w-[85%] h-[85%] lg:w-[90%] lg:h-[90%] rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(0,0,0,0.6)] border-2 border-white/10 group">
                     <img
-                      src="https://images.unsplash.com/photo-1544450181-29a848a25358?q=80&w=2070&auto=format&fit=crop"
+                      src="/book-cover.jpg"
                       alt="Carnival Photo Book"
                       className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
                     />
