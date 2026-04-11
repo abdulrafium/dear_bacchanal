@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Users, ShoppingCart, CreditCard, BookOpen, TrendingUp, Clock, Activity } from "lucide-react";
 import { db } from "@/lib/firebase";
-import { collection, onSnapshot, query, orderBy, limit, where } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, limit, getCountFromServer } from "firebase/firestore";
 
 interface Stats {
   totalUsers: number;
@@ -38,46 +38,65 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Listen to Users
-    const usersQuery = query(collection(db, "users"), orderBy("updatedAt", "desc"));
+    // 1. Listen to Recent Users (Limited to fix speed)
+    const usersQuery = query(
+      collection(db, "users"), 
+      orderBy("updatedAt", "desc"), 
+      limit(15)
+    );
+    
     const unsubscribeUsers = onSnapshot(usersQuery, (snapshot) => {
       const usersData: any[] = [];
-      let creditors = 0;
       let googlers = 0;
+      let creditors = 0;
       let purchased = 0;
 
       snapshot.forEach((doc) => {
         const data = doc.data();
-        usersData.push({ id: doc.id, ...data });
-        if (data.provider === "google.com" || data.provider === "google") googlers++;
-        else creditors++;
-        if (data.isPurchased) purchased++;
+        
+        // Only show Firebase related users (google.com or password/credentials)
+        const isFirebase = data.provider === "google.com" || 
+                          data.provider === "google" || 
+                          data.provider === "credentials" || 
+                          data.provider === "password";
+                          
+        if (isFirebase) {
+          usersData.push({ id: doc.id, ...data });
+          if (data.provider?.includes("google")) googlers++;
+          else creditors++;
+          if (data.isPurchased) purchased++;
+        }
       });
 
-      setRecentUsers(usersData.slice(0, 5));
+      setRecentUsers(usersData);
       setStats(prev => ({
         ...prev,
-        totalUsers: snapshot.size,
-        credentialUsers: creditors,
+        totalUsers: snapshot.size, // This is only of the recent snapshot! 
+        // We'll update total counts via a separate efficient mechanism
         googleUsers: googlers,
+        credentialUsers: creditors,
         purchasedUsers: purchased,
-        paidOrders: purchased // Assuming paid orders match purchased users for now
+        paidOrders: purchased
       }));
       setLoading(false);
     });
 
-    // 2. Listen to Books
-    const booksQuery = query(collection(db, "books"), where("isDeleted", "==", false));
-    const unsubscribeBooks = onSnapshot(booksQuery, (snapshot) => {
+    // 2. Efficiently get Total Counts
+    const updateStats = async () => {
+        const usersSnapshot = await getCountFromServer(collection(db, "users"));
+        const booksSnapshot = await getCountFromServer(collection(db, "books"));
+        
         setStats(prev => ({
             ...prev,
-            booksCreated: snapshot.size
+            totalUsers: usersSnapshot.data().count,
+            booksCreated: booksSnapshot.data().count
         }));
-    });
+    };
 
+    updateStats();
+    
     return () => {
       unsubscribeUsers();
-      unsubscribeBooks();
     };
   }, []);
 

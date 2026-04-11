@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Search, RotateCcw, Ban, CheckCircle, CreditCard, ChevronLeft, ChevronRight } from "lucide-react";
+import { db } from "@/lib/firebase";
+import { collection, query, orderBy, limit, getDocs, doc, updateDoc, getCountFromServer } from "firebase/firestore";
+import { toast } from "sonner";
 
 interface User {
   id: string;
@@ -25,29 +28,49 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     fetchUsers();
-
-    // Set up polling for real-time updates when not searching
-    let interval: NodeJS.Timeout;
-    if (!search) {
-      interval = setInterval(() => {
-        fetchUsers(true); // pass true to indicate it's a silent background refresh
-      }, 10000); // 10 seconds polling
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
   }, [page, search]);
 
   const fetchUsers = async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const params = new URLSearchParams({ page: page.toString(), limit: "15", search, t: Date.now().toString() });
-      const res = await fetch(`/api/admin/users?${params}`);
-      const data = await res.json();
-      setUsers(data.users);
-      setTotalPages(data.totalPages);
-      setTotal(data.total);
+      const usersRef = collection(db, "users");
+      
+      // Get count
+      const countSnapshot = await getCountFromServer(usersRef);
+      setTotal(countSnapshot.data().count);
+      setTotalPages(Math.ceil(countSnapshot.data().count / 15));
+
+      // Get users with limit and filter
+      const q = query(
+        usersRef, 
+        orderBy("updatedAt", "desc"), 
+        limit(50) // We'll client-side filter/search for simplicity since firestore search is limited
+      );
+      
+      const snapshot = await getDocs(q);
+      let usersData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate()?.toISOString() || doc.data().createdAt
+      })) as User[];
+
+      // Strictly show Firebase users
+      usersData = usersData.filter(u => 
+        u.provider === "google.com" || 
+        u.provider === "google" || 
+        u.provider === "credentials" || 
+        u.provider === "password"
+      );
+
+      if (search) {
+        const lowerSearch = search.toLowerCase();
+        usersData = usersData.filter(u => 
+          u.name?.toLowerCase().includes(lowerSearch) || 
+          u.email?.toLowerCase().includes(lowerSearch)
+        );
+      }
+
+      setUsers(usersData.slice((page - 1) * 15, page * 15));
     } catch (error) {
       console.error("Error:", error);
     } finally {
@@ -58,16 +81,21 @@ export default function AdminUsersPage() {
   const handleAction = async (userId: string, action: string) => {
     setActionLoading(userId);
     try {
-      const res = await fetch("/api/admin/users", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, action }),
-      });
-      const data = await res.json();
-      alert(data.message);
-      fetchUsers();
+      const userRef = doc(db, "users", userId);
+      const user = users.find(u => u.id === userId);
+      
+      switch(action) {
+        case "toggleDisable":
+          await updateDoc(userRef, { isDisabled: !user?.isDisabled, updatedAt: new Date() });
+          break;
+        case "togglePurchased":
+          await updateDoc(userRef, { isPurchased: !user?.isPurchased, updatedAt: new Date() });
+          break;
+      }
+      toast.success("User updated");
+      fetchUsers(true);
     } catch (error) {
-      alert("Action failed");
+      toast.error("Action failed");
     } finally {
       setActionLoading(null);
     }
