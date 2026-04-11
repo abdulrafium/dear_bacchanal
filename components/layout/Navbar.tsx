@@ -60,7 +60,7 @@ const Navbar = () => {
                 key={link.path}
                 href={link.path}
                 className={`relative font-display text-sm uppercase tracking-[0.2em] transition-all py-2 ${pathname === link.path
-                    ? "text-primary font-black drop-shadow-[0_0_10px_rgba(var(--primary),0.5)]"
+                    ? "text-primary font-black drop-shadow-[0_0_8px_hsl(var(--primary)/0.4)]"
                     : "text-white/70 hover:text-white"
                   }`}
               >
