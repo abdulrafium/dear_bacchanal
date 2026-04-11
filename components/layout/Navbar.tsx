@@ -59,14 +59,14 @@ const Navbar = () => {
               <Link
                 key={link.path}
                 href={link.path}
-                className={`relative font-medium transition-colors py-2 ${pathname === link.path
-                    ? "text-pink-600 font-bold"
-                    : "text-zinc-900 hover:text-black"
+                className={`relative font-display text-sm uppercase tracking-[0.2em] transition-all py-2 ${pathname === link.path
+                    ? "text-primary font-black drop-shadow-[0_0_10px_rgba(var(--primary),0.5)]"
+                    : "text-white/70 hover:text-white"
                   }`}
               >
                 {link.label}
                 {pathname === link.path && (
-                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full" />
+                  <span className="absolute -bottom-1 left-0 right-0 h-0.5 bg-primary rounded-full animate-pulse" />
                 )}
               </Link>
             ))}
@@ -84,11 +84,11 @@ const Navbar = () => {
 
           {/* Mobile Menu Button */}
           <button
-            className="md:hidden p-2 text-zinc-900"
+            className="md:hidden p-2 text-white hover:text-primary transition-colors"
             onClick={() => setIsOpen(!isOpen)}
             aria-label="Toggle menu"
           >
-            {isOpen ? <X size={24} /> : <Menu size={24} />}
+            {isOpen ? <X size={28} /> : <Menu size={28} />}
           </button>
         </div>
 
@@ -101,9 +101,9 @@ const Navbar = () => {
                   key={link.path}
                   href={link.path}
                   onClick={() => setIsOpen(false)}
-                  className={`font-medium py-2 transition-colors ${pathname === link.path
-                      ? "text-pink-600 font-bold"
-                      : "text-zinc-900 hover:text-black"
+                  className={`font-display text-lg uppercase tracking-widest py-3 transition-colors ${pathname === link.path
+                      ? "text-primary font-black"
+                      : "text-white/80 hover:text-white"
                     }`}
                 >
                   {link.label}
