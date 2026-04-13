@@ -16,7 +16,7 @@ interface CalendarEvent {
 
 const ThirteenthPage = () => {
   const { data, isReadOnly } = useBookData();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, getToken } = useAuth();
   const { openModal } = useAuthModal();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);

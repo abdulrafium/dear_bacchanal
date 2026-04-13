@@ -717,7 +717,7 @@ export function EditorCanvas() {
                     const el = spreads.find(s => s.leftPage.id === pageId || s.rightPage.id === pageId)
                       ?.leftPage.elements.concat(
                         spreads.find(s => s.leftPage.id === pageId || s.rightPage.id === pageId)?.rightPage.elements || []
-                      ).find(e => e.id === elementId) as CalendarElement;
+                      ).find(e => e.id === elementId) as EditorElement;
 
                     if (el) {
                       const newData = { ...(el.calendarSettings?.data || {}) };
@@ -728,7 +728,10 @@ export function EditorCanvas() {
                       }
 
                       updateElement(pageId, elementId, {
-                        calendarSettings: { ...el.calendarSettings, data: newData }
+                        calendarSettings: el.calendarSettings ? { 
+                          ...el.calendarSettings, 
+                          data: newData 
+                        } : undefined
                       });
                     }
                     setEditingCalendarNote(null);

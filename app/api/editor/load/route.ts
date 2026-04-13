@@ -88,9 +88,10 @@ export async function GET(req: NextRequest) {
       if (dbTemplate && dbTemplate.spreads) {
         if (book) {
           // If the book matches the template series, perform the smart merge
-          if (book.activeTemplateName?.includes("Bacchanal") || book.activeTemplateName === "Untitled Book") {
+          const currentBook = book; // Local reference to help TS narrow the type
+          if (currentBook.activeTemplateName?.includes("Bacchanal") || currentBook.activeTemplateName === "Untitled Book") {
             const mergedSpreads = dbTemplate.spreads.map((adminSpread: any, index: number) => {
-              const userSpread = book.spreads && book.spreads[index];
+              const userSpread = currentBook.spreads && currentBook.spreads[index];
               if (!userSpread) return adminSpread;
 
               const mergePage = (adminPage: any, userPage: any) => {

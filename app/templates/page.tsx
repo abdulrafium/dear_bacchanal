@@ -23,8 +23,9 @@ interface Template {
   bookName: string;
   createdAt: string;
   updatedAt: string;
-  images: Record<string, string>;
-  textData: Record<string, string>;
+  imageCount: number;
+  images?: Record<string, string>;
+  textData?: Record<string, string>;
 }
 
 const TemplatesPage = () => {
@@ -240,10 +241,10 @@ const TemplatesPage = () => {
                         <Image className="w-4 h-4 text-yellow" />
                       </div>
                       <span className="font-semibold">
-                        {getImageCount(template.images)}
+                        {template.imageCount}
                       </span>
                       <span>
-                        {getImageCount(template.images) === 1
+                        {template.imageCount === 1
                           ? "image"
                           : "images"}
                       </span>

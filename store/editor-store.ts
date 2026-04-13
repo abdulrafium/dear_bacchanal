@@ -3,6 +3,7 @@ import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { v4 as uuidv4 } from "uuid";
 import Konva from "konva";
+import { toast } from "sonner";
 
 // Element types that can be placed on a page
 export type ElementType = "image" | "text" | "shape" | "sticker" | "qrcode" | "calendar" | "photo-card";
@@ -63,7 +64,7 @@ export interface BookSpread {
   rightPage: BookPage;
 }
 
-export type SidebarPanel = "images" | "templates" | "layouts" | "backgrounds" | "stickers" | "calendar" | null;
+export type SidebarPanel = "images" | "templates" | "layouts" | "backgrounds" | "stickers" | "calendar" | "text" | null;
 export type RightTool = "text" | "photo" | "qrcode" | "layout" | "rectangle" | "ellipse" | null;
 
 interface HistoryEntry {
