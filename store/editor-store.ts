@@ -566,7 +566,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     if (node.getClassName() === 'Image') {
                         const imgNode = node as Konva.Image;
                         const img = imgNode.image();
-                        if (img && !img.complete) {
+                        if (img instanceof HTMLImageElement && !img.complete) {
                             return new Promise(r => { 
                                 img.addEventListener('load', r, { once: true });
                                 img.addEventListener('error', r, { once: true });
@@ -578,7 +578,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     if (node.getClassName() === 'Rect') {
                         const rectNode = node as Konva.Rect;
                         const patternImg = rectNode.fillPatternImage();
-                        if (patternImg && !patternImg.complete) {
+                        if (patternImg instanceof HTMLImageElement && !patternImg.complete) {
                             return new Promise(r => {
                                 patternImg.addEventListener('load', r, { once: true });
                                 patternImg.addEventListener('error', r, { once: true });
