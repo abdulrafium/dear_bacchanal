@@ -65,24 +65,24 @@ export function createBacchanaleTemplate(): BookTemplate {
     // Spread 0 — Cover (FirstPage is actually back cover, EigthPage is front cover)
     {
       id: uuidv4(),
-      leftPage: createPage("Back cover", "#ff0400", [
+      leftPage: createPage("Back cover", "#ffffff", [
         {...createBgImage("/assets/layer-2.png"), isLocked: true, x: PAGE_WIDTH * 0.2, y: PAGE_HEIGHT * 0.4, width: PAGE_WIDTH * 0.8, height: PAGE_HEIGHT * 0.6},
-        createText("Dear Bacchanal", 30, 70, 16, "#ffffff", 250, "left"),
-        createText("First edition 2023\nSecond edition 2026", 30, 120, 12, "#ffffff", 250, "left"),
-        createText("Copyright © SAFFA Trinidad Ltd.\nAll rights reserved.\nNo part of this book may be reproduced\nin any form or by any means without\nthe written permission of the copyright owner.", 30, 180, 11, "#ffffff", 250, "left"),
-        createText("Ami Aqui Sirjoo, Creative Director\nAarad Homer, Assistant Creative Director\nAya Ataeva, Web Development and Design", 30, 290, 11, "#ffffff", 250, "left"),
+        createText("Dear Bacchanal", 30, 70, 16, "#000000", 250, "left"),
+        createText("First edition 2023\nSecond edition 2026", 30, 120, 12, "#000000", 250, "left"),
+        createText("Copyright © SAFFA Trinidad Ltd.\nAll rights reserved.\nNo part of this book may be reproduced\nin any form or by any means without\nthe written permission of the copyright owner.", 30, 180, 11, "#000000", 250, "left"),
+        createText("Ami Aqui Sirjoo, Creative Director\nAarad Homer, Assistant Creative Director\nAya Ataeva, Web Development and Design", 30, 290, 11, "#000000", 250, "left"),
       ], true),
-      rightPage: createPage("Front cover", "#9f2e2b", [
+      rightPage: createPage("Front cover", "#ffffff", [
         createBgImage("/assets/layer-12.png"),
-        createText("We tried to behave.", 0, 100, 20, "#ffffff", PAGE_WIDTH, "center"),
-        createText("DEAR", 0, 210, 52, "#ffffff", PAGE_WIDTH, "center"),
-        createText("BACCHANAL", 0, 270, 72, "#ffffff", PAGE_WIDTH, "center"),
+        createText("We tried to behave.", 0, 100, 20, "#000000", PAGE_WIDTH, "center"),
+        createText("DEAR", 0, 210, 52, "#000000", PAGE_WIDTH, "center"),
+        createText("BACCHANAL", 0, 270, 72, "#000000", PAGE_WIDTH, "center"),
       ], true),
     },
     // Spread 1 — Quote + Letter (TenthPage equivalent split across two pages)
     {
       id: uuidv4(),
-      leftPage: createPage("Page 1", "#9F2E2B", [
+      leftPage: createPage("Page 1", "#ffffff", [
         { ...createText("❝", 10, 120, 100, "#c8413d", 60, "left"), fontFamily: "Kalam" },
         {
           ...createText(
@@ -102,16 +102,16 @@ export function createBacchanaleTemplate(): BookTemplate {
     // Spread 2 — THE GREATEST (NinthPage)
     {
       id: uuidv4(),
-      leftPage: createPage("Page 3", "#d13430", [
+      leftPage: createPage("Page 3", "#ffffff", [
         {...createBgImage("/assets/layer-14.png"), isLocked: true},
-        createText("THE GREATEST", 40, 100, 40, "#ffffff", PAGE_WIDTH - 80, "left"),
+        createText("THE GREATEST", 40, 100, 40, "#000000", PAGE_WIDTH - 80, "left"),
         createText("✓ Vibes", 40, 200, 20, "#000000", PAGE_WIDTH - 80, "left"),
         createText("✓ Costume from ya band", 40, 240, 20, "#000000", PAGE_WIDTH - 80, "left"),
         createText("✓ Fete-in time", 40, 280, 20, "#000000", PAGE_WIDTH - 80, "left"),
       ]),
-      rightPage: createPage("Page 4", "#d13430", [
+      rightPage: createPage("Page 4", "#ffffff", [
         {...createBgImage("/assets/layer-14.png"), isLocked: true},
-        createText("SHOW ON EARTH", 40, 100, 40, "#ffffff", PAGE_WIDTH - 80, "left"),
+        createText("SHOW ON EARTH", 40, 100, 40, "#000000", PAGE_WIDTH - 80, "left"),
         createText("✓ Friends", 40, 200, 20, "#000000", PAGE_WIDTH - 80, "left"),
         createText("✓ Soca tunes loaded", 40, 240, 20, "#000000", PAGE_WIDTH - 80, "left"),
         createText("✓ Waist ready to wine", 40, 280, 20, "#000000", PAGE_WIDTH - 80, "left"),
@@ -132,7 +132,7 @@ export function createBacchanaleTemplate(): BookTemplate {
     // Spread 4 - Fete In Time
     {
       id: uuidv4(),
-      leftPage: createPage("Page 7", "#643676", [
+      leftPage: createPage("Page 7", "#ffffff", [
         {...createBgImage("/assets/layer-20.png"), isLocked: true},
         {...createBgImage("/assets/FEte-ing.png"), isLocked: true, width: 200, height: 60, x: 20, y: 20},
         {...createBgImage("/assets/layer-21.png"), isLocked: true, width: 140, height: 200, x: 0, y: PAGE_HEIGHT - 200},
@@ -140,7 +140,7 @@ export function createBacchanaleTemplate(): BookTemplate {
         { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 240, y: 110, width: 120, height: 160, rotation: -4, shapeFill: "#2d2d2d", stroke: "#ffffff", strokeWidth: 8, isLocked: false },
         { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 220, y: 310, width: 120, height: 160, rotation: -7, shapeFill: "#2d2d2d", stroke: "#ffffff", strokeWidth: 8, isLocked: false },
       ]),
-      rightPage: createPage("Page 8", "#643676", [
+      rightPage: createPage("Page 8", "#ffffff", [
         {...createBgImage("/assets/layer-20.png"), isLocked: true},
         {...createBgImage("/assets/layer-22.png"), isLocked: true, width: 140, height: 200, x: PAGE_WIDTH - 140, y: PAGE_HEIGHT - 200},
         { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 40, y: 90, width: 120, height: 160, rotation: 5, shapeFill: "#2d2d2d", stroke: "#ffffff", strokeWidth: 8, isLocked: false },
@@ -151,7 +151,7 @@ export function createBacchanaleTemplate(): BookTemplate {
     // Spread 5 - We Limin' Design (Page 9 & 10)
     {
       id: uuidv4(),
-      leftPage: createPage("Page 9", "#74913c", [
+      leftPage: createPage("Page 9", "#ffffff", [
         // Background Lime Pattern
         { id: uuidv4(), type: "image", src: "/assets/lime.png", x: -80, y: -40, width: 200, height: 200, rotation: -15, isLocked: true, opacity: 0.3 },
         { id: uuidv4(), type: "image", src: "/assets/lime.png", x: PAGE_WIDTH - 120, y: -80, width: 250, height: 250, rotation: 140, isLocked: true, opacity: 0.2 },
@@ -177,7 +177,7 @@ export function createBacchanaleTemplate(): BookTemplate {
         { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 40, y: 495, width: PAGE_WIDTH - 80, height: 1, rotation: 0, shapeFill: "#ffffff", opacity: 0.6 },
         { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 40, y: 530, width: PAGE_WIDTH - 80, height: 1, rotation: 0, shapeFill: "#ffffff", opacity: 0.6 },
       ]),
-      rightPage: createPage("Page 10", "#74913c", [
+      rightPage: createPage("Page 10", "#ffffff", [
         // Background Lime Pattern (Symmetrical)
         { id: uuidv4(), type: "image", src: "/assets/lime.png", x: -40, y: -40, width: 220, height: 220, rotation: 45, isLocked: true, opacity: 0.3 },
         { id: uuidv4(), type: "image", src: "/assets/lime.png", x: PAGE_WIDTH - 150, y: -60, width: 200, height: 200, rotation: -15, isLocked: true, opacity: 0.2 },
@@ -195,30 +195,30 @@ export function createBacchanaleTemplate(): BookTemplate {
     // Spread 6
     {
       id: uuidv4(),
-      leftPage: createPage("Page 11", "#111111", [
+      leftPage: createPage("Page 11", "#ffffff", [
         {...createBgImage("/assets/layer-22.png"), isLocked: true},
       ]),
-      rightPage: createPage("Page 12", "#111111", [
+      rightPage: createPage("Page 12", "#ffffff", [
         {...createBgImage("/assets/layer-21.png"), isLocked: true},
       ]),
     },
     // Spread 7
     {
       id: uuidv4(),
-      leftPage: createPage("Page 13", "#9f2e2b", [
+      leftPage: createPage("Page 13", "#ffffff", [
         {...createBgImage("/assets/layer-8.png"), isLocked: true},
       ]),
-      rightPage: createPage("Page 14", "#9f2e2b", [
+      rightPage: createPage("Page 14", "#ffffff", [
         {...createBgImage("/assets/layer-9.png"), isLocked: true},
       ]),
     },
     // Spread 8
     {
       id: uuidv4(),
-      leftPage: createPage("Page 15", "#222222", [
+      leftPage: createPage("Page 15", "#ffffff", [
         {...createBgImage("/assets/layer-13.png"), isLocked: true},
       ]),
-      rightPage: createPage("Page 16", "#222222", [
+      rightPage: createPage("Page 16", "#ffffff", [
         {...createBgImage("/assets/layer-3.png"), isLocked: true},
       ]),
     },

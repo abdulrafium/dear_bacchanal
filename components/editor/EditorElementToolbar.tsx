@@ -1,8 +1,8 @@
 "use client";
 
 import { useEditorStore } from "@/store/editor-store";
-import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Layers, Trash2, Bookmark, ChevronDown, Lock, Unlock } from "lucide-react";
-import { useState, useRef, useEffect } from "react";
+import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Layers, Trash2, Bookmark, ChevronDown, Lock, Unlock, Image } from "lucide-react";
+import { useState, useRef, useEffect, useMemo } from "react";
 
 export function EditorElementToolbar() {
   const spreads = useEditorStore((s) => s.spreads);
@@ -14,6 +14,9 @@ export function EditorElementToolbar() {
   const isPreviewMode = useEditorStore((s) => s.isPreviewMode);
   const isAdmin = useEditorStore((s) => s.isAdmin);
   const setPreviewElement = useEditorStore((s) => s.setPreviewElement);
+  const stage = useEditorStore((s) => s.stageRef);
+  const zoom = useEditorStore((s) => s.zoom);
+  const viewMode = useEditorStore((s) => s.viewMode);
 
   const [isFontOpen, setIsFontOpen] = useState(false);
   const fontDropdownRef = useRef<HTMLDivElement>(null);
@@ -28,23 +31,34 @@ export function EditorElementToolbar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  if (isPreviewMode || !selectedElementId) return null;
-
-  let selectedElementInfo = null;
-  for (const spread of spreads) {
-    let el = spread.leftPage.elements.find((e) => e.id === selectedElementId);
-    if (el) {
-      selectedElementInfo = { element: el, pageId: spread.leftPage.id };
-      break;
+  // Find the selected element
+  const selectedElementInfo = useMemo(() => {
+    if (!selectedElementId) return null;
+    for (const spread of spreads) {
+      let el = spread.leftPage.elements.find((e) => e.id === selectedElementId);
+      if (el) return { element: el, pageId: spread.leftPage.id };
+      el = spread.rightPage.elements.find((e) => e.id === selectedElementId);
+      if (el) return { element: el, pageId: spread.rightPage.id };
     }
-    el = spread.rightPage.elements.find((e) => e.id === selectedElementId);
-    if (el) {
-      selectedElementInfo = { element: el, pageId: spread.rightPage.id };
-      break;
-    }
-  }
+    return null;
+  }, [spreads, selectedElementId]);
 
-  if (!selectedElementInfo) return null;
+  // Calculate floating position - NOW FIXED TO THE TOP SAFE ZONE
+  const toolbarPos = useMemo(() => {
+    if (!selectedElementId) return null;
+    
+    // Position it at the top of the screen (below the header) 
+    // to ensure it stays outside the book boundary and doesn't block rotation handles
+    return {
+      top: "100px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      opacity: 1,
+      visibility: "visible" as "visible"
+    };
+  }, [selectedElementId]);
+
+  if (isPreviewMode || !selectedElementId || !selectedElementInfo) return null;
 
   const { element, pageId } = selectedElementInfo;
 
@@ -76,7 +90,8 @@ export function EditorElementToolbar() {
     "sans-serif",
     "serif"
   ];
-  const sizes = [12, 14, 16, 18, 20, 24, 28, 36, 48, 60, 72, 96, 120];
+
+  const sizes = [12, 14, 16, 18, 20, 24, 28, 36, 48, 60, 72, 84, 96, 120];
 
   const update = (updates: Partial<typeof element>) => {
     updateElement(pageId, element.id, updates);
@@ -103,7 +118,10 @@ export function EditorElementToolbar() {
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 10px; }
       `}} />
-      <div className="fixed md:absolute top-[80px] left-0 right-0 md:right-auto md:left-1/2 md:-translate-x-1/2 z-40 bg-white rounded-none md:rounded-xl shadow-lg border-b md:border border-gray-100 flex items-center p-2 gap-2 h-14 max-w-full overflow-visible">
+      <div 
+        className="fixed z-[1001] bg-white rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.1)] border border-gray-100 flex items-center p-1.5 gap-1.5 h-11 max-w-full overflow-visible transition-all duration-300 animate-in fade-in zoom-in-95"
+        style={toolbarPos || { top: 80, left: "50%", transform: "translateX(-50%)" }}
+      >
 
         {(element.type === "text" || element.type === "calendar") && (
           <>
@@ -252,7 +270,28 @@ export function EditorElementToolbar() {
         )}
 
         {/* Layers */}
-        <button className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-gray-600 hover:bg-gray-50 transition-colors shrink-0" title="Bring to front">
+        <button 
+           className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-gray-600 hover:bg-gray-50 transition-colors shrink-0" 
+           title="Bring to front"
+           onClick={() => {
+              // Get current max z-index logic or simply re-push to array end
+              const spreads = useEditorStore.getState().spreads;
+              const newSpreads = spreads.map(s => {
+                  if (s.leftPage.id === pageId) {
+                      const el = s.leftPage.elements.find(e => e.id === element.id)!;
+                      const rest = s.leftPage.elements.filter(e => e.id !== element.id);
+                      return { ...s, leftPage: { ...s.leftPage, elements: [...rest, el] } };
+                  }
+                  if (s.rightPage.id === pageId) {
+                      const el = s.rightPage.elements.find(e => e.id === element.id)!;
+                      const rest = s.rightPage.elements.filter(e => e.id !== element.id);
+                      return { ...s, rightPage: { ...s.rightPage, elements: [...rest, el] } };
+                  }
+                  return s;
+              });
+              useEditorStore.setState({ spreads: newSpreads });
+           }}
+        >
           <Layers className="w-5 h-5" />
         </button>
 
@@ -265,6 +304,21 @@ export function EditorElementToolbar() {
         <button onClick={handleDuplicate} className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-gray-600 hover:bg-gray-50 transition-colors shrink-0" title="Duplicate">
           <Bookmark className="w-5 h-5" />
         </button>
+
+        <div className="w-[px] h-6 bg-gray-100 mx-1" />
+
+        {element.type === "photo-card" && (
+           <button 
+             className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-teal hover:bg-teal/5 transition-colors shrink-0" 
+             title="Change Photo"
+             onClick={() => {
+                // Trigger upload input if needed, or open sidebar
+                useEditorStore.getState().setSidebarPanel("images");
+             }}
+           >
+             <Image className="w-5 h-5" />
+           </button>
+        )}
 
         {element.type === "text" && (
           <button className="ml-2 bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 transition-colors text-xs md:text-sm shrink-0">

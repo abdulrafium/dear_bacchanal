@@ -41,36 +41,38 @@ export function EditorPageTools({ pageId, align }: { pageId: string, align: "lef
 
       case "rectangle":
         addElement(pageId, {
-          type: "shape",
+          type: "photo-card",
           x: 100,
           y: 150,
-          width: 150,
-          height: 100,
+          width: 200,
+          height: 250,
           rotation: 0,
           shapeType: "rectangle",
-          stroke: "#333333",
-          strokeWidth: 2,
-          shapeFill: "transparent",
         });
         break;
-
+ 
       case "ellipse":
         addElement(pageId, {
-          type: "shape",
+          type: "photo-card",
           x: 100,
           y: 150,
-          width: 120,
-          height: 120,
+          width: 200,
+          height: 200,
           rotation: 0,
           shapeType: "ellipse",
-          stroke: "#333333",
-          strokeWidth: 2,
-          shapeFill: "transparent",
         });
         break;
-
+ 
       case "photo":
-        useEditorStore.getState().setSidebarPanel("images");
+        addElement(pageId, {
+          type: "photo-card",
+          x: 50,
+          y: 100,
+          width: 300,
+          height: 300,
+          rotation: 0,
+          shapeType: "rectangle",
+        });
         break;
 
       case "layout":
@@ -102,10 +104,10 @@ export function EditorPageTools({ pageId, align }: { pageId: string, align: "lef
         <button
           key={id}
           onClick={() => handleToolClick(id)}
-          className={`flex flex-col items-center justify-center gap-1 ${isCenter ? "w-12 h-14" : "w-14 h-16"} rounded-xl border transition-all duration-200 ${
+          className={`flex flex-col items-center justify-center gap-1 ${isCenter ? "w-12 h-14" : "w-14 h-16"} rounded-xl transition-all duration-200 ${
             activeRightTool === id
-              ? "bg-[#2d2d2d] border-[#2d2d2d] shadow-lg text-white"
-              : "bg-white/95 backdrop-blur border-gray-200 text-gray-500 hover:bg-white hover:text-gray-800 hover:shadow-sm"
+              ? "bg-[#2d2d2d] shadow-lg text-white"
+              : "bg-transparent text-gray-500 hover:text-gray-900 hover:scale-110 active:scale-95"
           }`}
         >
           {id === "text" ? (

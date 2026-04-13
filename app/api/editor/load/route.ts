@@ -16,7 +16,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const userId = user?.id || user?.email || "anonymous-dev-user";
+    const userIdFromAuth = user?.id || user?.email || "anonymous-dev-user";
+    const targetUserId = req.nextUrl.searchParams.get("userId");
+    
+    // Check if the requester is an admin
+    const isRequesterAdmin = userIdFromAuth === "admin@dearbacchanal.com" || process.env.NODE_ENV === "development";
+    
+    // Determine which userId's data to load
+    const userId = (isRequesterAdmin && targetUserId) ? targetUserId : userIdFromAuth;
+    
     const db = await getDatabase();
 
     if (isAdmin) {
@@ -43,7 +51,7 @@ export async function GET(req: NextRequest) {
       if (!template) {
         // Fallback to Bacchanal if no specific template requested or found
         template = await templatesCollection.findOne({ 
-          templateName: { $in: ["Bacchanal 2026", "Bacchanal"] } 
+          templateName: { $in: ["Bacchanal 2026", "Bacchanal", "Dear Bacchanal"] } 
         });
       }
       
@@ -72,43 +80,82 @@ export async function GET(req: NextRequest) {
       
       let book = await userBooksCollection.findOne(query);
       
-      // FOR TESTING & SYNC: In development or for new users, only try to pull the latest Bacchanal template if no specific template is requested
-      const isDevUser = userId === "anonymous-dev-user";
-      
-      if (!book || (isDevUser && !templateName)) {
-        // Find the canonical template in DB (Admin's latest work)
-        const dbTemplate = await templatesCollection.findOne({ 
-            templateName: { $in: ["Bacchanal 2026", "Bacchanal"] } 
-        });
-        
-        if (dbTemplate && dbTemplate.spreads) {
-          // If it's a dev user, we want to see the latest admin changes even if we had a book before
-          if (isDevUser && book) {
-             book.spreads = dbTemplate.spreads;
-             book.activeTemplateName = dbTemplate.templateName;
-          } else if (!book) {
-            book = {
-              _id: "preview-id" as any,
-              userId,
-              spreads: dbTemplate.spreads,
-              activeTemplateName: dbTemplate.templateName,
-              currentSpreadIndex: 0,
-              templateDescription: dbTemplate.description
-            } as any;
+      // MASTER SMART-SYNC LOGIC: Deeply merge Admin design updates while protecting User personal content
+      const dbTemplate = await templatesCollection.findOne({ 
+          templateName: { $in: ["Bacchanal 2026", "Bacchanal", "Dear Bacchanal"] } 
+      });
+
+      if (dbTemplate && dbTemplate.spreads) {
+        if (book) {
+          // If the book matches the template series, perform the smart merge
+          if (book.activeTemplateName?.includes("Bacchanal") || book.activeTemplateName === "Untitled Book") {
+            const mergedSpreads = dbTemplate.spreads.map((adminSpread: any, index: number) => {
+              const userSpread = book.spreads && book.spreads[index];
+              if (!userSpread) return adminSpread;
+
+              const mergePage = (adminPage: any, userPage: any) => {
+                if (!userPage) return adminPage;
+                const adminElements = adminPage.elements || [];
+                const userElements = userPage.elements || [];
+                
+                const mergedElements = adminElements.map((ae: any) => {
+                  const ue = userElements.find((e: any) => e.id === ae.id);
+                  // Preserve user content in admin placeholders
+                  if (ue && (ae.type === "image" || ae.type === "photo-card") && ue.src) {
+                     return { ...ae, src: ue.src };
+                  }
+                  if (ue && ae.type === "text" && ue.text && ue.text !== ae.text) {
+                     return { ...ae, text: ue.text };
+                  }
+                  return ae;
+                });
+
+                // Add user's custom added elements (extra stickers, text, etc. not in template)
+                userElements.forEach((ue: any) => {
+                  const isAdminElement = adminElements.some((ae: any) => ae.id === ue.id);
+                  if (!isAdminElement) mergedElements.push(ue);
+                });
+
+                return {
+                  ...adminPage,
+                  elements: mergedElements,
+                  background: adminPage.background || userPage.background
+                };
+              };
+
+              return {
+                ...adminSpread,
+                leftPage: mergePage(adminSpread.leftPage, userSpread.leftPage),
+                rightPage: mergePage(adminSpread.rightPage, userSpread.rightPage),
+              };
+            });
+
+            book.spreads = mergedSpreads;
+            book.templateDescription = dbTemplate.description;
           }
-        } else if (!book) {
-          // Hard fallback to code definition if DB is empty
-          const { getAvailableTemplates } = await import('@/lib/book-templates');
-          const defaultTemplate = getAvailableTemplates().find(t => t.id === "bacchanal-2026");
+        } else {
+          // New user: load template directly
           book = {
             _id: "preview-id" as any,
             userId,
-            spreads: defaultTemplate?.spreads || [],
-            activeTemplateName: defaultTemplate?.name || "Bacchanal 2026",
+            spreads: dbTemplate.spreads,
+            activeTemplateName: dbTemplate.templateName,
             currentSpreadIndex: 0,
-            templateDescription: defaultTemplate?.description
+            templateDescription: dbTemplate.description
           } as any;
         }
+      } else if (!book) {
+        // Hard fallback to code definition if DB is empty
+        const { getAvailableTemplates } = await import('@/lib/book-templates');
+        const defaultTemplate = getAvailableTemplates().find(t => t.id === "bacchanal-2026");
+        book = {
+          _id: "preview-id" as any,
+          userId,
+          spreads: defaultTemplate?.spreads || [],
+          activeTemplateName: defaultTemplate?.name || "Bacchanal 2026",
+          currentSpreadIndex: 0,
+          templateDescription: defaultTemplate?.description
+        } as any;
       }
       
       return NextResponse.json({ book }, { status: 200 });

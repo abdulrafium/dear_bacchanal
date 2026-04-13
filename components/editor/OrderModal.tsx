@@ -40,34 +40,34 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
 
   const handlePayment = async () => {
     if (isPurchased && selectedType === "soft") {
-        handleGeneratePdf();
-        return;
+      handleGeneratePdf();
+      return;
     }
 
     setLoading(true);
-    
+
     try {
       const response = await fetch("/api/checkout", {
         method: "POST",
-        headers: { 
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${localStorage.getItem("fb_token") || ""}`,
-            "x-user-email": localStorage.getItem("fb_user_email") || "",
-            "x-user-id": localStorage.getItem("fb_user_id") || ""
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${localStorage.getItem("fb_token") || ""}`,
+          "x-user-email": localStorage.getItem("fb_user_email") || "",
+          "x-user-id": localStorage.getItem("fb_user_id") || ""
         },
         body: JSON.stringify({ type: selectedType }),
       });
       const data = await response.json();
       if (data.url) {
-          window.location.href = data.url;
+        window.location.href = data.url;
       } else {
-          toast.error("Failed to initiate checkout");
-          setLoading(false);
+        toast.error("Failed to initiate checkout");
+        setLoading(false);
       }
     } catch (error) {
-        console.error("Checkout error:", error);
-        toast.error("An error occurred during checkout");
-        setLoading(false);
+      console.error("Checkout error:", error);
+      toast.error("An error occurred during checkout");
+      setLoading(false);
     }
   };
 
@@ -77,7 +77,7 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
   const handleGeneratePdf = async () => {
     setLoading(true);
     setDownloadStatus("PREPARING YOUR DIGITAL MEMORY...");
-    
+
     try {
       setTimeout(() => setDownloadStatus("SYNCHRONIZING ASSETS..."), 1500);
       setTimeout(() => setDownloadStatus("GENERATING HIGH-RES PAGES..."), 3000);
@@ -85,19 +85,19 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
 
       await generatePdfBook();
       await refreshUser();
-      
+
       setDownloadStatus("DOWNLOAD COMPLETE!");
       toast.success("Download successful! Redirecting...");
-      
+
       setTimeout(() => {
         window.location.href = "/customize";
       }, 2000);
 
     } catch (error) {
-        console.error("PDF Error:", error);
-        toast.error("Failed to generate PDF");
-        setDownloadStatus(null);
-        setLoading(false);
+      console.error("PDF Error:", error);
+      toast.error("Failed to generate PDF");
+      setDownloadStatus(null);
+      setLoading(false);
     }
   };
 
@@ -107,11 +107,11 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
         <div className="flex-1 overflow-y-auto scrollbar-hide sm:scrollbar-default overscroll-contain pb-8">
           <div className="bg-gradient-to-br from-[#9f2e2b] to-[#1a1a1a] p-5 sm:p-8 pb-10 rounded-t-[23px] sm:rounded-t-[39px]">
             <DialogHeader className="mb-0">
-               <div className="flex justify-between items-center mb-6">
-                 <span className="text-[9px] font-black text-white/40 uppercase tracking-[4px]">Checkout Portal</span>
-               </div>
+              <div className="flex justify-between items-center mb-6">
+                <span className="text-[9px] font-black text-white/40 uppercase tracking-[4px]">Checkout Portal</span>
+              </div>
               <DialogTitle className="text-2xl sm:text-4xl font-black font-display text-center leading-tight">
-                Order Your <br className="hidden sm:block"/> Carnival Story
+                Order Your <br className="hidden sm:block" /> Carnival Story
               </DialogTitle>
               <DialogDescription className="text-center text-white/50 mt-2 text-xs sm:text-sm max-w-[280px] mx-auto leading-relaxed">
                 Choose between a digital masterpiece or a premium physical heirloom.
@@ -121,13 +121,12 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
 
           <div className="px-4 sm:px-8 -mt-6 bg-[#0a0a0a] rounded-t-[32px]">
             <div className="grid grid-cols-1 gap-3 sm:gap-4 mb-6 pt-6">
-              <div 
+              <div
                 onClick={() => setSelectedType("soft")}
-                className={`relative cursor-pointer rounded-2xl sm:rounded-3xl border-2 p-4 sm:p-6 transition-all duration-300 ${
-                  selectedType === "soft" 
-                  ? "border-[#9f2e2b] bg-[#9f2e2b]/10 shadow-lg" 
-                  : "border-white/5 bg-white/5 hover:bg-white/[0.08]"
-                }`}
+                className={`relative cursor-pointer rounded-2xl sm:rounded-3xl border-2 p-4 sm:p-6 transition-all duration-300 ${selectedType === "soft"
+                    ? "border-[#9f2e2b] bg-[#9f2e2b]/10 shadow-lg"
+                    : "border-white/5 bg-white/5 hover:bg-white/[0.08]"
+                  }`}
               >
                 <div className="flex justify-between items-center mb-3">
                   <div className={`p-2 sm:p-3 rounded-xl transition-colors ${selectedType === "soft" ? "bg-red-500/20" : "bg-white/5"}`}>
@@ -143,18 +142,17 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
                   </div>
                 </div>
                 <div className="mt-4 flex items-baseline gap-2">
-                   <div className="font-black text-2xl sm:text-3xl text-white">$25.00</div>
-                   <div className="text-[10px] text-white/30 font-bold uppercase tracking-widest">USD</div>
+                  <div className="font-black text-2xl sm:text-3xl text-white">$25.00</div>
+                  <div className="text-[10px] text-white/30 font-bold uppercase tracking-widest">USD</div>
                 </div>
               </div>
 
-              <div 
+              <div
                 onClick={() => setSelectedType("hard")}
-                className={`relative cursor-pointer rounded-2xl sm:rounded-3xl border-2 p-4 sm:p-6 transition-all duration-300 ${
-                  selectedType === "hard" 
-                  ? "border-[#9f2e2b] bg-[#9f2e2b]/10 shadow-lg" 
-                  : "border-white/5 bg-white/5 hover:bg-white/[0.08]"
-                }`}
+                className={`relative cursor-pointer rounded-2xl sm:rounded-3xl border-2 p-4 sm:p-6 transition-all duration-300 ${selectedType === "hard"
+                    ? "border-[#9f2e2b] bg-[#9f2e2b]/10 shadow-lg"
+                    : "border-white/5 bg-white/5 hover:bg-white/[0.08]"
+                  }`}
               >
                 <div className="flex justify-between items-center mb-3">
                   <div className={`p-2 sm:p-3 rounded-xl transition-colors ${selectedType === "hard" ? "bg-orange-500/20" : "bg-white/5"}`}>
@@ -163,8 +161,8 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
                   {selectedType === "hard" && <Check className="w-4 h-4 text-red-500" />}
                 </div>
                 <div>
-                   <h3 className="font-black text-lg sm:text-xl">Hardcover Volume</h3>
-                   <div className="flex gap-2 mt-1">
+                  <h3 className="font-black text-lg sm:text-xl">Hardcover Volume</h3>
+                  <div className="flex gap-2 mt-1">
                     <span className="text-[8px] font-bold text-orange-400 uppercase tracking-tighter">Premium Print</span>
                     <span className="text-[8px] font-bold text-purple-400 uppercase tracking-tighter">Linen Wrap</span>
                   </div>
@@ -205,29 +203,29 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
             </div>
 
             <div className="mt-8 flex items-center justify-center gap-6 opacity-20 grayscale invert">
-               <img src="https://upload.wikimedia.org/wikipedia/commons/b/ba/Stripe_Logo%2C_revised_2016.svg" alt="Stripe" className="h-3" />
-               <img src="https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg" alt="PayPal" className="h-3" />
+              <img src="https://upload.wikimedia.org/wikipedia/commons/b/ba/Stripe_Logo%2C_revised_2016.svg" alt="Stripe" className="h-3" />
+              <img src="https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg" alt="PayPal" className="h-3" />
             </div>
 
             <div className="mt-8 pt-8 border-t border-white/5 flex flex-col items-center gap-4">
-                <div className="flex items-center gap-2">
-                   <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center">
-                     <User className="w-3 h-3 text-white/40" />
-                   </div>
-                   <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider truncate max-w-[150px]">{user?.email}</span>
-                   <button 
-                    onClick={async () => {
-                      await logout();
-                      window.location.href = "/";
-                    }}
-                    className="text-[10px] font-black text-red-500/60 hover:text-red-500 underline uppercase tracking-wider ml-2"
-                   >
-                     Sign Out
-                   </button>
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center">
+                  <User className="w-3 h-3 text-white/40" />
                 </div>
-                <p className="text-[8px] text-white/20 uppercase font-bold tracking-[2px]">
-                  Secure AES-256 Encrypted Gateway
-                </p>
+                <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider truncate max-w-[150px]">{user?.email}</span>
+                <button
+                  onClick={async () => {
+                    await logout();
+                    window.location.href = "/";
+                  }}
+                  className="text-[10px] font-black text-red-500/60 hover:text-red-500 underline uppercase tracking-wider ml-2"
+                >
+                  Sign Out
+                </button>
+              </div>
+              <p className="text-[8px] text-white/20 uppercase font-bold tracking-[2px]">
+                Secure AES-256 Encrypted Gateway
+              </p>
             </div>
           </div>
         </div>

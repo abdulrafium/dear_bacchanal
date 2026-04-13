@@ -91,23 +91,11 @@ export function FirebaseAuthProvider({ children }: { children: ReactNode }) {
                     isAdmin: !!data.user.isAdmin,
                     id: data.user._id?.toString() || data.user.id
                 };
-                
-                setUser(authedUser);
+                               setUser(authedUser);
                 localStorage.setItem("fb_user_cache", JSON.stringify(authedUser));
                 localStorage.setItem("fb_user_id", authedUser.id || "");
                 localStorage.setItem("last_sync_uid", firebaseUser.uid);
                 localStorage.setItem("last_sync_time", now.toString());
-                
-                // Firestore sync in background (non-blocking)
-                setDoc(doc(db, "users", firebaseUser.uid), {
-                    email: firebaseUser.email,
-                    name: firebaseUser.displayName,
-                    image: firebaseUser.photoURL,
-                    provider: firebaseUser.providerData[0]?.providerId || "credentials",
-                    isPurchased: !!data.user.isPurchased,
-                    lastLogin: serverTimestamp(),
-                    updatedAt: serverTimestamp()
-                }, { merge: true }).catch(err => console.error("Firestore sync error:", err));
             }
         } catch (error) {
             console.error("User sync error:", error);

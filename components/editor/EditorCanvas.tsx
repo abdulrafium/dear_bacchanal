@@ -9,6 +9,7 @@ import { PAGE_LAYOUTS } from "@/lib/layouts";
 import { ChevronLeft, ChevronRight, Calendar, LayoutGrid, X, Edit3 } from "lucide-react";
 import { EditorPageTools } from "./EditorPageTools";
 import { toast } from "sonner";
+import { useUploadThing } from "@/lib/uploadthing-client";
 
 const PAGE_WIDTH = 400;
 const PAGE_HEIGHT = 550;
@@ -65,9 +66,12 @@ function PageElement({
   const isAdmin = useEditorStore((s) => s.isAdmin);
 
   const canInteract = !isPreviewMode && (!pageIsLocked && !el.isLocked || isAdmin);
+  const isCircle = el.shapeType === "ellipse";
 
   const commonProps = {
     ref: shapeRef,
+    id: el.id, // CRITICAL: Allow floating toolbar to find this node
+    name: el.id,
     x: el.x,
     y: el.y,
     width: el.width,
@@ -120,9 +124,12 @@ function PageElement({
             fill={el.shapeFill || "transparent"}
             stroke={el.stroke || "#333"}
             strokeWidth={el.strokeWidth || 2}
-            cornerRadius={el.shapeType === "ellipse" ? Math.min(el.width, el.height) / 2 : 0}
+            cornerRadius={isCircle ? Math.min(el.width, el.height) / 2 : 0}
           />
         );
+
+      case "photo-card":
+        return <PhotoCardElement {...commonProps} el={el} pageId={pageId} canInteract={canInteract} />;
 
       default:
         return <Rect {...commonProps} fill="#ccc" stroke="#999" strokeWidth={1} />;
@@ -132,6 +139,7 @@ function PageElement({
   return (
     <>
       {renderElement()}
+      <PhotoCardInput el={el} pageId={pageId} isSelected={isSelected} />
       {isSelected && !isEditing && (
         <Transformer
           ref={trRef}
@@ -139,12 +147,14 @@ function PageElement({
             if (newBox.width < 20 || newBox.height < 20) return oldBox;
             return newBox;
           }}
-          anchorSize={typeof window !== 'undefined' && window.innerWidth < 768 ? 16 : 10}
-          anchorCornerRadius={4}
-          borderStroke="#3b82f6"
-          borderStrokeWidth={2}
-          anchorStroke="#3b82f6"
+          anchorSize={typeof window !== 'undefined' && window.innerWidth < 768 ? 16 : 12}
+          anchorCornerRadius={6}
+          borderStroke="white"
+          borderStrokeWidth={3}
+          anchorStroke="rgba(0,0,0,0.2)"
           anchorFill="#ffffff"
+          shadowBlur={10}
+          shadowColor="rgba(0,0,0,0.3)"
           rotateEnabled={!el.isLocked}
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right', 'top-center', 'bottom-center']}
         />
@@ -198,6 +208,119 @@ function ImageElement(props: any) {
   }, [props.src]);
   if (!image) return <Rect {...props} fill="#e5e7eb" stroke="#d1d5db" strokeWidth={1} />;
   return <KonvaImage {...props} image={image} />;
+}
+
+function PhotoCardElement({ el, pageId, canInteract, ...props }: any) {
+  const [image, setImage] = useState<HTMLImageElement | null>(null);
+  
+  useEffect(() => {
+    if (el.src) {
+      const img = new window.Image();
+      img.crossOrigin = "anonymous";
+      img.src = el.src;
+      img.onload = () => setImage(img);
+    } else {
+      setImage(null);
+    }
+  }, [el.src]);
+
+  const isCircle = el.shapeType === "ellipse";
+
+  return (
+    <Group {...props}>
+      {/* Base Card Background (Supports Rectangle and Circle) */}
+      {isCircle ? (
+        <Circle 
+          x={el.width / 2}
+          y={el.height / 2}
+          radius={el.width / 2}
+          fill="transparent" 
+          stroke="white"
+          strokeWidth={12}
+          shadowBlur={10}
+          shadowColor="rgba(0,0,0,0.15)"
+        />
+      ) : (
+        <Rect 
+          width={el.width} 
+          height={el.height} 
+          fill="transparent" 
+          stroke="white"
+          strokeWidth={12}
+          shadowBlur={10}
+          shadowColor="rgba(0,0,0,0.15)"
+        />
+      )}
+
+      {/* Image Rendering with optimized Shape-Aware Clipping */}
+      {image && (
+        <Group clipFunc={(ctx) => {
+          ctx.beginPath();
+          if (isCircle) {
+            ctx.arc(el.width / 2, el.height / 2, el.width / 2, 0, Math.PI * 2);
+          } else {
+            ctx.roundRect(0, 0, el.width, el.height, 4);
+          }
+          ctx.closePath();
+        }}>
+           <KonvaImage 
+              image={image} 
+              width={el.width} 
+              height={el.height}
+           />
+        </Group>
+      )}
+
+      {/* Large Center (+) */}
+      {!el.src && (
+        <Group x={el.width / 2} y={el.height / 2}>
+           <Circle radius={45} fill="rgba(255,255,255,0.05)" stroke="white" strokeWidth={2} opacity={0.6} />
+           <Text text="+" fontSize={64} fill="white" x={-20} y={-38} fontFamily="Inter" fontStyle="100" opacity={0.6} />
+        </Group>
+      )}
+    </Group>
+  );
+}
+
+function PhotoCardInput({ el, pageId, isSelected }: any) {
+  const { startUpload, isUploading } = useUploadThing("bookImageUploader");
+  const updateElement = useEditorStore((s) => s.updateElement);
+
+  if (!isSelected || el.type !== "photo-card" || el.src) return null;
+
+  return (
+    <Html>
+      <div style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, pointerEvents: 'none' }}>
+        {isUploading && (
+           <div style={{ 
+              position: 'absolute', top: el.y + el.height/2 - 20, left: el.x + el.width/2 - 20,
+              width: 40, height: 40, background: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+           }}>
+              <div style={{ width: 24, height: 24, border: '3px solid #eee', borderTopColor: '#2d2d2d', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+           </div>
+        )}
+        <input 
+          type="file" 
+          accept="image/*"
+          style={{ 
+            position: 'absolute', top: el.y, left: el.x, width: el.width, height: el.height, 
+            opacity: 0, cursor: 'pointer', pointerEvents: 'auto' 
+          }}
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const res = await startUpload([file]);
+            if (res?.[0]) {
+               updateElement(pageId, el.id, { src: res[0].url });
+               toast.success("Picture imported correctly!");
+            }
+          }}
+        />
+      </div>
+    </Html>
+  );
 }
 
 function CalendarElement({
@@ -461,15 +584,19 @@ export function EditorCanvas() {
   if (!templateLoaded || !currentSpread) return <div ref={containerRef} className="w-full h-full bg-[#e8e8e8]" />;
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-[#e8e8e8] overflow-auto relative flex flex-col" onDragOver={(e) => e.preventDefault()} onDrop={handleDrop}>
+    <div ref={containerRef} className="w-full h-full bg-[#f1f1f1] overflow-auto relative flex flex-col custom-scrollbar" onDragOver={(e) => e.preventDefault()} onDrop={handleDrop}>
       <style dangerouslySetInnerHTML={{ __html: `
-        @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Kalam:wght@300;400;700&family=Poppins:wght@300;400;500;600;700;800;900&family=Luckiest+Guy&family=Caveat:wght@400;700&family=Pacifico&family=Anton&family=Bangers&family=Lobster&family=Montserrat:wght@400;700&family=Oswald:wght@400;700&family=Playfair+Display:wght@400;700&family=Inter:wght@400;700&family=Boogaloo&family=Fredoka+One&family=Baloo+2:wght@400;700&family=Titan+One&family=Architects+Daughter&family=Patrick+Hand&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Kalam:wght@300;400;700&family=Poppins:wght@300;400;500;600;700;800;900&family=Luckiest+Guy&family=Caveat:wght@400;700&family=Pacifico&family=Anton&family=Bangers&family=Lobster&family=Montserrat:wght@400;700&family=Oswald:wght@400;700&family=Playfair+Display:wght@400;700&family=Inter:wght@400;700&family=Boogaloo&family=Fredoka+One&family=Baloo+2:wght@400;700&family=Titan+ One&family=Architects+Daughter&family=Patrick+Hand&display=swap');
+        .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; border: 2px solid #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #bbb; }
       `}} />
       {isSingle && (
         <div className="flex justify-center absolute top-4 left-1/2 -translate-x-1/2 z-[30] bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-gray-200 p-1.5 gap-1 scale-90 sm:scale-100">
           <button 
             onClick={() => setMobilePage("left")} 
-            className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
+            className={`px-5 py-2 rounded-full text-[10px] font-semibold uppercase tracking-widest transition-all duration-300 ${
               mobilePage === "left" ? "bg-black text-white shadow-md scale-105" : "text-gray-400 hover:text-gray-900"
             }`}
           >
@@ -477,7 +604,7 @@ export function EditorCanvas() {
           </button>
           <button 
             onClick={() => setMobilePage("right")} 
-            className={`px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${
+            className={`px-5 py-2 rounded-full text-[10px] font-semibold uppercase tracking-widest transition-all duration-300 ${
               mobilePage === "right" ? "bg-black text-white shadow-md scale-105" : "text-gray-400 hover:text-gray-900"
             }`}
           >
@@ -486,7 +613,7 @@ export function EditorCanvas() {
         </div>
       )}
 
-      <div className="flex-1 relative overflow-hidden">
+      <div className="flex-1 relative">
         {isPreviewMode && (
           <>
             <button onClick={prevSpread} disabled={currentSpreadIndex === 0} className="absolute left-5 top-1/2 -translate-y-1/2 z-20 text-gray-300 hover:text-gray-600 disabled:opacity-0"><ChevronLeft className="w-20 h-20" /></button>
@@ -525,8 +652,8 @@ export function EditorCanvas() {
 
           {!isPreviewMode && (
             <div className="absolute top-0 w-full pointer-events-none" style={{ height: stageHeight }}>
-              {(viewMode === "spread" || mobilePage === "left") && !currentSpread.leftPage.isLocked && <EditorPageTools pageId={currentSpread.leftPage.id} align={isSingle ? "center" : "left"} />}
-              {(viewMode === "spread" || mobilePage === "right") && !currentSpread.rightPage.isLocked && <EditorPageTools pageId={currentSpread.rightPage.id} align={isSingle ? "center" : "right"} />}
+              {(viewMode === "spread" || mobilePage === "left") && <EditorPageTools pageId={currentSpread.leftPage.id} align={isSingle ? "center" : "left"} />}
+              {(viewMode === "spread" || mobilePage === "right") && <EditorPageTools pageId={currentSpread.rightPage.id} align={isSingle ? "center" : "right"} />}
             </div>
           )}
 

@@ -145,10 +145,25 @@ export default function EditorWorkspace() {
 
     loadEditorState();
     
+    // AUTO-SAVE LOGIC: Debounced saving of user progress
+    let saveTimeout: NodeJS.Timeout;
+    const { spreads, isDirty, save, isAdmin: isAdminStore } = useEditorStore.getState();
+    
+    if (isDirty && !isAdminStore) { // Auto-save for users only, admins save manually to prevent accidental template overrides
+      saveTimeout = setTimeout(() => {
+        save();
+      }, 2500);
+    }
+
     // Add keyboard listeners
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
+      }
+      
+      if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+        e.preventDefault();
+        useEditorStore.getState().save();
       }
 
       if (e.key === "Delete" || e.key === "Backspace") {
@@ -176,7 +191,27 @@ export default function EditorWorkspace() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isAdmin, templateName, loadTemplate, setCurrentSpread, searchParams, isAdminParam]);
+  }, []); // Only on mount
+
+  // DEDICATED AUTO-SAVE: Watch spreads and dirty state
+  const spreads = useEditorStore((s) => s.spreads);
+  const isDirty = useEditorStore((s) => s.isDirty);
+  const save = useEditorStore((s) => s.save);
+  const isAdminStore = useEditorStore((s) => s.isAdmin);
+
+  useEffect(() => {
+    let saveTimeout: NodeJS.Timeout;
+    
+    if (isDirty && !isAdminStore) {
+      saveTimeout = setTimeout(() => {
+        save();
+      }, 3000); // 3 second debounce
+    }
+
+    return () => {
+      if (saveTimeout) clearTimeout(saveTimeout);
+    };
+  }, [isDirty, spreads, isAdminStore, save]);
 
   const downloadTriggeredRef = useRef(false);
 
@@ -322,10 +357,9 @@ export default function EditorWorkspace() {
         </div>
       </div>
 
-      {!isPreviewMode && (
         <div 
            style={{ height: bottomBarHeight }}
-           className="hidden md:block border-t border-gray-200 bg-white shrink-0 relative"
+           className="hidden md:block border-t border-gray-200 bg-white shrink-0 relative z-50"
         >
            {/* Resize Handle */}
            <div 
@@ -341,7 +375,6 @@ export default function EditorWorkspace() {
              <EditorBottomBar />
            </div>
         </div>
-      )}
 
       {/* Mobile Tool Navigation */}
       {!isPreviewMode && (

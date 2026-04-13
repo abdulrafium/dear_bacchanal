@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";
-import { adminAuthMiddleware } from "@/lib/admin-auth";
+import { getServerAuth } from "@/lib/server-auth";
 import { auth } from "@/lib/auth";
  
 export const dynamic = "force-dynamic";

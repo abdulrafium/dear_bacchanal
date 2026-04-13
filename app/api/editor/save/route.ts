@@ -39,11 +39,16 @@ export async function POST(req: NextRequest) {
       let query: any = { templateName: finalName };
       
       // Use ID if available for precision and to allow renaming
-      if (activeTemplateId && typeof activeTemplateId === 'string') {
-        if (activeTemplateId.length === 24) {
-          query = { _id: new ObjectId(activeTemplateId) };
-        } else {
-          query = { _id: activeTemplateId }; // Hardcoded string ID
+      if (activeTemplateId && typeof activeTemplateId === 'string' && activeTemplateId !== "undefined") {
+        try {
+          if (activeTemplateId.length === 24) {
+            query = { _id: new ObjectId(activeTemplateId) };
+          } else {
+            query = { _id: activeTemplateId }; // Hardcoded string ID
+          }
+        } catch (idError) {
+          console.error("Invalid template ID format:", activeTemplateId);
+          // Fallback to name-based query if ID is invalid
         }
       }
 
@@ -68,7 +73,7 @@ export async function POST(req: NextRequest) {
         { upsert: true }
       );
 
-      const templateId = result.upsertedId || (query._id ? query._id.toString() : null);
+      const templateId = result.upsertedId ? result.upsertedId.toString() : (query._id ? query._id.toString() : null);
 
       return NextResponse.json({ 
         message: "Template saved successfully!", 

@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import Konva from "konva";
 
 // Element types that can be placed on a page
-export type ElementType = "image" | "text" | "shape" | "sticker" | "qrcode" | "calendar";
+export type ElementType = "image" | "text" | "shape" | "sticker" | "qrcode" | "calendar" | "photo-card";
 export type ShapeType = "rectangle" | "ellipse";
 
 export interface CalendarSettings {
@@ -34,12 +34,13 @@ export interface EditorElement {
   fontFamily?: string;
   fontStyle?: string;
   fill?: string;
-  align?: string;
+  align?: "left" | "center" | "right";
   // Shape-specific
   shapeType?: ShapeType;
   stroke?: string;
   strokeWidth?: number;
   shapeFill?: string;
+  cornerRadius?: number;
   // QR Code
   qrData?: string;
   // Calendar
@@ -211,14 +212,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   addElement: (pageId, element) => {
     const state = get();
     state.pushHistory();
+    const newId = Math.random().toString(36).substring(2, 11).toUpperCase();
     set({
       spreads: state.spreads.map((spread) => ({
         ...spread,
         leftPage: spread.leftPage.id === pageId
-          ? { ...spread.leftPage, elements: [...spread.leftPage.elements, { ...element, id: uuidv4() }] }
+          ? { ...spread.leftPage, elements: [...spread.leftPage.elements, { ...element, id: newId }] }
           : spread.leftPage,
         rightPage: spread.rightPage.id === pageId
-          ? { ...spread.rightPage, elements: [...spread.rightPage.elements, { ...element, id: uuidv4() }] }
+          ? { ...spread.rightPage, elements: [...spread.rightPage.elements, { ...element, id: newId }] }
           : spread.rightPage,
       })),
     });
@@ -393,8 +395,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     
     try {
       const state = get();
-      // Use cached token if valid, only refresh if necessary (faster)
-      const token = await auth.currentUser?.getIdToken();
+      // Ensure we have a valid auth context
+      const token = await auth.currentUser?.getIdToken().catch(() => null);
       
       const res = await fetch("/api/editor/save", {
         method: "POST",
@@ -407,8 +409,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         body: JSON.stringify({ 
           spreads, 
           isAdmin: isAdminParam !== undefined ? isAdminParam : isAdmin, 
-          activeTemplateId, 
-          activeTemplateName, 
+          activeTemplateId: activeTemplateId === "undefined" ? null : activeTemplateId, 
+          activeTemplateName: activeTemplateName || "My Book", 
           templateDescription,
           templateCountry,
           templateYear,
@@ -416,36 +418,25 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         }),
       });
 
-      if (!res.ok) throw new Error("Failed to save");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to save");
+      }
+      
       const data = await res.json();
       
-      // If we didn't have an ID before and the server returned one, save it
       if (!activeTemplateId && data.templateId) {
         set({ activeTemplateId: data.templateId });
       }
       
-      // Only mark clean if no changes were made during the save
       if (get().version === startVersion) {
         set({ isDirty: false });
       }
-      // Sync to Firestore for real-time dashboard tracking
-      const userRef = localStorage.getItem("fb_user_id");
-      if (userRef) {
-          try {
-              await setDoc(doc(db, "books", activeTemplateId || "default_book"), {
-                  userId: userRef,
-                  templateName: activeTemplateName || "Unnamed Book",
-                  updatedAt: serverTimestamp(),
-                  isDeleted: false
-              }, { merge: true });
-          } catch (fsError) {
-              console.error("Firestore sync error:", fsError);
-          }
-      }
-
+      
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Save error:", error);
+      toast.error(`Save failed: ${error.message}`);
       return false;
     }
   },
@@ -540,8 +531,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         for (let i = 0; i < spreads.length; i++) {
             setCurrentSpread(i, true);
             
-            // 1. Wait for React to switch and Konva to mount nodes
-            await new Promise(resolve => setTimeout(resolve, 800)); 
+            // 1. Initial wait for React components to mount
+            await new Promise(resolve => setTimeout(resolve, 1500)); 
             
             // 2. Clear and Redraw
             stageRef.batchDraw();
@@ -551,10 +542,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             const stageHeightExport = stageRef.height() / stageRef.scaleY();
 
             const exportBg = new Konva.Rect({
-                x: 0,
-                y: 0,
-                width: stageWidthExport, 
-                height: stageHeightExport,
+                x: -100, // Overscan a bit for safety
+                y: -100,
+                width: stageWidthExport + 200, 
+                height: stageHeightExport + 200,
                 fill: 'white',
                 listening: false
             });
@@ -565,28 +556,32 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 firstLayer.add(exportBg);
                 exportBg.moveToBottom();
                 
-                // 4. DEEP-WAIT FOR ALL ASSETS (Including Rect Patterns)
-                const nodes = stageRef.find('Image, Rect');
+                // 4. DEEP-WAIT FOR ALL ASSETS (Including Rect Patterns, Stickers, and Text Fonts)
+                await document.fonts.ready; // Wait for all web fonts
+
+                const nodes = stageRef.find('Image, Rect, Text, Group');
                 const assetPromises = nodes.map(node => {
-                    // Check for standard images
+                    // Check for standard images and Stickers
                     if (node.getClassName() === 'Image') {
-                        const img = (node as any).image();
+                        const imgNode = node as Konva.Image;
+                        const img = imgNode.image();
                         if (img && !img.complete) {
                             return new Promise(r => { 
                                 img.addEventListener('load', r, { once: true });
                                 img.addEventListener('error', r, { once: true });
-                                setTimeout(r, 6000); 
+                                setTimeout(r, 10000); // 10s max wait per asset
                             });
                         }
                     }
                     // Check for background patterns in Rects
                     if (node.getClassName() === 'Rect') {
-                        const patternImg = (node as any).fillPatternImage();
+                        const rectNode = node as Konva.Rect;
+                        const patternImg = rectNode.fillPatternImage();
                         if (patternImg && !patternImg.complete) {
                             return new Promise(r => {
                                 patternImg.addEventListener('load', r, { once: true });
                                 patternImg.addEventListener('error', r, { once: true });
-                                setTimeout(r, 6000);
+                                setTimeout(r, 10000);
                             });
                         }
                     }
@@ -594,9 +589,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 });
 
                 await Promise.all(assetPromises);
-
+                
+                // Extra settling time for complex SVG/Canvas nodes
+                await new Promise(r => setTimeout(r, 400));
+                
                 // Final draw after all assets ready
-                firstLayer.batchDraw();
+                stageRef.batchDraw();
                 
                 // 5. Take high-precision snapshot with explicit bounds
                 const dataUrl = stageRef.toDataURL({ 
@@ -611,7 +609,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
                 // Clean up
                 exportBg.destroy();
-                firstLayer.batchDraw();
+                stageRef.batchDraw();
 
                 if (i > 0) pdf.addPage([spreadWidth, spreadHeight], "landscape");
                 pdf.addImage(dataUrl, 'JPEG', 0, 0, spreadWidth, spreadHeight);

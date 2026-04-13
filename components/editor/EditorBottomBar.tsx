@@ -33,114 +33,113 @@ export function EditorBottomBar() {
 
   const [showPageMenu, setShowPageMenu] = useState(false);
 
-  const currentSpread = spreads[currentSpreadIndex];
-
   return (
-    <div className="flex-shrink-0 bg-white border-t border-gray-200 flex flex-col">
-      {/* View mode + Navigation */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100">
+    <div className="flex-shrink-0 bg-white border-t border-gray-100 flex flex-col w-full relative z-[2000]">
+      {/* Primary Toolbar */}
+      <div className="bg-white/95 backdrop-blur-xl py-2 px-4 flex items-center justify-between shadow-[0_-5px_20px_rgba(0,0,0,0.02)] transition-all duration-300 h-14">
+        
         {/* Left: View mode */}
-        <div className="flex items-center gap-1 md:gap-2">
+        <div className="flex items-center gap-1.5 flex-1">
           <button
             onClick={() => setViewMode("spread")}
-            className={`flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+            className={`px-3 h-8 rounded-lg text-[10px] font-semibold tracking-wider uppercase transition-all flex items-center gap-1.5 ${
               viewMode === "spread"
-                ? "bg-gray-100 text-[#2d2d2d]"
-                : "text-gray-400 hover:text-gray-600"
+                ? "bg-[#2d2d2d] text-white shadow-md shadow-black/10"
+                : "text-gray-400 hover:text-[#2d2d2d] hover:bg-gray-50"
             }`}
-             title="One Page"
           >
             <Columns2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:block">One page</span>
+            <span className="hidden lg:block">Spread</span>
           </button>
           <button
             onClick={() => setViewMode("single")}
-            className={`flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+            className={`px-3 h-8 rounded-lg text-[10px] font-semibold tracking-wider uppercase transition-all flex items-center gap-1.5 ${
               viewMode === "single"
-                ? "bg-gray-100 text-[#2d2d2d]"
-                : "text-gray-400 hover:text-gray-600"
+                ? "bg-[#2d2d2d] text-white shadow-md shadow-black/10"
+                : "text-gray-400 hover:text-[#2d2d2d] hover:bg-gray-50"
             }`}
-            title="All Pages"
           >
             <Grid2X2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:block">All pages</span>
+            <span className="hidden lg:block">Single</span>
           </button>
         </div>
 
-        {/* Center: Page navigation */}
-        <div className="flex items-center gap-1 md:gap-3">
+        {/* Center: Navigation */}
+        <div className="flex items-center gap-4 flex-1 justify-center">
           <button
             onClick={prevSpread}
             disabled={currentSpreadIndex === 0}
-            className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30"
+            className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-[#2d2d2d] hover:bg-gray-50 transition-all disabled:opacity-0 active:scale-90"
           >
-            <ChevronLeft className="w-4 h-4" />
+            <ChevronLeft className="w-5 h-5" />
           </button>
-          <span className="text-[10px] sm:text-sm text-gray-600 font-medium">
-            {currentSpreadIndex === 0 ? "Cover" : `${currentSpreadIndex * 2 - 1}-${currentSpreadIndex * 2}`}
-          </span>
+          
+          <div className="flex flex-col items-center">
+            <span className="text-[8px] font-bold text-gray-300 uppercase tracking-[0.2em] leading-none">Page</span>
+            <span className="text-[12px] font-semibold text-[#2d2d2d]">
+              {currentSpreadIndex === 0 ? "COVER" : `${currentSpreadIndex * 2 - 1} - ${currentSpreadIndex * 2}`}
+            </span>
+          </div>
+
           <button
             onClick={nextSpread}
             disabled={currentSpreadIndex >= spreads.length - 1}
-            className="text-[10px] sm:text-xs text-blue-500 hover:text-blue-700 font-bold disabled:opacity-30 disabled:text-gray-400"
+            className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-[#2d2d2d] hover:bg-gray-50 transition-all disabled:opacity-0 active:scale-90"
           >
-            Next <span className="hidden xs:inline">page</span> →
+            <ChevronRight className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Right: Actions */}
-        <div className="flex items-center gap-1 md:gap-2 relative">
-          <button
-            onClick={toggleThumbnails}
-            className="text-[10px] md:text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
+        {/* Right: Zoom & Menu */}
+        <div className="flex items-center gap-3 flex-1 justify-end">
+          <button 
+             onClick={() => toggleThumbnails()}
+             className={`px-2 h-8 rounded-lg text-[9px] font-bold uppercase tracking-widest transition-all ${
+               showThumbnails ? "bg-red-50 text-red-600" : "text-gray-400 hover:text-[#2d2d2d]"
+             }`}
           >
-            <Plus className={`w-3.5 h-3.5 transition-transform ${showThumbnails ? 'rotate-45' : ''}`} />
-            <span className="hidden md:block">{showThumbnails ? "Hide" : "Show"} page thumbnails</span>
+            {showThumbnails ? "Hide Grid" : "All Pages"}
           </button>
+          
+          <div className="w-px h-5 bg-gray-100 mx-1" />
 
-          {/* Zoom - hidden on small mobile */}
-          <div className="hidden sm:flex items-center gap-1 ml-1 md:ml-3 border-l border-gray-200 pl-1 md:pl-3">
-            <button onClick={() => setZoom(zoom - 10)} className="p-1 text-gray-400 hover:text-gray-700">
-              <ZoomOut className="w-4 h-4" />
+          {/* Compact Zoom Controls */}
+          <div className="flex items-center gap-2 bg-gray-50/70 px-2.5 py-1 rounded-xl border border-gray-100 h-8">
+            <button 
+              onClick={() => setZoom(Math.max(10, zoom - 10))}
+              className="text-gray-400 hover:text-[#2d2d2d] transition-colors"
+            >
+              <ZoomOut className="w-3.5 h-3.5" />
             </button>
-            <span className="text-xs text-gray-500 w-8 md:w-10 text-center font-medium">{zoom}%</span>
-            <button onClick={() => setZoom(zoom + 10)} className="p-1 text-gray-400 hover:text-gray-700">
-              <ZoomIn className="w-4 h-4" />
+            <span className="text-[11px] font-bold text-gray-400 w-8 text-center">{zoom}%</span>
+            <button 
+              onClick={() => setZoom(Math.min(200, zoom + 10))}
+              className="text-gray-400 hover:text-[#2d2d2d] transition-colors"
+            >
+              <ZoomIn className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          {/* Page actions */}
-          <div className="relative ml-2">
+          <div className="flex items-center gap-1 bg-gray-50/50 rounded-full p-1 transition-all duration-500 overflow-hidden">
             <button
               onClick={() => setShowPageMenu(!showPageMenu)}
-              className="p-2 rounded-full bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors"
+              className={`w-8 h-8 flex items-center justify-center rounded-full transition-all active:scale-95 ${
+                showPageMenu ? "bg-[#2d2d2d] text-white shadow-md rotate-90" : "text-gray-400 hover:text-gray-600"
+              }`}
             >
               <MoreHorizontal className="w-4 h-4" />
             </button>
 
             {showPageMenu && (
-              <div className="absolute bottom-full right-0 mb-2 bg-white border border-gray-200 rounded-xl shadow-xl py-1 w-40 z-50">
-                <button
-                  onClick={() => { addSpread(); setShowPageMenu(false); }}
-                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Pages
+              <div className="flex items-center gap-1 px-1 animate-in slide-in-from-right-4 fade-in duration-300">
+                <button onClick={() => { addSpread(); setShowPageMenu(false); }} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors" title="Add New Pages">
+                  <Plus className="w-3.5 h-3.5 text-blue-500" />
                 </button>
-                <button
-                  onClick={() => { duplicateSpread(currentSpreadIndex); setShowPageMenu(false); }}
-                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50"
-                >
-                  <Copy className="w-4 h-4" />
-                  Duplicate
+                <button onClick={() => { duplicateSpread(currentSpreadIndex); setShowPageMenu(false); }} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors" title="Duplicate Current">
+                  <Copy className="w-3.5 h-3.5 text-violet-500" />
                 </button>
-                <button
-                  onClick={() => { removeSpread(currentSpreadIndex); setShowPageMenu(false); }}
-                  disabled={spreads.length <= 1}
-                  className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 disabled:opacity-30"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  Remove
+                <button onClick={() => { removeSpread(currentSpreadIndex); setShowPageMenu(false); }} disabled={spreads.length <= 1} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 disabled:opacity-30 transition-colors" title="Delete Spread">
+                  <Trash2 className="w-3.5 h-3.5 text-red-600" />
                 </button>
               </div>
             )}
@@ -150,41 +149,26 @@ export function EditorBottomBar() {
 
       {/* Page Thumbnails */}
       {showThumbnails && (
-        <div className="flex items-center gap-3 px-4 py-3 overflow-x-auto">
+        <div className="flex items-center gap-3 px-4 py-4 overflow-x-auto bg-gray-50/20 custom-scrollbar border-t border-gray-100">
           {spreads.map((spread, index) => (
             <button
               key={spread.id}
               onClick={() => setCurrentSpread(index)}
-              className={`flex-shrink-0 group transition-all duration-200 ${
-                index === currentSpreadIndex ? "scale-105" : "opacity-60 hover:opacity-100"
+              className={`flex-shrink-0 group transition-all duration-300 ${
+                index === currentSpreadIndex ? "scale-105" : "opacity-40 hover:opacity-100"
               }`}
             >
-              <div
-                className={`flex rounded-lg overflow-hidden shadow-sm transition-all ${
+              <div className={`flex rounded-lg overflow-hidden shadow-xl transition-all ${
                   index === currentSpreadIndex
                     ? "ring-2 ring-[#2d2d2d] ring-offset-2"
-                    : "ring-1 ring-gray-200 group-hover:ring-gray-400"
+                    : "ring-1 ring-gray-100 group-hover:ring-gray-300"
                 }`}
               >
-                {/* Left mini page */}
-                <div
-                  className="w-12 h-16"
-                  style={{ backgroundColor: spread.leftPage.background }}
-                >
-                  {spread.leftPage.isLocked && (
-                    <div className="w-full h-full bg-black/30 flex items-center justify-center">
-                      <span className="text-[5px] text-white font-bold">LOCKED</span>
-                    </div>
-                  )}
-                </div>
-                {/* Right mini page */}
-                <div
-                  className="w-12 h-16 border-l border-gray-200"
-                  style={{ backgroundColor: spread.rightPage.background }}
-                />
+                <div className="w-12 h-16 bg-white" style={{ backgroundColor: spread.leftPage.background }} />
+                <div className="w-12 h-16 bg-white border-l border-gray-50" style={{ backgroundColor: spread.rightPage.background }} />
               </div>
-              <p className="text-[10px] text-gray-500 text-center mt-1 font-medium">
-                {index === 0 ? "Cover" : `Page ${index * 2 - 1}-${index * 2}`}
+              <p className="text-[9px] font-bold text-gray-400 text-center mt-2 uppercase tracking-widest">
+                {index === 0 ? "Cover" : `P. ${index * 2 - 1}-${index * 2}`}
               </p>
             </button>
           ))}
