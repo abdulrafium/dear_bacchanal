@@ -1,16 +1,15 @@
-import NextAuth, { NextAuthConfig } from "next-auth";
+import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { getDatabase } from "./db";
 import { signInSchema } from "./validators";
+import { authConfig } from "./auth.config";
 
-export const authConfig: NextAuthConfig = {
+export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    }),
+    ...authConfig.providers,
     Credentials({
       name: "credentials",
       credentials: {
@@ -26,7 +25,9 @@ export const authConfig: NextAuthConfig = {
 
           const db = await getDatabase();
           const usersCollection = db.collection("users");
-          const user = await usersCollection.findOne({ email });
+          const user = await usersCollection.findOne({
+            email: { $regex: new RegExp(`^${email}$`, "i") }
+          });
 
           if (!user) return null;
 
@@ -49,6 +50,8 @@ export const authConfig: NextAuthConfig = {
               name: user.name,
               image: user.image || null,
               provider: (user.provider as "credentials" | "google") || "credentials",
+              isAdmin: !!user.isAdmin,
+              isPurchased: !!user.isPurchased,
             };
           }
 
@@ -63,6 +66,8 @@ export const authConfig: NextAuthConfig = {
             name: user.name,
             image: user.image || null,
             provider: "credentials" as const,
+            isAdmin: !!user.isAdmin,
+            isPurchased: !!user.isPurchased,
           };
         } catch (error) {
           console.error("Authorization error:", error);
@@ -71,117 +76,115 @@ export const authConfig: NextAuthConfig = {
       },
     }),
   ],
-  session: {
-    strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
-  },
-  pages: {
-    signIn: "/",
-    error: "/",
-  },
   callbacks: {
+    ...authConfig.callbacks,
     async signIn({ user, account }) {
-      // Handle Google OAuth sign in
       if (account?.provider === "google") {
         try {
+          if (!user.email) {
+            console.error("Google Sign-in error: No email returned from Google");
+            return false;
+          }
+
           const db = await getDatabase();
           const usersCollection = db.collection("users");
 
-          // Check if user exists
           const existingUser = await usersCollection.findOne({
-            email: user.email,
+            email: { $regex: new RegExp(`^${user.email}$`, "i") }
           });
 
           if (!existingUser) {
-            // Create new user
+            console.log(`Creating new Google user: ${user.email}`);
             await usersCollection.insertOne({
-              email: user.email,
+              email: user.email.toLowerCase(),
               name: user.name,
               image: user.image,
               provider: "google",
               password: null,
+              isAdmin: false,
+              isPurchased: false,
               emailVerified: new Date(),
               createdAt: new Date(),
               updatedAt: new Date(),
             });
           } else {
-            // Update existing user
+            console.log(`Synching existing Google user: ${user.email}`);
             await usersCollection.updateOne(
-              { email: user.email },
+              { _id: existingUser._id },
               {
                 $set: {
-                  name: user.name,
-                  image: user.image,
+                  name: user.name || existingUser.name,
+                  image: user.image || existingUser.image,
                   updatedAt: new Date(),
                 },
               }
             );
           }
-
           return true;
         } catch (error) {
-          console.error("Sign in error:", error);
+          console.error("Critical Google Sign-in callback error:", error);
           return false;
         }
       }
-
       return true;
     },
     async jwt({ token, user, account }) {
-      // Add user id and provider to JWT token
-      if (user?.id) {
+      // First, handle the initial login (this part is Edge-compatible if it doesn't use DB)
+      if (user) {
         token.id = user.id;
         token.provider = user.provider || (account?.provider === "google" ? "google" : "credentials");
+        token.isAdmin = user.isAdmin;
+        token.isPurchased = user.isPurchased;
+        token.lastSynced = Date.now();
       }
 
-      // Get user ID and purchase status from database
-      const email = user?.email || token?.email;
-      if (email) {
-        try {
-          const db = await getDatabase();
-          const usersCollection = db.collection("users");
-          const dbUser = await usersCollection.findOne({ email });
+      // ONLY if we are NOT in the Edge Runtime, we can perform DB refreshes
+      // In Next.js, process.env.NEXT_RUNTIME === 'nodejs' means we are in Node.js
+      if (process.env.NEXT_RUNTIME === "nodejs") {
+        const email = token?.email as string;
+        const lastSynced = token.lastSynced as number || 0;
+        const shouldSync = !lastSynced || (Date.now() - lastSynced > 5 * 60 * 1000);
 
-          if (dbUser) {
-            token.id = dbUser._id.toString();
-            token.isPurchased = !!dbUser.isPurchased;
-            // Admin Check - environment variable, fallback hardcoded, or db flag
-            const envAdmins = process.env.ADMIN_EMAIL ? process.env.ADMIN_EMAIL.split(',') : [];
-            const hardcodedAdmins = [
-              "admin@dearbacchanal.com", 
-              "dearbacchanal@gmail.com", 
-              "hello@bacchanal.com",
-              "aamirtwo001@gmail.com"
-            ];
-            const allAdmins = [...envAdmins, ...hardcodedAdmins].map(e => e.trim().toLowerCase());
-            
-            token.isAdmin = !!dbUser.isAdmin || allAdmins.includes(email.toLowerCase());
+        if (email && shouldSync) {
+          try {
+            const db = await getDatabase();
+            const usersCollection = db.collection("users");
+            const dbUser = await usersCollection.findOne({
+              email: { $regex: new RegExp(`^${email}$`, "i") }
+            });
 
-            if (account?.provider === "google") {
-              token.provider = "google";
+            if (dbUser) {
+              token.id = dbUser._id.toString();
+              token.isPurchased = !!dbUser.isPurchased;
+              token.lastSynced = Date.now();
+
+              // Administrative override logic
+              const envAdmins = process.env.ADMIN_EMAIL ? process.env.ADMIN_EMAIL.split(',') : [];
+              const hardcodedAdmins = [
+                "admin@dearbacchanal.com"
+              ];
+              const allAdmins = [...envAdmins, ...hardcodedAdmins].map(e => e.trim().toLowerCase());
+
+              const isAdminEmail = allAdmins.includes(email.toLowerCase());
+              token.isAdmin = !!dbUser.isAdmin || isAdminEmail;
+
+              // Sync database if hardcoded admin but not marked in DB
+              if (isAdminEmail && !dbUser.isAdmin) {
+                await usersCollection.updateOne(
+                  { _id: dbUser._id },
+                  { $set: { isAdmin: true, updatedAt: new Date() } }
+                );
+              }
             }
+          } catch (error) {
+            console.error("JWT sync error:", error);
           }
-        } catch (error) {
-          console.error("JWT callback error:", error);
         }
       }
 
       return token;
     },
-    async session({ session, token }) {
-      // Add user id and provider and purchase status to session
-      if (session.user) {
-        session.user.id = token.id as string;
-        session.user.provider = token.provider as "credentials" | "google";
-        session.user.isPurchased = token.isPurchased as boolean;
-        session.user.isAdmin = token.isAdmin as boolean;
-      }
-
-      return session;
-    },
   },
   secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "your-development-secret-is-set-here-for-localhost-only",
   trustHost: true,
-};
-
-export const { handlers, auth, signIn, signOut } = NextAuth(authConfig);
+});

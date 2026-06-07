@@ -1,6 +1,4 @@
 import { create } from "zustand";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { db, auth } from "@/lib/firebase";
 import { v4 as uuidv4 } from "uuid";
 import Konva from "konva";
 import { toast } from "sonner";
@@ -96,6 +94,7 @@ interface EditorState {
   viewMode: "spread" | "single";
   previewElement: { id: string, updates: Partial<EditorElement> } | null;
   stageRef: Konva.Stage | null;
+  isOrderModalOpen: boolean;
 
   // History
   history: HistoryEntry[];
@@ -133,6 +132,7 @@ interface EditorState {
   togglePreview: () => void;
   setIsAdmin: (isAdmin: boolean) => void;
   setStageRef: (ref: Konva.Stage | null) => void;
+  setIsOrderModalOpen: (open: boolean) => void;
 
   // Actions - History
   undo: () => void;
@@ -183,12 +183,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   viewMode: "spread",
   previewElement: null,
   stageRef: null,
+  isOrderModalOpen: false,
   history: [],
   historyIndex: -1,
   version: 0,
   isDirty: false,
   setDirty: (dirty) => set({ isDirty: dirty }),
   setStageRef: (ref) => set({ stageRef: ref }),
+  setIsOrderModalOpen: (open) => set({ isOrderModalOpen: open }),
 
   // Navigation
   setCurrentSpread: (index, skipDirty = false) => set((s) => ({ 
@@ -395,17 +397,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const { spreads, isAdmin, activeTemplateId, activeTemplateName, templateDescription, templateCountry, templateYear, currentSpreadIndex, version: startVersion } = get();
     
     try {
-      const state = get();
-      // Ensure we have a valid auth context
-      const token = await auth.currentUser?.getIdToken().catch(() => null);
-      
       const res = await fetch("/api/editor/save", {
         method: "POST",
         headers: { 
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${token || localStorage.getItem("fb_token") || ""}`,
-            "x-user-email": localStorage.getItem("fb_user_email") || "",
-            "x-user-id": localStorage.getItem("fb_user_id") || ""
         },
         body: JSON.stringify({ 
           spreads, 
@@ -504,14 +499,28 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   isGeneratingPdf: false,
   generatePdfBook: async () => {
-    const { spreads, setCurrentSpread, stageRef, activeTemplateName, currentSpreadIndex, selectElement } = get();
+    const state = get();
+    const { spreads, setCurrentSpread, stageRef, activeTemplateName, currentSpreadIndex, selectElement } = state;
     
     if (!stageRef) {
+        toast.error("Editor canvas not ready. Please wait a moment and try again.");
+        return;
+    }
+
+    if (spreads.length === 0) {
+        toast.error("No pages to generate PDF from.");
         return;
     }
 
     set({ isGeneratingPdf: true });
     const originalIndex = currentSpreadIndex;
+    const originalViewMode = state.viewMode;
+    
+    // Force spread (dual-page) view for PDF export
+    if (originalViewMode === 'single') {
+      set({ viewMode: 'spread' });
+      await new Promise(r => setTimeout(r, 500));
+    }
     
     // Clear selection so the transformer box doesn't appear in the PDF
     selectElement(null);
@@ -529,21 +538,32 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           format: [spreadWidth, spreadHeight]
         });
 
+        toast.info(`Generating PDF — ${spreads.length} spreads to process...`, { duration: 3000 });
+
         for (let i = 0; i < spreads.length; i++) {
+            toast.info(`Rendering spread ${i + 1} of ${spreads.length}...`, { duration: 2000, id: 'pdf-progress' });
+            
             setCurrentSpread(i, true);
             
-            // 1. Initial wait for React components to mount
-            await new Promise(resolve => setTimeout(resolve, 1500)); 
+            // 1. Wait for React to mount components and images to start loading
+            await new Promise(resolve => setTimeout(resolve, 3000)); 
             
-            // 2. Clear and Redraw
-            stageRef.batchDraw();
+            // 2. Re-fetch stageRef from store (it updates when canvas re-renders)
+            const currentStageRef = get().stageRef;
+            if (!currentStageRef) {
+                console.warn(`stageRef lost on spread ${i}, skipping...`);
+                continue;
+            }
+            
+            // 3. Force a full redraw
+            currentStageRef.batchDraw();
 
-            // 3. Manually add a temporary white background coverage
-            const stageWidthExport = stageRef.width() / stageRef.scaleX();
-            const stageHeightExport = stageRef.height() / stageRef.scaleY();
+            // 4. Calculate export dimensions from the CURRENT stage
+            const stageWidthExport = currentStageRef.width() / currentStageRef.scaleX();
+            const stageHeightExport = currentStageRef.height() / currentStageRef.scaleY();
 
             const exportBg = new Konva.Rect({
-                x: -100, // Overscan a bit for safety
+                x: -100,
                 y: -100,
                 width: stageWidthExport + 200, 
                 height: stageHeightExport + 200,
@@ -551,54 +571,65 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 listening: false
             });
             
-            const layers = stageRef.getLayers();
+            const layers = currentStageRef.getLayers();
             if (layers.length > 0) {
                 const firstLayer = layers[0];
                 firstLayer.add(exportBg);
                 exportBg.moveToBottom();
                 
-                // 4. DEEP-WAIT FOR ALL ASSETS (Including Rect Patterns, Stickers, and Text Fonts)
-                await document.fonts.ready; // Wait for all web fonts
+                // 4. DEEP-WAIT FOR ALL ASSETS
+                // Wait for web fonts
+                await document.fonts.ready;
 
-                const nodes = stageRef.find('Image, Rect, Text, Group');
-                const assetPromises = nodes.map(node => {
-                    // Check for standard images and Stickers
+                // Find all image/pattern nodes and wait for them
+                const allNodes = currentStageRef.find('Image, Rect, Text, Group');
+                const loadPromises: Promise<void>[] = [];
+
+                allNodes.forEach((node: any) => {
+                    // Standard Image nodes (photos, stickers)
                     if (node.getClassName() === 'Image') {
-                        const imgNode = node as Konva.Image;
-                        const img = imgNode.image();
-                        if (img instanceof HTMLImageElement && !img.complete) {
-                            return new Promise(r => { 
-                                img.addEventListener('load', r, { once: true });
-                                img.addEventListener('error', r, { once: true });
-                                setTimeout(r, 10000); // 10s max wait per asset
-                            });
+                        const img = node.image();
+                        if (img instanceof HTMLImageElement) {
+                            if (!img.complete || img.naturalWidth === 0) {
+                                loadPromises.push(new Promise<void>(resolve => {
+                                    const onDone = () => resolve();
+                                    img.addEventListener('load', onDone, { once: true });
+                                    img.addEventListener('error', onDone, { once: true });
+                                    setTimeout(onDone, 15000); // 15s max per asset
+                                }));
+                            }
                         }
                     }
-                    // Check for background patterns in Rects
+                    // Background pattern images in Rects
                     if (node.getClassName() === 'Rect') {
-                        const rectNode = node as Konva.Rect;
-                        const patternImg = rectNode.fillPatternImage();
-                        if (patternImg instanceof HTMLImageElement && !patternImg.complete) {
-                            return new Promise(r => {
-                                patternImg.addEventListener('load', r, { once: true });
-                                patternImg.addEventListener('error', r, { once: true });
-                                setTimeout(r, 10000);
-                            });
+                        const patternImg = (node as Konva.Rect).fillPatternImage();
+                        if (patternImg instanceof HTMLImageElement) {
+                            if (!patternImg.complete || patternImg.naturalWidth === 0) {
+                                loadPromises.push(new Promise<void>(resolve => {
+                                    const onDone = () => resolve();
+                                    patternImg.addEventListener('load', onDone, { once: true });
+                                    patternImg.addEventListener('error', onDone, { once: true });
+                                    setTimeout(onDone, 15000);
+                                }));
+                            }
                         }
                     }
-                    return Promise.resolve();
                 });
 
-                await Promise.all(assetPromises);
+                if (loadPromises.length > 0) {
+                    toast.info(`Waiting for ${loadPromises.length} assets on spread ${i + 1}...`, { duration: 2000, id: 'pdf-progress' });
+                    await Promise.all(loadPromises);
+                }
                 
-                // Extra settling time for complex SVG/Canvas nodes
-                await new Promise(r => setTimeout(r, 400));
+                // 5. Extra settling time for SVG renders, complex stickers, etc.
+                await new Promise(r => setTimeout(r, 1000));
                 
-                // Final draw after all assets ready
-                stageRef.batchDraw();
+                // 6. Final redraw after everything is loaded
+                currentStageRef.batchDraw();
+                await new Promise(r => setTimeout(r, 300)); // Let the draw flush
                 
-                // 5. Take high-precision snapshot with explicit bounds
-                const dataUrl = stageRef.toDataURL({ 
+                // 7. Capture high-quality snapshot
+                const dataUrl = currentStageRef.toDataURL({ 
                     x: 0,
                     y: 0,
                     width: stageWidthExport,
@@ -608,9 +639,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                     quality: 1.0
                 });
 
-                // Clean up
+                // Clean up the white background
                 exportBg.destroy();
-                stageRef.batchDraw();
+                currentStageRef.batchDraw();
 
                 if (i > 0) pdf.addPage([spreadWidth, spreadHeight], "landscape");
                 pdf.addImage(dataUrl, 'JPEG', 0, 0, spreadWidth, spreadHeight);
@@ -618,7 +649,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         }
 
         const fileName = `${activeTemplateName?.replace(/\s+/g, '_') || 'Carnival_Book'}_Book.pdf`;
-        pdf.save(fileName);
+        
+        // Manual download to force correct .pdf filename
+        const pdfBlob = pdf.output('blob');
+        const blobUrl = URL.createObjectURL(pdfBlob);
+        const downloadLink = document.createElement('a');
+        downloadLink.href = blobUrl;
+        downloadLink.download = fileName;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+        toast.success("PDF downloaded successfully!", { duration: 5000 });
 
         // Consume purchase - MUST PAY AGAIN FOR NEXT DOWNLOAD
         try {
@@ -626,9 +668,6 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             method: "POST",
             headers: { 
                 "Content-Type": "application/json",
-                "Authorization": `Bearer ${localStorage.getItem("fb_token") || ""}`,
-                "x-user-email": localStorage.getItem("fb_user_email") || "",
-                "x-user-id": localStorage.getItem("fb_user_id") || ""
             }
           });
         } catch (consumeError) {
@@ -636,8 +675,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         }
     } catch (err) {
         console.error("PDF Export Error:", err);
+        toast.error("PDF generation failed. Please try again.");
     } finally {
         setCurrentSpread(originalIndex, true);
+        // Restore original view mode
+        if (originalViewMode !== get().viewMode) {
+          set({ viewMode: originalViewMode });
+        }
         set({ isGeneratingPdf: false });
     }
   },

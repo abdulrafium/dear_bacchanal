@@ -7,17 +7,15 @@ import {
   Undo2,
   Redo2,
   Clock,
-  Settings2,
-  Play,
   Save,
   Eye,
   Pencil,
   ShoppingCart,
   Layout,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
-import { OrderModal } from "./OrderModal";
 
 export function EditorTopToolbar() {
   const router = useRouter();
@@ -25,27 +23,21 @@ export function EditorTopToolbar() {
   const redo = useEditorStore((s) => s.redo);
   const historyIndex = useEditorStore((s) => s.historyIndex);
   const isDirty = useEditorStore((s) => s.isDirty);
-  const setDirty = useEditorStore((s) => s.setDirty);
   const historyLength = useEditorStore((s) => s.history.length);
   const isPreviewMode = useEditorStore((s) => s.isPreviewMode);
   const togglePreview = useEditorStore((s) => s.togglePreview);
   const spreads = useEditorStore((s) => s.spreads);
   const isAdmin = useEditorStore((s) => s.isAdmin);
   const activeTemplateName = useEditorStore((s) => s.activeTemplateName);
-  const templateDescription = useEditorStore((s) => s.templateDescription);
-  const currentSpreadIndex = useEditorStore((s) => s.currentSpreadIndex);
 
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "modified">("saved");
-  const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
 
   const save = useEditorStore((s) => s.save);
 
   // Auto-save logic
   useEffect(() => {
-    // Only auto-save if they've explicitly dirtied the state
     if (isDirty) {
       setSaveStatus("modified");
-
       const timer = setTimeout(async () => {
         setSaveStatus("saving");
         const success = await save();
@@ -54,8 +46,7 @@ export function EditorTopToolbar() {
         } else {
           setSaveStatus("modified");
         }
-      }, 1000); // 1 second of inactivity to auto-save
-
+      }, 2000);
       return () => clearTimeout(timer);
     }
   }, [isDirty, save, spreads, historyIndex]);
@@ -74,7 +65,6 @@ export function EditorTopToolbar() {
 
   return (
     <div className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-2 sm:px-4 z-50 flex-shrink-0">
-      {/* Left Section */}
       <div className="flex items-center gap-0.5 sm:gap-1">
         <button
           onClick={() => router.push("/customize")}
@@ -143,7 +133,6 @@ export function EditorTopToolbar() {
         </button>
       </div>
 
-      {/* Right Section */}
       <div className="flex items-center gap-1 sm:gap-2">
         <div className="hidden sm:flex items-center text-[10px] text-gray-400 mr-1 sm:mr-2">
           {saveStatus === "saving" && <span className="animate-pulse flex items-center gap-1"><Clock className="w-3 h-3"/> Saving...</span>}
@@ -175,19 +164,37 @@ export function EditorTopToolbar() {
           </span>
         </button>
 
-        <button 
-          onClick={() => setIsOrderModalOpen(true)}
-          className="flex items-center gap-1 sm:gap-1.5 bg-[#2d2d2d] text-white px-3 sm:px-6 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs md:text-sm font-bold hover:bg-[#404040] transition-colors ml-0.5 sm:ml-2"
-        >
-          <ShoppingCart className="w-4 h-4" />
-          <span className="hidden xs:block uppercase tracking-tight">Order</span>
-        </button>
-      </div>
+        {isAdmin && (
+          <button 
+            onClick={async () => {
+              const { generatePdfBook, spreads } = useEditorStore.getState();
+              toast.info("Generating free Admin PDF for testing...");
+              try {
+                await generatePdfBook();
+                toast.success("PDF generated successfully!");
+              } catch (err) {
+                console.error("PDF generation failed:", err);
+                toast.error("Failed to generate PDF");
+              }
+            }}
+            className="flex items-center gap-1 sm:gap-1.5 bg-red-600/10 text-red-600 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs font-bold hover:bg-red-600 hover:text-white transition-all ml-0.5 sm:ml-2 border border-red-200"
+            title="Admin Quick PDF Test"
+          >
+            <Download className="w-4 h-4" />
+            <span className="hidden lg:block uppercase tracking-tight">Admin PDF</span>
+          </button>
+        )}
 
-      <OrderModal 
-        isOpen={isOrderModalOpen} 
-        onClose={() => setIsOrderModalOpen(false)} 
-      />
+        {!isAdmin && (
+          <button 
+            onClick={() => useEditorStore.getState().setIsOrderModalOpen(true)}
+            className="flex items-center gap-1 sm:gap-1.5 bg-[#2d2d2d] text-white px-3 sm:px-6 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs md:text-sm font-bold hover:bg-black transition-all ml-0.5 sm:ml-2 shadow-lg shadow-black/10 group"
+          >
+            <ShoppingCart className="w-4 h-4 group-hover:scale-110 transition-transform" />
+            <span className="hidden xs:block uppercase tracking-tight">Order</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 }

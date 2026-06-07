@@ -886,12 +886,17 @@ function StickersPanel() {
                     height: 150,
                     rotation: 0,
                   });
+                  toast.success("Added sticker (+$5.00 Add-on)");
                 }
               }}
             >
               <img src={sticker.url} alt={sticker.name} className="w-full h-full object-contain filter drop-shadow-md group-hover:scale-110 transition-transform duration-300" />
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/40 to-transparent p-2 translate-y-full group-hover:translate-y-0 transition-transform">
-                <span className="text-[10px] text-white font-bold truncate block">{sticker.name}</span>
+              <div className="absolute top-1 right-1 flex flex-col gap-0.5 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                 <span className="bg-coral text-[6px] text-white font-black px-1 rounded-sm shadow-sm leading-none py-0.5">ADDON</span>
+                 <span className="bg-black text-[6px] text-white font-black px-1 rounded-sm shadow-sm leading-none py-0.5">$5.00</span>
+              </div>
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/20 to-transparent p-1 translate-y-full group-hover:translate-y-0 transition-transform">
+                <span className="text-[8px] text-white font-bold truncate block">{sticker.name}</span>
               </div>
             </div>
           ))}

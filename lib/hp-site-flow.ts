@@ -1,7 +1,9 @@
 
-const HP_API_BASE_URL = "https://pro-api.oneflowcloud.com/api";
+const HP_API_BASE_URL = "https://orders.oneflow.io/api";
 const HP_API_KEY = process.env.HP_SITE_FLOW_API_KEY;
-const HP_API_SECRET = process.env.HP_SITE_FLOW_API_SECRET; // If needed, though prompt only mentioned Key
+const HP_API_SECRET = process.env.HP_SITE_FLOW_API_SECRET;
+
+import crypto from 'crypto';
 
 interface OrderItem {
     sourceItemId: string;
@@ -24,6 +26,7 @@ interface ShippingInfo {
     country: string;
     email: string;
     phone?: string;
+    shippingMethod?: string;
 }
 
 interface OrderData {
@@ -34,32 +37,45 @@ interface OrderData {
 
 export class HPSiteFlowClient {
     private apiKey: string;
-    private apiSecret?: string;
+    private apiSecret: string;
 
     constructor() {
-        if (!HP_API_KEY) {
-            console.error("HP_SITE_FLOW_API_KEY is not defined");
+        if (!HP_API_KEY || !HP_API_SECRET) {
+            console.error("HP_SITE_FLOW_API_KEY or HP_SITE_FLOW_API_SECRET is not defined");
         }
-        this.apiKey = HP_API_KEY || "";
-        this.apiSecret = HP_API_SECRET;
+        this.apiKey = HP_API_KEY || "602992397545";
+        this.apiSecret = HP_API_SECRET || "df0a55737c3fc3d50d7c2c50cd2b4f913ff587847a477e13";
     }
 
-    private getHeaders() {
+    private generateSignature(method: string, path: string, timestamp: string) {
+        const stringToSign = `${method} ${path} ${timestamp}`;
+        const signature = crypto.createHmac('sha1', this.apiSecret)
+            .update(stringToSign)
+            .digest('hex');
+        return signature;
+    }
+
+    private getHeaders(method: string, path: string) {
+        const timestamp = new Date().toISOString();
+        const signature = this.generateSignature(method, path, timestamp);
+
         const headers: HeadersInit = {
             "Content-Type": "application/json",
-            "x-oneflow-authorization": `${this.apiKey}:${this.apiSecret || ""}`
+            "x-oneflow-date": timestamp,
+            "x-oneflow-authorization": `${this.apiKey}:${signature}`
         };
         return headers;
     }
 
     async createOrder(orderData: OrderData) {
-        // Construct the payload based on HP Site Flow requirements
-        // Notes from docs:
-        // POST /order
+        const path = "/api/order";
+        
+        // Determine carrier alias based on shipping method logic (standard vs international)
+        const carrierAlias = orderData.shippingInfo.shippingMethod === 'international' ? 'international' : 'standard';
 
         const payload = {
             destination: {
-                name: "oneflow"
+                name: "pureprint"
             },
             orderData: {
                 sourceOrderId: orderData.sourceOrderId,
@@ -82,8 +98,7 @@ export class HPSiteFlowClient {
                         phone: orderData.shippingInfo.phone || ""
                     },
                     carrier: {
-                        code: "royal_mail", // Defaulting to a carrier, might need logic to select
-                        service: "first_class"
+                        alias: carrierAlias
                     }
                 }]
             }
@@ -92,11 +107,11 @@ export class HPSiteFlowClient {
         try {
             const response = await fetch(`${HP_API_BASE_URL}/order`, {
                 method: "POST",
-                headers: this.getHeaders(),
+                headers: this.getHeaders("POST", path),
                 body: JSON.stringify(payload)
             });
 
-            const data = await response.json();
+            const data = await response.json().catch(() => null);
 
             if (!response.ok) {
                 console.error("HP Site Flow Order Creation Failed:", data);
@@ -111,36 +126,33 @@ export class HPSiteFlowClient {
         }
     }
 
-    async validateOrder(orderData: OrderData) {
-        const payload = {
-            destination: {
-                name: "oneflow"
-            },
-            orderData: {
-                sourceOrderId: orderData.sourceOrderId,
-                items: orderData.items,
-                shipments: [{
-                    shipTo: {
-                        name: orderData.shippingInfo.name,
-                        address1: orderData.shippingInfo.line1,
-                        address2: orderData.shippingInfo.line2 || "",
-                        town: orderData.shippingInfo.city,
-                        state: orderData.shippingInfo.state || "",
-                        postcode: orderData.shippingInfo.postalCode,
-                        isoCountry: orderData.shippingInfo.country,
-                        email: orderData.shippingInfo.email,
-                        phone: orderData.shippingInfo.phone || ""
-                    }
-                }]
-            }
-        };
+    async fetchCountries() {
+        const path = "/api/reference/country";
+        try {
+            const response = await fetch(`${HP_API_BASE_URL}/reference/country`, {
+                method: "GET",
+                headers: this.getHeaders("GET", path)
+            });
+            if (!response.ok) return null;
+            return await response.json();
+        } catch (e) {
+            console.error("Failed to fetch countries from Site Flow:", e);
+            return null;
+        }
+    }
 
-        const response = await fetch(`${HP_API_BASE_URL}/order/validate`, {
-            method: "POST",
-            headers: this.getHeaders(),
-            body: JSON.stringify(payload)
-        });
-
-        return response.json();
+    async fetchCities(countryCode: string) {
+        const path = `/api/reference/city?country=${countryCode}`;
+        try {
+            const response = await fetch(`${HP_API_BASE_URL}/reference/city?country=${countryCode}`, {
+                method: "GET",
+                headers: this.getHeaders("GET", path)
+            });
+            if (!response.ok) return null;
+            return await response.json();
+        } catch (e) {
+            console.error("Failed to fetch cities from Site Flow:", e);
+            return null;
+        }
     }
 }

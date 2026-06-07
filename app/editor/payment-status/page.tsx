@@ -27,6 +27,7 @@ function PaymentStatusContent() {
     canceled ? "canceled" : "loading"
   );
   const [reason, setReason] = useState<string | null>(null);
+  const [orderInfo, setOrderInfo] = useState<any>(null);
 
   useEffect(() => {
     if (!sessionId || canceled) return;
@@ -38,6 +39,10 @@ function PaymentStatusContent() {
 
         if (data.success) {
           setStatus("success");
+
+          if (data.session?.metadata) {
+            setOrderInfo(data.session.metadata);
+          }
 
           if (data.session?.shipping_details) {
             try {
@@ -64,10 +69,20 @@ function PaymentStatusContent() {
   }, [sessionId, canceled]);
 
   useEffect(() => {
-    if (status === "success") {
+    if (status === "success" && orderInfo?.orderType !== 'hard') {
       const timer = setTimeout(() => {
-        router.replace("/editor?payment=success");
-      }, 5000); // 5 seconds to let them click manual download if they want
+        const tplName = orderInfo?.templateName ? `&templateName=${encodeURIComponent(orderInfo.templateName)}` : '';
+        router.replace(`/editor?payment=success${tplName}`);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [status, router, orderInfo]);
+
+  useEffect(() => {
+    if (status === "canceled") {
+      const timer = setTimeout(() => {
+        router.replace("/editor");
+      }, 1500);
       return () => clearTimeout(timer);
     }
   }, [status, router]);
@@ -88,18 +103,47 @@ function PaymentStatusContent() {
                <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
             </div>
             <h1 className="text-4xl font-black font-display mb-4 uppercase">Success!</h1>
-            <p className="text-lg text-white/70 mb-8 leading-relaxed">
-              Your payment is verified. Your carnival book is ready for generation.
-            </p>
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => router.replace("/editor?payment=success")}
-                className="w-full py-4 bg-[#9f2e2b] text-white font-black rounded-2xl hover:bg-[#c8413d] transition-all shadow-[0_10px_40px_rgba(159,46,43,0.3)] uppercase tracking-widest text-sm"
-              >
-                Download Book Now
-              </button>
-              <p className="text-[10px] text-white/30 uppercase font-bold tracking-[2px]">Automatic download in 5 seconds...</p>
-            </div>
+            
+            {orderInfo?.orderType === 'hard' ? (
+              <>
+                <p className="text-lg text-white/70 mb-8 leading-relaxed">
+                  Your physical book is now in the <span className="text-teal font-black italic">Print Queue</span>. 
+                  We'll notify you via email once it ships!
+                </p>
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => router.replace("/customize")}
+                    className="w-full py-4 bg-white/5 border border-white/10 text-white font-black rounded-2xl hover:bg-white/10 transition-all uppercase tracking-widest text-xs"
+                  >
+                    View Order History
+                  </button>
+                  <button
+                    onClick={() => router.push("/editor")}
+                    className="w-full py-4 bg-[#9f2e2b] text-white font-black rounded-2xl hover:bg-[#c8413d] transition-all uppercase tracking-widest text-sm"
+                  >
+                    Back to Editor
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-lg text-white/70 mb-8 leading-relaxed">
+                  Your payment is verified. Your digital carnival book is ready for generation.
+                </p>
+                <div className="flex flex-col gap-3">
+                  <button
+                    onClick={() => {
+                      const tplName = orderInfo?.templateName ? `&templateName=${encodeURIComponent(orderInfo.templateName)}` : '';
+                      router.replace(`/editor?payment=success${tplName}`);
+                    }}
+                    className="w-full py-4 bg-[#9f2e2b] text-white font-black rounded-2xl hover:bg-[#c8413d] transition-all shadow-[0_10px_40px_rgba(159,46,43,0.3)] uppercase tracking-widest text-sm"
+                  >
+                    Download PDF Now
+                  </button>
+                  <p className="text-[10px] text-white/30 uppercase font-bold tracking-[2px]">Automatic download in 5 seconds...</p>
+                </div>
+              </>
+            )}
           </div>
         )}
 

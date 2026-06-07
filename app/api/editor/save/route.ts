@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";
 import { getServerAuth } from "@/lib/server-auth";
+import { ObjectId } from "mongodb";
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getServerAuth(req);
+    const user = await getServerAuth();
 
     if (!user && process.env.NODE_ENV !== "development") {
       return NextResponse.json(
@@ -15,6 +16,8 @@ export async function POST(req: NextRequest) {
 
     const userId = user?.id || user?.email || "anonymous-dev-user";
     const body = await req.json();
+    console.log("Save request received from user:", userId, "isAdmin:", body.isAdmin);
+
     const { 
       isAdmin, 
       spreads, 
@@ -25,17 +28,16 @@ export async function POST(req: NextRequest) {
       templateYear,
       currentSpreadIndex 
     } = body;
-    
+
     const finalName = (activeTemplateName && activeTemplateName !== "undefined") ? activeTemplateName : "New Template";
     const finalDesc = (templateDescription && templateDescription !== "undefined") ? templateDescription : "Custom template created via editor";
-
+    
     const db = await getDatabase();
 
     if (isAdmin) {
       // Save to global templates
       const templatesCollection = db.collection("global_templates");
       
-      const { ObjectId } = await import('mongodb');
       let query: any = { templateName: finalName };
       
       // Use ID if available for precision and to allow renaming
@@ -73,7 +75,13 @@ export async function POST(req: NextRequest) {
         { upsert: true }
       );
 
-      const templateId = result.upsertedId ? result.upsertedId.toString() : (query._id ? query._id.toString() : null);
+      // CRITICAL: Ensure we return the ID after an update OR an insert
+      let templateId = result.upsertedId ? result.upsertedId.toString() : null;
+      if (!templateId) {
+        // If it was an update, we need to find the ID of the document we updated
+        const existing = await templatesCollection.findOne(query, { projection: { _id: 1 } });
+        if (existing) templateId = existing._id.toString();
+      }
 
       return NextResponse.json({ 
         message: "Template saved successfully!", 
@@ -88,29 +96,53 @@ export async function POST(req: NextRequest) {
 
       // Save to user books
       const userBooksCollection = db.collection("user_books");
-      await userBooksCollection.updateOne(
-        { userId },
+      
+      let bookQuery: any = { userId };
+      if (activeTemplateId && typeof activeTemplateId === 'string' && activeTemplateId !== "undefined") {
+        try {
+          bookQuery = { _id: new ObjectId(activeTemplateId), userId };
+        } catch (e) {
+          // If ID is not a valid ObjectId, fall back to name-based lookup for this user
+          bookQuery = { userId, activeTemplateName: activeTemplateName || "Untitled Book" };
+        }
+      } else {
+        bookQuery = { userId, activeTemplateName: activeTemplateName || "Untitled Book" };
+      }
+      
+      const result = await userBooksCollection.updateOne(
+        bookQuery,
         {
           $set: {
             spreads: spreads || [],
-            activeTemplateName: activeTemplateName || null,
+            activeTemplateName: activeTemplateName || "Untitled Book",
             currentSpreadIndex: currentSpreadIndex || 0,
             imageCount: totalImages,
             updatedAt: new Date(),
           },
           $setOnInsert: {
+            userId,
             createdAt: new Date(),
           },
         },
         { upsert: true }
       );
-
-      return NextResponse.json({ message: "Book saved successfully!" }, { status: 200 });
+      
+      let templateId = result.upsertedId ? result.upsertedId.toString() : null;
+      if (!templateId) {
+        // Find existing ID for update consistency
+        const existing = await userBooksCollection.findOne(bookQuery, { projection: { _id: 1 } });
+        if (existing) templateId = existing._id.toString();
+      }
+      
+      return NextResponse.json({ 
+        message: "Book saved successfully!", 
+        templateId 
+      }, { status: 200 });
     }
-  } catch (error) {
-    console.error("Error saving data:", error);
+  } catch (error: any) {
+    console.error("CRITICAL SAVE ERROR:", error);
     return NextResponse.json(
-      { error: "Failed to save" },
+      { error: error.message || "Internal server error during save" },
       { status: 500 }
     );
   }

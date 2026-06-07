@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAuthModal } from "@/hooks/useAuthModal";
 import { UserAvatar } from "@/components/auth/UserAvatar";
 import { AuthModal } from "@/components/auth/AuthModal";
+import { useSettings } from "@/providers/SettingsProvider";
 
 const Navbar = () => {
   const pathname = usePathname();
@@ -16,6 +17,7 @@ const Navbar = () => {
   const { isAuthenticated } = useAuth();
   const { openModal } = useAuthModal();
   const [mounted, setMounted] = useState(false);
+  const { settings } = useSettings();
 
   useEffect(() => {
     setMounted(true);
@@ -26,9 +28,8 @@ const Navbar = () => {
 
   const navLinks = [
     { path: "/", label: "Home" },
-    { path: "/customize", label: "Customize" },
+    { path: "/customize", label: "Templates" },
     { path: "/faqs", label: "FAQs" },
-    ...(mounted && isAuthenticated ? [{ path: "/templates", label: "My Books" }] : []),
   ];
 
   return (
@@ -42,7 +43,7 @@ const Navbar = () => {
         <div className="flex items-center justify-between h-20">
           <Link href="/" className="font-display text-2xl md:text-3xl">
             <span
-              className="block"
+              className="block uppercase"
               style={{
                 background:
                   "linear-gradient(90deg, #ec4899 0%, #fbbf24 50%, #10b981 100%)",
@@ -51,9 +52,10 @@ const Navbar = () => {
                 backgroundClip: "text",
               }}
             >
-              BACCHANAL
+              {settings?.general?.siteName || "BACCHANAL"}
             </span>
           </Link>
+
 
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-8">

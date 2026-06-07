@@ -6,7 +6,7 @@ import { hash } from "bcryptjs";
 
 // GET - List all users
 export async function GET(req: NextRequest) {
-  const authError = adminAuthMiddleware(req);
+  const authError = await adminAuthMiddleware();
   if (authError) return authError;
 
   try {
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
 
 // PATCH - Update user (reset password, disable, etc.)
 export async function PATCH(req: NextRequest) {
-  const authError = adminAuthMiddleware(req);
+  const authError = await adminAuthMiddleware();
   if (authError) return authError;
 
   try {

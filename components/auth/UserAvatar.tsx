@@ -1,12 +1,13 @@
+"use client";
+
 import { useState, useRef, useEffect } from "react";
-import { useFirebase } from "@/providers/FirebaseAuthProvider";
+import { useAuth } from "@/hooks/useAuth";
 import { User, LogOut, Settings, LayoutDashboard, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
-import { signOut as nextSignOut } from "next-auth/react";
 import Link from "next/link";
 
 export function UserAvatar() {
-  const { user, loading, logout } = useFirebase();
+  const { user, isLoading, logout } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -20,7 +21,7 @@ export function UserAvatar() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="w-10 h-10 rounded-full bg-white/10 animate-pulse border border-white/20" />
     );
@@ -32,15 +33,6 @@ export function UserAvatar() {
     try {
       setIsMenuOpen(false);
       await logout();
-      try {
-        await nextSignOut({ redirect: false });
-      } catch (e) {
-        console.error("NextAuth signout error:", e);
-      }
-      localStorage.removeItem("fb_token");
-      localStorage.removeItem("fb_user_id");
-      localStorage.removeItem("fb_user_email");
-      window.location.href = "/";
     } catch (error) {
       console.error("Sign out error:", error);
       toast.error("Error during logout");
@@ -56,10 +48,10 @@ export function UserAvatar() {
       >
         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-coral via-teal to-yellow p-[2px]">
           <div className="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden">
-            {user.photoURL ? (
+            {user.image ? (
               <img
-                src={user.photoURL}
-                alt={user.displayName || "User"}
+                src={user.image}
+                alt={user.name || "User"}
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
               />
             ) : (
@@ -70,7 +62,7 @@ export function UserAvatar() {
         
         <div className="hidden sm:flex flex-col items-start leading-none text-left">
           <span className="text-[11px] font-black uppercase tracking-widest text-white/90">
-            {user.displayName || "Explorer"}
+            {user.name || "Explorer"}
           </span>
         </div>
 
@@ -85,7 +77,7 @@ export function UserAvatar() {
           {/* User Header */}
           <div className="p-4 border-b border-white/5 bg-gradient-to-br from-white/5 to-transparent">
             <p className="text-sm font-black text-white uppercase tracking-wider truncate">
-              {user.displayName}
+              {user.name}
             </p>
             <p className="text-[10px] text-neutral-400 truncate mt-1">
               {user.email}
@@ -93,16 +85,16 @@ export function UserAvatar() {
           </div>
 
           <div className="p-2">
-            <Link 
+            {/* <Link 
               href="/templates" 
               onClick={() => setIsMenuOpen(false)}
               className="flex items-center gap-3 px-3 py-2.5 text-sm text-neutral-300 hover:text-white hover:bg-white/10 rounded-xl transition-all duration-200 group"
             >
               <Settings className="w-4 h-4 text-coral group-hover:rotate-45 transition-transform duration-500" />
               My Books
-            </Link>
+            </Link> */}
 
-            {user.isAdmin && (
+            {(user as any).isAdmin && (
               <Link 
                 href="/admin/dashboard" 
                 onClick={() => setIsMenuOpen(false)}

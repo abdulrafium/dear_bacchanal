@@ -95,54 +95,54 @@ export default function AdminPromoCodesPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-8">
       <div>
-        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600">
+        <h1 className="text-3xl font-bold text-white">
           Promo Codes
         </h1>
-        <p className="text-gray-500 mt-1">Create and manage discounts for your customers</p>
+        <p className="text-white/50 mt-1">Create and manage discounts for your customers</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Create Form */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-black">
               <Plus className="w-5 h-5 text-red-500" />
               Create Code
             </h2>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Code Name</label>
+                <label className="block text-sm font-bold text-black mb-1 tracking-tight">Code Name</label>
                 <input
                   type="text"
                   placeholder="e.g. SUMMER2024"
                   value={newCodeData.code}
                   onChange={(e) => setNewCodeData({ ...newCodeData, code: e.target.value.toUpperCase() })}
-                  className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500 text-black placeholder:text-gray-400 font-bold"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                  <label className="block text-sm font-bold text-black mb-1 opacity-70">Type</label>
                   <select
                     value={newCodeData.type}
                     onChange={(e) => setNewCodeData({ ...newCodeData, type: e.target.value as any })}
-                    className="w-full px-4 py-2 rounded-xl border border-gray-200 bg-white"
+                    className="w-full px-4 py-2 rounded-xl border border-gray-200 bg-white text-black font-bold"
                   >
                     <option value="percentage">Percentage</option>
                     <option value="fixed_amount">Fixed USD</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-bold text-black mb-1 opacity-70">
                     Value {newCodeData.type === 'percentage' ? '(%)' : '($)'}
                   </label>
                   <input
                     type="number"
                     value={newCodeData.value}
                     onChange={(e) => setNewCodeData({ ...newCodeData, value: Number(e.target.value) })}
-                    className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500"
+                    className="w-full px-4 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500 text-black font-bold"
                     required
                   />
                 </div>
@@ -164,7 +164,7 @@ export default function AdminPromoCodesPage() {
         <div className="lg:col-span-2">
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center">
-              <h2 className="text-xl font-bold flex items-center gap-2">
+              <h2 className="text-xl font-bold flex items-center gap-2 text-black leading-none">
                 <Ticket className="w-5 h-5 text-gray-400" />
                 Active Codes
               </h2>

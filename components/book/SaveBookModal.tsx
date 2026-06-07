@@ -150,15 +150,16 @@ export function SaveBookModal({ isOpen, onClose, onOpen, onSaveSuccess }: SaveBo
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4  p-4">
-            <div className="space-y-2">
-              <Label htmlFor="bookName">Book Name</Label>
+          <div className="space-y-3 p-2">
+            <div className="space-y-1">
+              <Label htmlFor="bookName" className="text-xs">Book Name</Label>
               <Input
                 id="bookName"
                 placeholder="e.g., Trinidad Carnival 2026"
                 value={bookName}
                 onChange={(e) => setBookName(e.target.value)}
                 disabled={isSaving}
+                className="h-9 text-sm"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !isSaving) {
                     handleSave();
@@ -168,18 +169,18 @@ export function SaveBookModal({ isOpen, onClose, onOpen, onSaveSuccess }: SaveBo
             </div>
           </div>
 
-          <div className="flex gap-3 justify-end">
+          <div className="flex gap-2 justify-end mt-2">
             <button
               onClick={onClose}
               disabled={isSaving}
-              className="px-4 py-2 rounded-lg border-2 border-white/20 bg-white/5 hover:bg-white/10 transition-colors duration-200 disabled:opacity-50"
+              className="px-3 py-1.5 text-xs rounded-lg border border-white/20 bg-white/5 hover:bg-white/10 transition-colors duration-200 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
               disabled={isSaving || !bookName.trim()}
-              className="px-4 py-2 rounded-lg bg-gradient-to-r from-coral via-teal to-yellow text-white font-semibold hover:opacity-90 transition-opacity duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-3 py-1.5 text-xs rounded-lg bg-gradient-to-r from-coral via-teal to-yellow text-white font-semibold hover:opacity-90 transition-opacity duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
               {isSaving ? "Saving..." : "Save Book"}
             </button>

@@ -111,20 +111,20 @@ export function ShareBookModal({ isOpen, onClose }: ShareBookModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[60vh] rounded-[2.5vh] border-[0.2vh] border-border shadow-2xl">
-        <DialogHeader className="mb-[2vh]">
-          <DialogTitle className="text-[2.5vh] font-bold">Share Your Carnival Book</DialogTitle>
-          <DialogDescription className="text-[1.8vh] text-muted-foreground mt-[0.5vh]">
+      <DialogContent className="max-w-[55vh] rounded-[2vh] border-[0.15vh] border-border shadow-2xl">
+        <DialogHeader className="mb-[1.5vh]">
+          <DialogTitle className="text-[2.2vh] font-bold">Share Your Carnival Book</DialogTitle>
+          <DialogDescription className="text-[1.6vh] text-muted-foreground mt-[0.3vh]">
             Share your carnival memories with friends and family
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-[2.4vh] py-[1.5vh]">
+        <div className="space-y-[1.8vh] py-[1vh]">
           {/* Privacy Toggle */}
-          <div className="flex items-center justify-between p-[1.6vh] bg-muted/50 rounded-[1.2vh]">
+          <div className="flex items-center justify-between p-[1.2vh] bg-muted/50 rounded-[1vh]">
             <div className="flex-1">
-              <h3 className="font-semibold text-[1.8vh]">Book Privacy</h3>
-              <p className="text-[1.4vh] text-muted-foreground mt-[0.2vh]">
+              <h3 className="font-semibold text-[1.6vh]">Book Privacy</h3>
+              <p className="text-[1.3vh] text-muted-foreground mt-[0.1vh]">
                 {isPublic
                   ? "Anyone with the link can view your book"
                   : "Your book is private"}
@@ -132,7 +132,7 @@ export function ShareBookModal({ isOpen, onClose }: ShareBookModalProps) {
             </div>
             <Button
               variant={isPublic ? "default" : "outline"}
-              className="h-[4vh] px-[1.5vh] text-[1.4vh] rounded-[0.8vh]"
+              className="h-[3.5vh] px-[1.2vh] text-[1.3vh] rounded-[0.7vh]"
               onClick={togglePrivacy}
               disabled={isLoading}
             >
@@ -142,89 +142,89 @@ export function ShareBookModal({ isOpen, onClose }: ShareBookModalProps) {
 
           {/* Share Link */}
           {isGenerating ? (
-            <div className="flex items-center justify-center py-[3vh]">
-              <Loader2 className="w-[3vh] h-[3vh] animate-spin text-coral" />
+            <div className="flex items-center justify-center py-[2.5vh]">
+              <Loader2 className="w-[2.5vh] h-[2.5vh] animate-spin text-coral" />
             </div>
           ) : shareUrl && isPublic ? (
             <>
-              <div className="space-y-[1vh]">
-                <label className="text-[1.6vh] font-semibold">Share Link</label>
-                <div className="flex gap-[1vh]">
+              <div className="space-y-[0.8vh]">
+                <label className="text-[1.4vh] font-semibold">Share Link</label>
+                <div className="flex gap-[0.8vh]">
                   <input
                     type="text"
                     value={shareUrl}
                     readOnly
                     onClick={(e) => e.currentTarget.select()}
-                    className="flex-1 px-[1.5vh] py-[1vh] text-[1.6vh] bg-muted rounded-[1vh] border-[0.1vh] border-border focus:outline-none focus:ring-[0.2vh] focus:ring-coral"
+                    className="flex-1 px-[1.2vh] py-[0.8vh] text-[1.4vh] bg-muted rounded-[0.8vh] border-[0.1vh] border-border focus:outline-none focus:ring-[0.15vh] focus:ring-coral"
                   />
                   <Button
                     variant="outline"
-                    className="w-[4.5vh] h-[4.5vh] flex-shrink-0 rounded-[1vh] border-[0.1vh] p-0 flex items-center justify-center"
+                    className="w-[4vh] h-[4vh] flex-shrink-0 rounded-[0.8vh] border-[0.1vh] p-0 flex items-center justify-center"
                     onClick={copyToClipboard}
                     title="Copy Link"
                   >
                     {isCopied ? (
-                      <Check className="w-[2vh] h-[2vh] text-green-500" />
+                      <Check className="w-[1.8vh] h-[1.8vh] text-green-500" />
                     ) : (
-                      <Copy className="w-[2vh] h-[2vh]" />
+                      <Copy className="w-[1.8vh] h-[1.8vh]" />
                     )}
                   </Button>
                   <Button
                     variant="outline"
-                    className="w-[4.5vh] h-[4.5vh] flex-shrink-0 rounded-[1vh] border-[0.1vh] p-0 flex items-center justify-center"
+                    className="w-[4vh] h-[4vh] flex-shrink-0 rounded-[0.8vh] border-[0.1vh] p-0 flex items-center justify-center"
                     onClick={() => window.open(shareUrl, "_blank")}
                     title="Open in new tab"
                   >
-                    <ExternalLink className="w-[2vh] h-[2vh]" />
+                    <ExternalLink className="w-[1.8vh] h-[1.8vh]" />
                   </Button>
                 </div>
               </div>
 
               {/* Social Share Buttons */}
-              <div className="space-y-[1vh]">
-                <label className="text-[1.6vh] font-semibold">Share On</label>
-                <div className="grid grid-cols-3 gap-[1.2vh]">
+              <div className="space-y-[0.8vh]">
+                <label className="text-[1.4vh] font-semibold">Share On</label>
+                <div className="grid grid-cols-3 gap-[1vh]">
                   <Button
                     variant="outline"
                     onClick={shareToFacebook}
-                    className="flex items-center gap-[1vh] h-[5vh] text-[1.6vh] rounded-[1vh] border-[0.1vh]"
+                    className="flex items-center gap-[0.8vh] h-[4.5vh] text-[1.4vh] rounded-[0.8vh] border-[0.1vh]"
                   >
-                    <Facebook className="w-[2vh] h-[2vh]" />
+                    <Facebook className="w-[1.8vh] h-[1.8vh]" />
                     <span className="hidden sm:inline">Facebook</span>
                   </Button>
                   <Button
                     variant="outline"
                     onClick={shareToTwitter}
-                    className="flex items-center gap-[1vh] h-[5vh] text-[1.6vh] rounded-[1vh] border-[0.1vh]"
+                    className="flex items-center gap-[0.8vh] h-[4.5vh] text-[1.4vh] rounded-[0.8vh] border-[0.1vh]"
                   >
-                    <Twitter className="w-[2vh] h-[2vh]" />
+                    <Twitter className="w-[1.8vh] h-[1.8vh]" />
                     <span className="hidden sm:inline">Twitter</span>
                   </Button>
                   <Button
                     variant="outline"
                     onClick={shareToWhatsApp}
-                    className="flex items-center gap-[1vh] h-[5vh] text-[1.6vh] rounded-[1vh] border-[0.1vh]"
+                    className="flex items-center gap-[0.8vh] h-[4.5vh] text-[1.4vh] rounded-[0.8vh] border-[0.1vh]"
                   >
-                    <Share2 className="w-[2vh] h-[2vh]" />
+                    <Share2 className="w-[1.8vh] h-[1.8vh]" />
                     <span className="hidden sm:inline">WhatsApp</span>
                   </Button>
                 </div>
               </div>
             </>
           ) : (
-            <div className="text-center py-[4vh] text-muted-foreground">
-              <p className="text-[1.6vh]">
+            <div className="text-center py-[3vh] text-muted-foreground">
+              <p className="text-[1.4vh]">
                 Make your book public to generate a share link
               </p>
             </div>
           )}
         </div>
 
-        <div className="flex justify-end mt-[1vh]">
+        <div className="flex justify-end mt-[0.5vh]">
           <Button
             variant="outline"
             onClick={onClose}
-            className="h-[4.5vh] px-[2.5vh] text-[1.6vh] rounded-[1vh] border-[0.1vh]"
+            className="h-[4vh] px-[2vh] text-[1.4vh] rounded-[0.8vh] border-[0.1vh]"
           >
             Close
           </Button>

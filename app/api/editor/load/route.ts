@@ -7,7 +7,7 @@ export const revalidate = 0;
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await getServerAuth(req);
+    const user = await getServerAuth();
     const isAdmin = req.nextUrl.searchParams.get("isAdmin") === "true";
     const templateName = req.nextUrl.searchParams.get("templateName");
     const isNew = req.nextUrl.searchParams.get("new") === "true";
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     const targetUserId = req.nextUrl.searchParams.get("userId");
     
     // Check if the requester is an admin
-    const isRequesterAdmin = userIdFromAuth === "admin@dearbacchanal.com" || process.env.NODE_ENV === "development";
+    const isRequesterAdmin = !!user?.isAdmin || process.env.NODE_ENV === "development";
     
     // Determine which userId's data to load
     const userId = (isRequesterAdmin && targetUserId) ? targetUserId : userIdFromAuth;
@@ -81,15 +81,16 @@ export async function GET(req: NextRequest) {
       let book = await userBooksCollection.findOne(query);
       
       // MASTER SMART-SYNC LOGIC: Deeply merge Admin design updates while protecting User personal content
+      const templateToSync = book ? book.activeTemplateName : templateName;
       const dbTemplate = await templatesCollection.findOne({ 
-          templateName: { $in: ["Bacchanal 2026", "Bacchanal", "Dear Bacchanal"] } 
+          templateName: templateToSync || { $in: ["Bacchanal 2026", "Bacchanal", "Dear Bacchanal"] }
       });
 
       if (dbTemplate && dbTemplate.spreads) {
         if (book) {
           // If the book matches the template series, perform the smart merge
-          const currentBook = book; // Local reference to help TS narrow the type
-          if (currentBook.activeTemplateName?.includes("Bacchanal") || currentBook.activeTemplateName === "Untitled Book") {
+          const currentBook = book;
+          if (currentBook.activeTemplateName) {
             const mergedSpreads = dbTemplate.spreads.map((adminSpread: any, index: number) => {
               const userSpread = currentBook.spreads && currentBook.spreads[index];
               if (!userSpread) return adminSpread;

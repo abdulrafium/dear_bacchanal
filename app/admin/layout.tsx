@@ -18,12 +18,12 @@ import {
   Ticket,
 } from "lucide-react";
 import { UserAvatar } from "@/components/auth/UserAvatar";
+import { useSession, signOut } from "next-auth/react";
 
 const navItems = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart },
   { href: "/admin/users", label: "Users", icon: Users },
-  { href: "/admin/books", label: "Books", icon: BookOpen },
   { href: "/admin/stickers", label: "Stickers", icon: Palette },
   { href: "/admin/templates", label: "Templates", icon: FileBox },
   { href: "/admin/promo-codes", label: "Promo Codes", icon: Ticket },
@@ -31,62 +31,24 @@ const navItems = [
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const { data: session, status } = useSession();
   const router = useRouter();
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isAuthed, setIsAuthed] = useState(false);
-
-  // Skip layout for login page
-  const isLoginPage = pathname === "/admin/login";
-  const isCreateTemplatePage = pathname === "/admin/templates/create";
 
   useEffect(() => {
-    if (isLoginPage) {
-      setIsAuthed(true);
-      return;
+    if (status === "loading") return;
+
+    if (!session?.user?.isAdmin) {
+      router.push("/");
     }
-
-    const token = localStorage.getItem("adminToken");
-    if (!token) {
-      router.push("/admin/login");
-      return;
-    }
-    
-    // Auto Logout / Idle logic
-    let idleTimer: NodeJS.Timeout;
-    const resetTimer = () => {
-      if (idleTimer) clearTimeout(idleTimer);
-      // 30 minutes idle time
-      idleTimer = setTimeout(() => {
-        handleLogout();
-      }, 30 * 60 * 1000);
-    };
-
-    // Events to track activity
-    const activityEvents = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
-    activityEvents.forEach(event => {
-      document.addEventListener(event, resetTimer);
-    });
-
-    resetTimer();
-    setIsAuthed(true);
-
-    return () => {
-      if (idleTimer) clearTimeout(idleTimer);
-      activityEvents.forEach(event => {
-        document.removeEventListener(event, resetTimer);
-      });
-    };
-  }, [pathname]);
+  }, [session, status, router]);
 
   const handleLogout = () => {
-    localStorage.removeItem("adminToken");
-    // Clear cookie
-    document.cookie = "adminToken=; path=/; max-age=0";
-    router.push("/admin/login");
+    signOut({ callbackUrl: "/" });
   };
 
-  if (!isAuthed) {
+  if (status === "loading") {
     return (
       <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-white/20 border-t-red-500 rounded-full animate-spin" />
@@ -94,7 +56,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
-  if (isLoginPage || isCreateTemplatePage) return <>{children}</>;
+  if (!session?.user?.isAdmin) return null;
+
+  const isCreateTemplatePage = pathname === "/admin/templates/create";
+  if (isCreateTemplatePage) return <>{children}</>;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex">

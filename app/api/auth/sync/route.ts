@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";
+import { sendEmail } from "@/lib/mail-service";
+import { getWelcomeEmail } from "@/lib/email-templates";
 
 export async function POST(req: NextRequest) {
     try {
@@ -52,6 +54,19 @@ export async function POST(req: NextRequest) {
             };
 
             await usersCollection.insertOne(newUser);
+
+            // Send Welcome Email
+            try {
+                await sendEmail({
+                    to: email,
+                    subject: "Welcome to Dear Bacchanal!",
+                    html: getWelcomeEmail(name || email.split("@")[0])
+                });
+                console.log(`Welcome email sent to new user: ${email}`);
+            } catch (emailError) {
+                console.error("Failed to send welcome email:", emailError);
+            }
+
             return NextResponse.json({ success: true, user: newUser });
         }
     } catch (error: any) {

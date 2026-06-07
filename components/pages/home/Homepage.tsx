@@ -3,16 +3,52 @@ import { kalufira } from "@/components/book/Font";
 import Image from "next/image";
 import { useAuthModal } from "@/hooks/useAuthModal";
 import { useAuth } from "@/hooks/useAuth";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect } from "react";
+import { toast } from "sonner";
 
 const Homepage = () => {
-  const { openModal } = useAuthModal();
+  const { openModal, closeModal } = useAuthModal();
   const { isAuthenticated } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const authView = searchParams.get("auth");
+    const error = searchParams.get("error");
+
+    if (error) {
+      toast.error(`Authentication Error: ${error}`);
+      // Clean up the URL
+      window.history.replaceState({}, "", "/");
+    }
+
+    if (authView === "signin" || authView === "signup") {
+      openModal(authView as "signin" | "signup");
+      // Clean up the URL
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, "", newUrl);
+    }
+  }, [searchParams, openModal]);
+
+  // If user is already authenticated, send them to the appropriate dashboard
+  const { user } = useAuth();
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      closeModal();
+      if (user.isAdmin) {
+        console.log("Admin detected, redirecting to admin dashboard...");
+        router.push("/admin/dashboard");
+      } else {
+        console.log("Regular user detected, redirecting to customize...");
+        router.push("/customize");
+      }
+    }
+  }, [isAuthenticated, user, router, closeModal]);
 
   const handleAction = () => {
     if (isAuthenticated) {
-      router.push("/editor");
+      router.push("/customize");
     } else {
       openModal("signup");
     }

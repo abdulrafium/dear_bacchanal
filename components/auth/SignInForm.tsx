@@ -10,15 +10,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/lib/firebase";
-import { useFirebase } from "@/providers/FirebaseAuthProvider";
+import { signIn, getSession } from "next-auth/react";
 
 export function SignInForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const { toggleView, closeModal } = useAuthModal();
-  const { loginWithGoogle } = useFirebase();
   const router = useRouter();
 
   const {
@@ -32,14 +29,29 @@ export function SignInForm() {
   const onSubmit = async (data: SignInInput) => {
     try {
       setIsLoading(true);
-      if (!data.email || !data.password) return;
-      await signInWithEmailAndPassword(auth, data.email, data.password);
-      toast.success("Signed in successfully!");
-      closeModal();
-      window.location.href = "/editor";
-    } catch (error: any) {
+      const result = await signIn("credentials", {
+        email: data.email,
+        password: data.password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        toast.error("Invalid email or password");
+      } else {
+        const session = await getSession();
+        toast.success("Signed in successfully!");
+        closeModal();
+        
+        if (session?.user?.isAdmin) {
+          router.push("/admin/dashboard");
+        } else {
+          router.push("/customize");
+        }
+        router.refresh();
+      }
+    } catch (error) {
       console.error("Login Error:", error);
-      toast.error(error.message || "Invalid email or password");
+      toast.error("An error occurred during sign in");
     } finally {
       setIsLoading(false);
     }
@@ -48,64 +60,68 @@ export function SignInForm() {
   const handleGoogleSignIn = async () => {
     try {
       setIsGoogleLoading(true);
-      await loginWithGoogle();
-      closeModal();
-      window.location.href = "/editor";
+      // We'll redirect to a client-side route that handles role-based redirection after sign-in
+      const callbackUrl = `${window.location.origin}/api/auth/callback/google?callbackUrl=${window.location.origin}/admin/dashboard`;
+      
+      // Actually, simplest is to just use standard callback and let the root page handle it or use midleware
+      // But for better UX, we'll use standard and rely on the Redirect callback in auth.config
+      await signIn("google", { callbackUrl: `${window.location.origin}/` });
     } catch (error) {
       console.error("Google Sign-In Error:", error);
       toast.error("Failed to sign in with Google");
-    } finally {
       setIsGoogleLoading(false);
     }
   };
 
   return (
-    <div className="space-y-6">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+    <div className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+        <div className="space-y-1">
+          <Label htmlFor="email" className="text-xs">Email</Label>
           <Input
             id="email"
             type="email"
             placeholder="your@email.com"
             {...register("email")}
             disabled={isLoading}
+            className="h-9 text-sm"
           />
           {errors.email && (
-            <p className="text-sm text-red-400">{errors.email.message}</p>
+            <p className="text-[10px] text-red-400">{errors.email.message}</p>
           )}
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+        <div className="space-y-1">
+          <Label htmlFor="password" className="text-xs">Password</Label>
           <Input
             id="password"
             type="password"
             placeholder="••••••••"
             {...register("password")}
             disabled={isLoading}
+            className="h-9 text-sm"
           />
           {errors.password && (
-            <p className="text-sm text-red-400">{errors.password.message}</p>
+            <p className="text-[10px] text-red-400">{errors.password.message}</p>
           )}
         </div>
 
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full h-12 rounded-lg bg-gradient-to-r from-coral via-teal to-yellow text-white font-semibold hover:opacity-90 transition-opacity duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="w-full h-10 rounded-lg bg-gradient-to-r from-coral via-teal to-yellow text-white text-sm font-semibold hover:opacity-90 transition-opacity duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
+          {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
           {isLoading ? "Signing in..." : "Sign In"}
         </button>
       </form>
 
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-white/20"></div>
+          <div className="w-full border-t border-white/10"></div>
         </div>
-        <div className="relative flex justify-center text-sm">
-          <span className="px-4 bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 text-neutral-400">
+        <div className="relative flex justify-center text-[10px] uppercase tracking-widest text-[#ffffff60]">
+          <span className="px-2 bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900">
             Or continue with
           </span>
         </div>
@@ -115,12 +131,12 @@ export function SignInForm() {
         type="button"
         onClick={handleGoogleSignIn}
         disabled={isGoogleLoading || isLoading}
-        className="w-full h-12 rounded-lg border-2 border-white/20 bg-white/5 backdrop-blur-sm text-white font-semibold hover:bg-white/10 hover:border-white/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+        className="w-full h-10 rounded-lg border border-white/20 bg-white/5 backdrop-blur-sm text-white text-sm font-semibold hover:bg-white/10 hover:border-white/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
         {isGoogleLoading ? (
-          <Loader2 className="w-5 h-5 animate-spin" />
+          <Loader2 className="w-4 h-4 animate-spin" />
         ) : (
-          <svg className="w-5 h-5" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" viewBox="0 0 24 24">
             <path
               fill="currentColor"
               d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -142,6 +158,14 @@ export function SignInForm() {
         {isGoogleLoading ? "Connecting..." : "Continue with Google"}
       </button>
 
+      <div className="text-center">
+        <button
+          onClick={toggleView}
+          className="text-xs text-white/40 hover:text-white transition-colors"
+        >
+          Don't have an account? <span className="text-coral font-bold underline">Sign Up</span>
+        </button>
+      </div>
     </div>
   );
 }

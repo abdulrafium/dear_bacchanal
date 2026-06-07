@@ -34,5 +34,6 @@ export default clientPromise;
 // Helper function to get the database
 export async function getDatabase(): Promise<Db> {
   const client = await clientPromise;
-  return client.db("bacchanal");
+  const dbName = process.env.DB_NAME || "bacchanal";
+  return client.db(dbName);
 }

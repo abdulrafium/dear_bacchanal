@@ -11,16 +11,19 @@ import { useEffect, useState, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Loader2, Edit3, LayoutGrid, Layout } from "lucide-react";
 
-import { useFirebase } from "@/providers/FirebaseAuthProvider";
+import { useAuth } from "@/hooks/useAuth";
+import { OrderModal } from "./OrderModal";
+import { ShoppingCart } from "lucide-react";
 
 export default function EditorWorkspace() {
   const activeSidebarPanel = useEditorStore((s) => s.activeSidebarPanel);
+  const isOrderModalOpen = useEditorStore((s) => s.isOrderModalOpen);
   const isPreviewMode = useEditorStore((s) => s.isPreviewMode);
   const resetEditor = useEditorStore((s) => s.resetEditor);
   const loadTemplate = useEditorStore((s) => s.loadTemplate);
   const setCurrentSpread = useEditorStore((s) => s.setCurrentSpread);
   const isAdmin = useEditorStore((s) => s.isAdmin);
-  const { refreshUser } = useFirebase();
+  const { refreshUser } = useAuth();
   
   const searchParams = useSearchParams();
   const templateName = searchParams.get("templateName");
@@ -80,15 +83,19 @@ export default function EditorWorkspace() {
       const activeNameInStore = useEditorStore.getState().activeTemplateName;
       const isLoaded = useEditorStore.getState().templateLoaded;
       
-      if (isLoaded && activeNameInStore === templateName && !isNewParam) {
-        setLoading(false);
-        return;
-      }
+      const isPaymentReturn = searchParams.get("payment") === "success";
+      
+      // Skip early-return guards when returning from payment
+      if (!isPaymentReturn) {
+        if (isLoaded && activeNameInStore === templateName && !isNewParam) {
+          setLoading(false);
+          return;
+        }
 
-      // Also use the ref as a secondary guard for the exact same fetch cycle
-      if (lastLoadedRef.current === currentKey) {
-        setLoading(false);
-        return;
+        if (lastLoadedRef.current === currentKey) {
+          setLoading(false);
+          return;
+        }
       }
 
       try {
@@ -96,14 +103,18 @@ export default function EditorWorkspace() {
         if (isAdminParam || isAdmin) query.set("isAdmin", "true");
         if (templateName) query.set("templateName", templateName);
         if (isNewParam) query.set("new", "true");
+        
+        // If returning from payment without templateName, still load user's book
+        const paymentParam = searchParams.get("payment");
+        if (!templateName && paymentParam === "success") {
+          // Load the user's latest book
+          query.set("loadLatest", "true");
+        }
 
         const res = await fetch(`/api/editor/load?${query.toString()}&t=${Date.now()}`, {
           cache: "no-store",
           headers: { 
               "Pragma": "no-cache",
-              "Authorization": `Bearer ${localStorage.getItem("fb_token") || ""}`,
-              "x-user-email": localStorage.getItem("fb_user_email") || "",
-              "x-user-id": localStorage.getItem("fb_user_id") || ""
           }
         });
 
@@ -399,6 +410,17 @@ export default function EditorWorkspace() {
            >
              <Layout className="w-5 h-5" />
            </button>
+           {!isAdminStore && (
+             <>
+               <div className="w-px h-4 bg-gray-200" />
+               <button 
+                 onClick={() => useEditorStore.getState().setIsOrderModalOpen(true)}
+                 className="p-2.5 bg-[#9f2e2b] text-white rounded-full shadow-lg shadow-red-500/20 active:scale-90 transition-all"
+               >
+                 <ShoppingCart className="w-5 h-5" />
+               </button>
+             </>
+           )}
         </div>
       )}
 
@@ -407,6 +429,11 @@ export default function EditorWorkspace() {
            <EditorBottomBar />
         </div>
       )}
+
+      <OrderModal 
+        isOpen={isOrderModalOpen} 
+        onClose={() => useEditorStore.getState().setIsOrderModalOpen(false)} 
+      />
     </div>
   );
 }

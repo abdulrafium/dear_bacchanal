@@ -9,14 +9,22 @@ export async function GET(req: NextRequest) {
     const templatesCollection = db.collection("global_templates");
 
     // Find all global templates, projecting only necessary fields
+    // Find only active global templates
     const templates = await templatesCollection
-      .find({})
+      .find({ 
+        $or: [
+          { active: { $ne: false } },
+          { isActive: { $ne: false } }
+        ]
+      })
       .project({ 
         templateName: 1, 
         description: 1, 
         country: 1, 
         year: 1,
         thumbnail: 1,
+        active: 1,
+        isActive: 1,
         createdAt: 1,
         updatedAt: 1
       })
@@ -30,7 +38,7 @@ export async function GET(req: NextRequest) {
       country: t.country || "Trinidad",
       year: t.year || "2026",
       thumbnail: t.thumbnail || "/img/templates/bacchanal-classic.jpg",
-      active: t.active !== undefined ? t.active : true, // Explicitly include active field
+      active: t.active !== undefined ? t.active : (t.isActive !== undefined ? t.isActive : true),
       updatedAt: t.updatedAt,
     }));
 

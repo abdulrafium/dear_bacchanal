@@ -132,8 +132,22 @@ export function EditorBottomBar() {
 
             {showPageMenu && (
               <div className="flex items-center gap-1 px-1 animate-in slide-in-from-right-4 fade-in duration-300">
-                <button onClick={() => { addSpread(); setShowPageMenu(false); }} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors" title="Add New Pages">
+                <button 
+                  onClick={() => { 
+                    if (spreads.length >= 10) {
+                      const { toast } = require("sonner");
+                      toast.info("Adding Extra Spread (+$5.00 Add-on)");
+                    }
+                    addSpread(); 
+                    setShowPageMenu(false); 
+                  }} 
+                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors relative group/btn" 
+                  title="Add New Pages"
+                >
                   <Plus className="w-3.5 h-3.5 text-blue-500" />
+                  {spreads.length >= 10 && (
+                    <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black text-white text-[7px] font-black px-1 py-0.5 rounded opacity-0 group-hover/btn:opacity-100 transition-opacity whitespace-nowrap">+$5.00</span>
+                  )}
                 </button>
                 <button onClick={() => { duplicateSpread(currentSpreadIndex); setShowPageMenu(false); }} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors" title="Duplicate Current">
                   <Copy className="w-3.5 h-3.5 text-violet-500" />

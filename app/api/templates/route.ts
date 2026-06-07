@@ -5,7 +5,7 @@ import { getServerAuth } from "@/lib/server-auth";
 // GET - Retrieve all saved templates for the current user
 export async function GET(req: NextRequest) {
   try {
-    const user = await getServerAuth(req);
+    const user = await getServerAuth();
 
     if (!user) {
       return NextResponse.json(
@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
 // POST - Save a new book template
 export async function POST(req: NextRequest) {
   try {
-    const user = await getServerAuth(req);
+    const user = await getServerAuth();
 
     if (!user?.id) {
       return NextResponse.json(

@@ -45,9 +45,35 @@ export async function GET(req: NextRequest) {
                 query,
                 { $set: { isPurchased: true, updatedAt: new Date() } }
             );
+
+            // Create order record if webhook hasn't done it yet (fallback)
+            const ordersCollection = db.collection("orders");
+            const existingOrder = await ordersCollection.findOne({ orderId: sessionId });
+            if (!existingOrder) {
+                await ordersCollection.insertOne({
+                    userId: userId,
+                    email: email || checkoutSession.customer_email || '',
+                    orderId: sessionId,
+                    amount: checkoutSession.amount_total || 0,
+                    currency: checkoutSession.currency || 'usd',
+                    type: checkoutSession.metadata?.orderType || 'soft',
+                    templateName: checkoutSession.metadata?.templateName || '',
+                    bookId: checkoutSession.metadata?.bookId || '',
+                    status: (checkoutSession.metadata?.orderType === 'hard') ? 'processing' : 'paid',
+                    shippingDetails: checkoutSession.shipping_details || null,
+                    paymentMethod: checkoutSession.payment_method_types?.[0] || 'card',
+                    customerName: checkoutSession.customer_details?.name || '',
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                });
+            }
+
             return NextResponse.json({
                 success: true,
-                session: { shipping_details: checkoutSession.shipping_details }
+                session: { 
+                    shipping_details: checkoutSession.shipping_details,
+                    metadata: checkoutSession.metadata
+                }
             });
         }
 
@@ -90,9 +116,31 @@ export async function GET(req: NextRequest) {
             user = await usersCollection.findOne({ _id: insert.insertedId });
         }
 
+        // Create order record if webhook hasn't done it yet (fallback)
+        const ordersCollection = db.collection("orders");
+        const existingOrder = await ordersCollection.findOne({ orderId: sessionId });
+        if (!existingOrder) {
+            await ordersCollection.insertOne({
+                userId: user?._id?.toString() || null,
+                email: email,
+                orderId: sessionId,
+                amount: checkoutSession.amount_total || 0,
+                currency: checkoutSession.currency || 'usd',
+                type: checkoutSession.metadata?.orderType || 'soft',
+                templateName: checkoutSession.metadata?.templateName || '',
+                bookId: checkoutSession.metadata?.bookId || '',
+                status: (checkoutSession.metadata?.orderType === 'hard') ? 'processing' : 'paid',
+                shippingDetails: checkoutSession.shipping_details || null,
+                paymentMethod: checkoutSession.payment_method_types?.[0] || 'card',
+                customerName: checkoutSession.customer_details?.name || email?.split('@')[0] || '',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            });
+        }
+
         return NextResponse.json({
             success: true,
-            session: { shipping_details: checkoutSession.shipping_details },
+            session: { shipping_details: checkoutSession.shipping_details, metadata: checkoutSession.metadata },
             email,
             oneTimeToken,
         });

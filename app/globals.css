@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Caveat:wght@400;500;600;700&family=Poppins:wght@300;400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -84,20 +82,20 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Poppins', sans-serif;
+    font-family: var(--font-poppins), sans-serif;
   }
 
   h1, h2, h3, .font-display {
-    font-family: 'Luckiest Guy', cursive;
+    font-family: var(--font-luckiest-guy), cursive;
     letter-spacing: 0.02em;
   }
 
   .font-handwritten {
-    font-family: 'Caveat', cursive;
+    font-family: var(--font-caveat), cursive;
   }
 
   .font-body {
-    font-family: 'Poppins', sans-serif;
+    font-family: var(--font-poppins), sans-serif;
   }
 }
 

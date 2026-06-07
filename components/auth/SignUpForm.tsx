@@ -10,15 +10,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { auth } from "@/lib/firebase";
-import { useFirebase } from "@/providers/FirebaseAuthProvider";
+import { signIn } from "next-auth/react";
 
 export function SignUpForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const { toggleView, closeModal } = useAuthModal();
-  const { loginWithGoogle } = useFirebase();
   const router = useRouter();
 
   const {
@@ -33,101 +30,118 @@ export function SignUpForm() {
     try {
       setIsLoading(true);
 
-      if (!data.email || !data.password) return;
-      // 1. Create user in Firebase
-      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
-      
-      // 2. Update display name
-      await updateProfile(userCredential.user, {
-          displayName: data.name
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
       });
 
-      toast.success("Account created successfully!");
-      closeModal();
-      window.location.href = "/editor";
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Registration failed");
+      }
+
+      // Automatically sign in after registration
+      const signInResult = await signIn("credentials", {
+        email: data.email,
+        password: data.password,
+        redirect: false,
+      });
+
+      if (signInResult?.error) {
+        toast.error("Account created, but failed to sign in automatically");
+        toggleView(); // Switch to sign in
+      } else {
+        toast.success("Account created successfully!");
+        closeModal();
+        router.push("/customize");
+        router.refresh();
+      }
     } catch (error: any) {
       console.error("Signup error:", error);
-      toast.error(error.message || "Registration failed. Please choose a stronger password.");
+      toast.error(error.message || "Registration failed. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGoogleSignUp = async () => {
+  const handleGoogleSignIn = async () => {
     try {
       setIsGoogleLoading(true);
-      await loginWithGoogle();
-      closeModal();
-      window.location.href = "/editor";
+      const callbackUrl = `${window.location.origin}/customize`;
+      await signIn("google", { callbackUrl });
     } catch (error) {
       console.error("Google Signup Error:", error);
       toast.error("Failed to sign up with Google");
-    } finally {
       setIsGoogleLoading(false);
     }
   };
 
   return (
-    <div className="space-y-6">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="name">Full Name</Label>
+    <div className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+        <div className="space-y-1">
+          <Label htmlFor="name" className="text-xs">Full Name</Label>
           <Input
             id="name"
             type="text"
             placeholder="John Doe"
             {...register("name")}
             disabled={isLoading}
+            className="h-9 text-sm"
           />
           {errors.name && (
-            <p className="text-sm text-red-400">{errors.name.message}</p>
+            <p className="text-[10px] text-red-400">{errors.name.message}</p>
           )}
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
+        <div className="space-y-1">
+          <Label htmlFor="email" className="text-xs">Email</Label>
           <Input
             id="email"
             type="email"
             placeholder="your@email.com"
             {...register("email")}
             disabled={isLoading}
+            className="h-9 text-sm"
           />
           {errors.email && (
-            <p className="text-sm text-red-400">{errors.email.message}</p>
+            <p className="text-[10px] text-red-400">{errors.email.message}</p>
           )}
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+        <div className="space-y-1">
+          <Label htmlFor="password" className="text-xs">Password</Label>
           <Input
             id="password"
             type="password"
             placeholder="••••••••"
             {...register("password")}
             disabled={isLoading}
+            className="h-9 text-sm"
           />
           {errors.password && (
-            <p className="text-sm text-red-400">{errors.password.message}</p>
+            <p className="text-[10px] text-red-400">{errors.password.message}</p>
           )}
         </div>
 
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full h-12 rounded-lg bg-gradient-to-r from-coral via-teal to-yellow text-white font-semibold hover:opacity-90 transition-opacity duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="w-full h-10 rounded-lg bg-gradient-to-r from-coral via-teal to-yellow text-white text-sm font-semibold hover:opacity-90 transition-opacity duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
-          {isLoading && <Loader2 className="w-5 h-5 animate-spin" />}
+          {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
           {isLoading ? "Creating account..." : "Sign Up"}
         </button>
       </form>
 
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
-          <div className="w-full border-t border-white/20"></div>
+          <div className="w-full border-t border-white/10"></div>
         </div>
-        <div className="relative flex justify-center text-sm">
-          <span className="px-4 bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 text-neutral-400">
+        <div className="relative flex justify-center text-[10px] uppercase tracking-widest text-[#ffffff60]">
+          <span className="px-2 bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900">
             Or continue with
           </span>
         </div>
@@ -135,14 +149,14 @@ export function SignUpForm() {
 
       <button
         type="button"
-        onClick={handleGoogleSignUp}
+        onClick={handleGoogleSignIn}
         disabled={isGoogleLoading || isLoading}
-        className="w-full h-12 rounded-lg border-2 border-white/20 bg-white/5 backdrop-blur-sm text-white font-semibold hover:bg-white/10 hover:border-white/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+        className="w-full h-10 rounded-lg border border-white/20 bg-white/5 backdrop-blur-sm text-white text-sm font-semibold hover:bg-white/10 hover:border-white/30 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
         {isGoogleLoading ? (
-          <Loader2 className="w-5 h-5 animate-spin" />
+          <Loader2 className="w-4 h-4 animate-spin" />
         ) : (
-          <svg className="w-5 h-5" viewBox="0 0 24 24">
+          <svg className="w-4 h-4" viewBox="0 0 24 24">
             <path
               fill="currentColor"
               d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -164,12 +178,12 @@ export function SignUpForm() {
         {isGoogleLoading ? "Connecting..." : "Continue with Google"}
       </button>
 
-      <div className="text-center text-sm">
+      <div className="text-center text-xs">
         <span className="text-neutral-400">Already have an account? </span>
         <button
           type="button"
           onClick={toggleView}
-          className="text-teal hover:text-coral transition-colors duration-200 font-semibold"
+          className="text-teal hover:text-coral transition-colors duration-200 font-semibold underline"
         >
           Sign in
         </button>

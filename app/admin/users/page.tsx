@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, RotateCcw, Ban, CheckCircle, CreditCard, ChevronLeft, ChevronRight } from "lucide-react";
-import { db } from "@/lib/firebase";
-import { collection, query, orderBy, limit, getDocs, doc, updateDoc, getCountFromServer } from "firebase/firestore";
+import { Search, RotateCcw, Ban, CheckCircle, CreditCard, ChevronLeft, ChevronRight, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 
 interface User {
@@ -30,76 +28,45 @@ export default function AdminUsersPage() {
     fetchUsers();
   }, [page, search]);
 
-  const fetchUsers = async (silent = false) => {
-    if (!silent) setLoading(true);
+  const fetchUsers = async () => {
+    setLoading(true);
     try {
-      const usersRef = collection(db, "users");
-      
-      // Get count
-      const countSnapshot = await getCountFromServer(usersRef);
-      setTotal(countSnapshot.data().count);
-      setTotalPages(Math.ceil(countSnapshot.data().count / 15));
-
-      // Get users with limit and filter
-      const q = query(
-        usersRef, 
-        orderBy("updatedAt", "desc"), 
-        limit(50) // We'll client-side filter/search for simplicity since firestore search is limited
-      );
-      
-      const snapshot = await getDocs(q);
-      let usersData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate()?.toISOString() || doc.data().createdAt
-      })) as User[];
-
-      // Strictly show Firebase users
-      usersData = usersData.filter(u => 
-        u.provider === "google.com" || 
-        u.provider === "google" || 
-        u.provider === "credentials" || 
-        u.provider === "password"
-      );
-
-      if (search) {
-        const lowerSearch = search.toLowerCase();
-        usersData = usersData.filter(u => 
-          u.name?.toLowerCase().includes(lowerSearch) || 
-          u.email?.toLowerCase().includes(lowerSearch)
-        );
+      const res = await fetch(`/api/admin/users?page=${page}&search=${search}`);
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(data.users);
+        setTotal(data.total);
+        setTotalPages(data.totalPages);
       }
-
-      setUsers(usersData.slice((page - 1) * 15, page * 15));
     } catch (error) {
-      console.error("Error:", error);
+      toast.error("Failed to load users");
     } finally {
-      if (!silent) setLoading(false);
+      setLoading(false);
     }
   };
 
-  const handleAction = async (userId: string, action: string) => {
+  const handleAction = async (userId: string, action: string, value?: any) => {
     setActionLoading(userId);
     try {
-      const userRef = doc(db, "users", userId);
-      const user = users.find(u => u.id === userId);
+      const res = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, action, value }),
+      });
       
-      switch(action) {
-        case "toggleDisable":
-          await updateDoc(userRef, { isDisabled: !user?.isDisabled, updatedAt: new Date() });
-          break;
-        case "togglePurchased":
-          await updateDoc(userRef, { isPurchased: !user?.isPurchased, updatedAt: new Date() });
-          break;
+      if (res.ok) {
+        toast.success("User updated successfully");
+        fetchUsers();
+      } else {
+        throw new Error("Action failed");
       }
-      toast.success("User updated");
-      fetchUsers(true);
     } catch (error) {
       toast.error("Action failed");
     } finally {
       setActionLoading(null);
     }
   };
+
 
   return (
     <div className="space-y-6">
