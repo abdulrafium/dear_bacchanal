@@ -5,7 +5,7 @@ import { ObjectId } from "mongodb";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { orderId: string } }
+  { params }: { params: Promise<{ orderId: string }> }
 ) {
   const user = await getServerAuth();
   if (!user) {
@@ -13,7 +13,7 @@ export async function GET(
   }
 
   try {
-    const { orderId } = params;
+    const { orderId } = await params;
     const db = await getDatabase();
     
     const order = await db.collection("orders").findOne({ _id: new ObjectId(orderId) });

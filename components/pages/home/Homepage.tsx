@@ -33,18 +33,18 @@ const Homepage = () => {
 
   // If user is already authenticated, send them to the appropriate dashboard
   const { user } = useAuth();
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      closeModal();
-      if (user.isAdmin) {
-        console.log("Admin detected, redirecting to admin dashboard...");
-        router.push("/admin/dashboard");
-      } else {
-        console.log("Regular user detected, redirecting to customize...");
-        router.push("/customize");
-      }
-    }
-  }, [isAuthenticated, user, router, closeModal]);
+  // useEffect(() => {
+  //   if (isAuthenticated && user) {
+  //     closeModal();
+  //     if (user.isAdmin) {
+  //       console.log("Admin detected, redirecting to admin dashboard...");
+  //       router.push("/admin/dashboard");
+  //     } else {
+  //       console.log("Regular user detected, redirecting to customize...");
+  //       router.push("/customize");
+  //     }
+  //   }
+  // }, [isAuthenticated, user, router, closeModal]);
 
   const handleAction = () => {
     if (isAuthenticated) {

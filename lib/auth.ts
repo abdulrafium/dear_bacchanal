@@ -131,10 +131,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async jwt({ token, user, account }) {
       // First, handle the initial login (this part is Edge-compatible if it doesn't use DB)
       if (user) {
-        token.id = user.id;
-        token.provider = user.provider || (account?.provider === "google" ? "google" : "credentials");
-        token.isAdmin = user.isAdmin;
-        token.isPurchased = user.isPurchased;
+        const u = user as any;
+        token.id = u.id;
+        token.provider = u.provider || (account?.provider === "google" ? "google" : "credentials");
+        token.isAdmin = u.isAdmin;
+        token.isPurchased = u.isPurchased;
         token.lastSynced = Date.now();
       }
 

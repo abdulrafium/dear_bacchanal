@@ -158,7 +158,7 @@ const TemplatesPage = () => {
                   <span>Total Images</span>
                 </div>
               </div>
-              
+
               <Link href="/editor?new=true">
                 <Button className="bg-gradient-to-r from-coral to-teal text-white hover:shadow-lg transition-all duration-300 rounded-full px-6">
                   <Plus className="w-4 h-4 mr-2" />
