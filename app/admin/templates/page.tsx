@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Edit, Trash2, BookOpen, ToggleLeft, ToggleRight, Upload, Loader2 } from "lucide-react";
+import { Plus, Edit, Trash2, BookOpen, ToggleLeft, ToggleRight, Upload, Loader2, AlertTriangle } from "lucide-react";
 import Link from "next/link";
-import { getAvailableTemplates, BookTemplate } from "@/lib/book-templates";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 export default function AdminTemplatesPage() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [templateToDelete, setTemplateToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchTemplates = async () => {
     try {
@@ -56,22 +58,30 @@ export default function AdminTemplatesPage() {
     }
   };
 
-  const handleDelete = async (templateName: string) => {
-    if (!confirm("Are you sure you want to delete this template?")) return;
+  const handleDeleteClick = (templateName: string) => {
+    setTemplateToDelete(templateName);
+  };
+
+  const confirmDelete = async () => {
+    if (!templateToDelete) return;
+    setIsDeleting(true);
 
     try {
-      const res = await fetch(`/api/admin/templates/${encodeURIComponent(templateName)}`, {
+      const res = await fetch(`/api/admin/templates/${encodeURIComponent(templateToDelete)}`, {
         method: "DELETE"
       });
 
       if (res.ok) {
-        setTemplates(templates.filter(t => (t.templateName || t.name) !== templateName));
-        toast.success("Template deleted");
+        setTemplates(templates.filter(t => (t.templateName || t.name) !== templateToDelete));
+        toast.success("Template deleted successfully");
+        setTemplateToDelete(null);
       } else {
         toast.error("Failed to delete template");
       }
     } catch (err) {
-      toast.error("An error occurred");
+      toast.error("An error occurred while deleting");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -126,11 +136,12 @@ export default function AdminTemplatesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {templates.map((template) => {
             const name = template.templateName || template.name;
+            const templateThumb = (template.thumbnail && !template.thumbnail.includes("/img/templates/")) ? template.thumbnail : "/book-cover.jpg";
             return (
               <div key={template._id || template.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow group animate-in fade-in slide-in-from-bottom-2 duration-500">
                 <div className="aspect-[4/3] relative bg-[#9f2e2b] overflow-hidden">
                   <img 
-                    src={template.thumbnail} 
+                    src={templateThumb} 
                     alt={name}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-80 group-hover:opacity-100"
                   />
@@ -178,7 +189,7 @@ export default function AdminTemplatesPage() {
                     </Link>
                     {!template.isHardCoded && (
                       <button 
-                        onClick={() => handleDelete(name)}
+                        onClick={() => handleDeleteClick(name)}
                         className="p-2 aspect-square rounded-lg text-red-500 hover:bg-red-50 border border-transparent hover:border-red-100 transition-all"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -202,7 +213,37 @@ export default function AdminTemplatesPage() {
           </Link>
         </div>
       )}
+
+      <Dialog open={!!templateToDelete} onOpenChange={(open) => !open && setTemplateToDelete(null)}>
+        <DialogContent className="sm:max-w-md bg-white border-none shadow-2xl p-0 overflow-hidden">
+          <div className="bg-red-50 p-6 flex flex-col items-center text-center">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+              <AlertTriangle className="w-8 h-8 text-red-500" />
+            </div>
+            <DialogTitle className="text-2xl font-display tracking-tight text-gray-900 mb-2">Delete Template?</DialogTitle>
+            <DialogDescription className="text-gray-600 font-body text-sm max-w-[280px]">
+              Are you sure you want to delete <strong className="text-gray-900">{templateToDelete}</strong>? This action cannot be undone and will remove it from the system forever.
+            </DialogDescription>
+          </div>
+          <DialogFooter className="p-4 bg-gray-50 flex gap-2 sm:justify-center border-t border-gray-100">
+            <button
+              onClick={() => setTemplateToDelete(null)}
+              className="flex-1 px-4 py-2.5 rounded-xl font-bold text-gray-600 bg-white border border-gray-200 hover:bg-gray-50 transition-colors"
+              disabled={isDeleting}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDelete}
+              disabled={isDeleting}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              {isDeleting ? "Deleting..." : "Delete Permanently"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-

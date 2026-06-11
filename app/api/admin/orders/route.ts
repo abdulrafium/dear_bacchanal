@@ -1,9 +1,18 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { NextRequest, NextResponse } from "next/server";
+
 import { getDatabase } from "@/lib/db";
+
 import { adminAuthMiddleware } from "@/lib/admin-auth";
+
 import { ObjectId } from "mongodb";
+
 import { sendEmail } from "@/lib/mail-service";
+
 import { getOrderCompletedEmail, getRefundEmail } from "@/lib/email-templates";
+
 
 // GET - List all orders
 export async function GET(req: NextRequest) {
@@ -113,3 +122,5 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+

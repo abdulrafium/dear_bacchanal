@@ -1,6 +1,12 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { NextRequest, NextResponse } from "next/server";
+
 import { getDatabase } from "@/lib/db";
+
 import { auth } from "@/lib/auth";
+
 
 export async function GET() {
   try {
@@ -38,3 +44,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to add sticker" }, { status: 500 });
   }
 }
+
+

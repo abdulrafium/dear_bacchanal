@@ -18,8 +18,11 @@ import {
   History,
   Info,
   Undo2,
-  Download
+  Download,
+  Trash2,
+  AlertTriangle
 } from "lucide-react";
+import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Link from "next/link";
@@ -51,6 +54,8 @@ const CustomizeRitual = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<"global" | "saved" | "orders">("global");
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(true);
+  const [templateToDelete, setTemplateToDelete] = useState<{id: string, name: string} | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -100,6 +105,32 @@ const CustomizeRitual = () => {
         fetchOrders();
     }
   }, [activeTab, isAuthenticated]);
+
+  const confirmDelete = async () => {
+    if (!templateToDelete) return;
+    setIsDeleting(true);
+    
+    try {
+      const res = await fetch("/api/editor/delete", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: templateToDelete.id })
+      });
+
+      if (res.ok) {
+        setUserTemplates(prev => prev.filter(t => t._id !== templateToDelete.id));
+        toast.success("Design deleted successfully");
+        setTemplateToDelete(null);
+      } else {
+        toast.error("Failed to delete design");
+      }
+    } catch (error) {
+      console.error("Error deleting design:", error);
+      toast.error("An error occurred");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const fetchOrders = async () => {
     setIsLoadingOrders(true);
@@ -388,81 +419,7 @@ const CustomizeRitual = () => {
             </div>
           </div>
 
-          {isLoadingTemplates ? (
-            <div className="py-32 flex flex-col items-center justify-center gap-6">
-              <div className="relative">
-                <Loader2 className="w-16 h-16 text-primary animate-spin" />
-                <Sparkles className="absolute -top-2 -right-2 w-6 h-6 text-yellow animate-pulse" />
-              </div>
-              <p className="text-muted-foreground font-body tracking-widest uppercase text-xs animate-pulse">Loading artist-curated templates...</p>
-            </div>
-          ) : filteredTemplates.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-              {filteredTemplates.map((template) => {
-                const isGlobal = activeTab === "global";
-                const templateName = isGlobal ? template.name : template.bookName;
-                const templateThumb = isGlobal ? template.thumbnail : "/book-cover.jpg"; // Fallback for saved books
-
-                return (
-                  <div 
-                    key={template._id}
-                    className="group relative bg-white/5 rounded-[40px] overflow-hidden border border-white/10 hover:border-primary/50 transition-all duration-700 hover:shadow-[0_40px_80px_rgba(0,0,0,0.4)]"
-                  >
-                    <div className="aspect-[3/2] overflow-hidden relative">
-                      <img 
-                        src={templateThumb} 
-                        alt={templateName}
-                        className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent opacity-80" />
-                      
-                      <div className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 bg-primary/20 backdrop-blur-[2px]">
-                         <Button 
-                           variant="carnival" 
-                           size="md"
-                           onClick={() => handleTemplateSelect(templateName)}
-                           className="shadow-2xl translate-y-4 group-hover:translate-y-0 transition-transform duration-500 uppercase px-8"
-                          >
-                           {isGlobal ? "START CREATING" : "CONTINUE EDITING"}
-                         </Button>
-                      </div>
-
-                      <div className="absolute top-4 left-4 flex gap-2">
-                         <span className="bg-white/10 backdrop-blur-xl border border-white/20 px-3 py-1 rounded-full text-[9px] text-white font-bold uppercase tracking-widest flex items-center gap-1.5">
-                           {isGlobal ? <Globe className="w-2.5 h-2.5 text-teal" /> : <Book className="w-2.5 h-2.5 text-coral" />}
-                           {isGlobal ? template.country : "Saved Design"}
-                         </span>
-                      </div>
-                    </div>
-
-                    <div className="p-6 space-y-3">
-                      <div className="flex justify-between items-start">
-                        <h3 className="font-display text-xl text-white group-hover:text-primary transition-colors uppercase">{templateName}</h3>
-                        <span className="text-primary font-display text-lg">/ {template.year || "2026"}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground/80 font-body leading-relaxed line-clamp-2">
-                        {isGlobal ? template.description : `Last updated on ${new Date(template.updatedAt).toLocaleDateString()}`}
-                      </p>
-                      <div className="pt-4 border-t border-white/5 flex items-center justify-between">
-                         <div className="flex items-center gap-2 text-[9px] text-muted-foreground uppercase tracking-widest font-bold">
-                            <CalendarIcon className="w-2.5 h-2.5" />
-                            {isGlobal ? "Limited Release" : "Cloud Sync Active"}
-                         </div>
-                         <Button 
-                           variant="ghost" 
-                           size="sm" 
-                           onClick={() => handleTemplateSelect(templateName)}
-                           className="text-primary hover:text-white hover:bg-primary/20 transition-all rounded-full px-4 text-[10px] flex items-center gap-1.5"
-                         >
-                           {isGlobal ? "SELECT" : "OPEN"} <ArrowRight className="w-2.5 h-2.5" />
-                         </Button>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : activeTab === "orders" ? (
+          {activeTab === "orders" ? (
              <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
                 {isLoadingOrders ? (
                    <div className="py-20 flex flex-col items-center justify-center gap-4">
@@ -484,12 +441,12 @@ const CustomizeRitual = () => {
                                         <div>
                                             <div className="flex items-center gap-2 mb-1">
                                                 <span className="text-[10px] text-primary/60 font-black uppercase tracking-[0.2em]">Transaction ID</span>
-                                                <span className="px-2 py-0.5 rounded-md bg-white/10 text-[10px] text-white/40 font-mono">{order.id?.slice(-8).toUpperCase()}</span>
+                                                <span className="px-2 py-0.5 rounded-md bg-white/10 text-[10px] text-white/40 font-mono">{(order.orderId || order.id || order._id || "").slice(-8).toUpperCase()}</span>
                                             </div>
                                             <h3 className="text-2xl font-display text-white uppercase">{order.templateName || "Custom Carnival Book"}</h3>
                                         </div>
                                         <div className="text-right">
-                                            <div className="text-2xl font-display text-primary">${(order.totalAmount / 100).toFixed(2)}</div>
+                                            <div className="text-2xl font-display text-primary">${(Number(order.amount || order.totalAmount || 0) / 100).toFixed(2)}</div>
                                             <div className="text-[10px] text-white/40 uppercase tracking-widest">{new Date(order.createdAt).toLocaleDateString(undefined, { dateStyle: 'long' })}</div>
                                         </div>
                                     </div>
@@ -551,6 +508,91 @@ const CustomizeRitual = () => {
                     </div>
                 )}
              </div>
+          ) : isLoadingTemplates ? (
+            <div className="py-32 flex flex-col items-center justify-center gap-6">
+              <div className="relative">
+                <Loader2 className="w-16 h-16 text-primary animate-spin" />
+                <Sparkles className="absolute -top-2 -right-2 w-6 h-6 text-yellow animate-pulse" />
+              </div>
+              <p className="text-muted-foreground font-body tracking-widest uppercase text-xs animate-pulse">Loading artist-curated templates...</p>
+            </div>
+          ) : filteredTemplates.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
+              {filteredTemplates.map((template) => {
+                const isGlobal = activeTab === "global";
+                const templateName = isGlobal ? template.name : template.bookName;
+                const templateThumb = (isGlobal && template.thumbnail && !template.thumbnail.includes("/img/templates/")) ? template.thumbnail : "/book-cover.jpg";
+
+                return (
+                  <div 
+                    key={template._id}
+                    className="group relative bg-white/5 rounded-[40px] overflow-hidden border border-white/10 hover:border-primary/50 transition-all duration-700 hover:shadow-[0_40px_80px_rgba(0,0,0,0.4)]"
+                  >
+                    <div className="aspect-[3/2] overflow-hidden relative">
+                      <img 
+                        src={templateThumb} 
+                        alt={templateName}
+                        className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/60 opacity-90" />
+                      
+                      <div className="absolute inset-0 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 bg-primary/20 backdrop-blur-[2px]">
+                         <Button 
+                           variant="carnival" 
+                           size="default"
+                           onClick={() => handleTemplateSelect(templateName)}
+                           className="shadow-2xl translate-y-4 group-hover:translate-y-0 transition-transform duration-500 uppercase px-8"
+                          >
+                           {isGlobal ? "START CREATING" : "CONTINUE EDITING"}
+                         </Button>
+                      </div>
+
+                      <div className="absolute top-4 left-4 flex gap-2">
+                         <span className="bg-black/50 backdrop-blur-md border border-white/20 px-3 py-1 rounded-full text-[10px] text-white font-bold uppercase tracking-widest flex items-center gap-1.5 shadow-lg">
+                           {isGlobal ? <Globe className="w-2.5 h-2.5 text-teal drop-shadow-md" /> : <Book className="w-2.5 h-2.5 text-coral drop-shadow-md" />}
+                           <span className="drop-shadow-md">{isGlobal ? template.country : "Saved Design"}</span>
+                         </span>
+                      </div>
+                    </div>
+
+                    <div className="p-6 space-y-3">
+                      <div className="flex justify-between items-start">
+                        <h3 className="font-display text-xl text-white group-hover:text-primary transition-colors uppercase">{templateName}</h3>
+                        <span className="text-primary font-display text-lg">/ {template.year || "2026"}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground/80 font-body leading-relaxed line-clamp-2">
+                        {isGlobal ? template.description : `Last updated on ${new Date(template.updatedAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}`}
+                      </p>
+                      <div className="pt-4 border-t border-white/5 flex items-center justify-between">
+                         <div className="flex items-center gap-2 text-[9px] text-muted-foreground uppercase tracking-widest font-bold">
+                            <CalendarIcon className="w-2.5 h-2.5" />
+                            {isGlobal ? "Limited Release" : "Cloud Sync Active"}
+                         </div>
+                         <div className="flex items-center gap-2">
+                           {!isGlobal && (
+                             <button
+                               onClick={() => setTemplateToDelete({ id: template._id, name: templateName })}
+                               className="p-1.5 aspect-square rounded-full text-red-500 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-all"
+                               title="Delete Design"
+                             >
+                               <Trash2 className="w-4 h-4" />
+                             </button>
+                           )}
+                           <Button 
+                             variant="ghost" 
+                             size="sm" 
+                             onClick={() => handleTemplateSelect(templateName)}
+                             className="text-primary hover:text-white hover:bg-primary/20 transition-all rounded-full px-4 text-[10px] flex items-center gap-1.5"
+                           >
+                             {isGlobal ? "SELECT" : "OPEN"} <ArrowRight className="w-2.5 h-2.5" />
+                           </Button>
+                         </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           ) : (
             <div className="py-32 text-center bg-white/5 rounded-[40px] border border-dashed border-white/20">
                <Search className="w-16 h-16 text-muted-foreground/20 mx-auto mb-6" />
@@ -604,6 +646,38 @@ const CustomizeRitual = () => {
           </div>
         </div>
       </section>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={!!templateToDelete} onOpenChange={(open) => !open && setTemplateToDelete(null)}>
+        <DialogContent className="sm:max-w-md bg-[#1a1a1a] border-white/10 shadow-2xl p-0 overflow-hidden">
+          <div className="bg-red-500/10 p-6 flex flex-col items-center text-center">
+            <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mb-4">
+              <AlertTriangle className="w-8 h-8 text-red-500" />
+            </div>
+            <DialogTitle className="text-2xl font-display tracking-tight text-white mb-2">Delete Design?</DialogTitle>
+            <DialogDescription className="text-gray-400 font-body text-sm max-w-[280px]">
+              Are you sure you want to delete <strong className="text-white">{templateToDelete?.name}</strong>? This action cannot be undone and will remove it from your designs forever.
+            </DialogDescription>
+          </div>
+          <DialogFooter className="p-4 bg-[#111] flex gap-2 sm:justify-center border-t border-white/5">
+            <button
+              onClick={() => setTemplateToDelete(null)}
+              className="flex-1 px-4 py-2.5 rounded-xl font-bold text-gray-300 bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+              disabled={isDeleting}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmDelete}
+              disabled={isDeleting}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              {isDeleting ? "Deleting..." : "Delete Permanently"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

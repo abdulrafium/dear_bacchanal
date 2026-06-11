@@ -45,18 +45,18 @@ export async function POST(req: NextRequest) {
                         return acc + leftStickers + rightStickers;
                     }, 0) || 0;
 
-                    // Base price includes first 10 spreads (20 pages)
-                    if (spreadsCount > 10) {
+                    // Base price includes first 16 spreads (32 pages)
+                    if (spreadsCount > 16) {
                         lineItems.push({
                             price_data: {
                                 currency: 'usd',
                                 product_data: { 
                                     name: "Additional Spreads (Pages Pack)",
-                                    description: `Added ${spreadsCount - 10} extra spreads`
+                                    description: `Added ${spreadsCount - 16} extra spreads`
                                 },
                                 unit_amount: pricing.extraSpreadPrice || 500,
                             },
-                            quantity: spreadsCount - 10,
+                            quantity: spreadsCount - 16,
                         });
                     }
 

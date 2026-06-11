@@ -138,6 +138,23 @@ export async function GET(req: NextRequest) {
             });
         }
 
+        // Mark the user_book as ordered so it disappears from My Designs
+        const bookId = checkoutSession.metadata?.bookId;
+        if (bookId) {
+            const userBooksCollection = db.collection("user_books");
+            let bookQuery: any;
+            try {
+                if (bookId.length === 24) {
+                    bookQuery = { _id: new ObjectId(bookId) };
+                } else {
+                    bookQuery = { _id: bookId };
+                }
+            } catch {
+                bookQuery = { _id: bookId };
+            }
+            await userBooksCollection.updateOne(bookQuery, { $set: { isOrdered: true } });
+        }
+
         return NextResponse.json({
             success: true,
             session: { shipping_details: checkoutSession.shipping_details, metadata: checkoutSession.metadata },

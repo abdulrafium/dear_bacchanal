@@ -113,7 +113,7 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
     fetchCities();
   }, [shippingInfo.country, step]);
 
-  const extraSpreads = Math.max(0, spreads.length - 10);
+  const extraSpreads = Math.max(0, spreads.length - 16);
   const stickersCount = spreads.reduce((acc, s) => {
     const leftS = s.leftPage?.elements?.filter(e => e.type === 'sticker').length || 0;
     const rightS = s.rightPage?.elements?.filter(e => e.type === 'sticker').length || 0;
@@ -143,6 +143,14 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
     setLoading(true);
 
     try {
+      // FORCE SAVE BEFORE CHECKOUT
+      // This ensures the database has the latest page count for accurate Stripe add-on pricing
+      const saveBook = useEditorStore.getState().save;
+      await saveBook();
+
+      // Get the freshest bookId from the store (since save updates it from global template -> user book)
+      const freshestBookId = useEditorStore.getState().activeTemplateId;
+
       const response = await fetch("/api/checkout", {
         method: "POST",
         headers: {
@@ -151,7 +159,7 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
         body: JSON.stringify({ 
             type: selectedType,
             templateName: activeTemplateName,
-            bookId: bookId,
+            bookId: freshestBookId || bookId,
             shippingInfo: selectedType === "hard" ? shippingInfo : undefined,
             shippingRate: selectedType === "hard" ? shippingRate : undefined
         }),

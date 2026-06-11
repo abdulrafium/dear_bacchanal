@@ -1,8 +1,16 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { NextRequest, NextResponse } from "next/server";
+
 import { getDatabase } from "@/lib/db";
+
 import { adminAuthMiddleware } from "@/lib/admin-auth";
+
 import { ObjectId } from "mongodb";
+
 import { hash } from "bcryptjs";
+
 
 // GET - List all users
 export async function GET(req: NextRequest) {
@@ -107,3 +115,5 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+

@@ -108,6 +108,23 @@ export async function POST(req: NextRequest) {
             await ordersCollection.insertOne(orderRecord);
             console.log(`Order record created for session ${session.id}`);
 
+            // Mark user_book as ordered so it disappears from My Designs
+            if (session.metadata?.bookId) {
+                const userBooksCollection = db.collection("user_books");
+                let bookQuery: any;
+                try {
+                    if (session.metadata.bookId.length === 24) {
+                        bookQuery = { _id: new ObjectId(session.metadata.bookId) };
+                    } else {
+                        bookQuery = { _id: session.metadata.bookId };
+                    }
+                } catch {
+                    bookQuery = { _id: session.metadata.bookId };
+                }
+                await userBooksCollection.updateOne(bookQuery, { $set: { isOrdered: true } });
+                console.log(`Marked book ${session.metadata.bookId} as ordered`);
+            }
+
             // TRIGGER PRINT API FOR HARD COPIES
             if (orderType === 'hard') {
                 try {

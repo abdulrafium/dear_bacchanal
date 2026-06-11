@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";
 import { getServerAuth } from "@/lib/server-auth";
 
+export const dynamic = "force-dynamic";
+
 // GET - Retrieve all saved templates for the current user
 export async function GET(req: NextRequest) {
   try {
@@ -18,9 +20,15 @@ export async function GET(req: NextRequest) {
     const db = await getDatabase();
     const userBooksCollection = db.collection("user_books");
 
-    // Find all user books, projecting only necessary fields for list view
+    // Find all user books matching userId or email
     const templates = await userBooksCollection
-      .find({ userId })
+      .find({ 
+        $or: [
+          { userId },
+          { email: user.email }
+        ],
+        isOrdered: { $ne: true }
+      })
       .project({ 
         activeTemplateName: 1, 
         createdAt: 1, 

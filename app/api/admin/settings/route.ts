@@ -1,7 +1,14 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { NextRequest, NextResponse } from "next/server";
+
 import { getDatabase } from "@/lib/db";
+
 import { adminAuthMiddleware } from "@/lib/admin-auth";
+
 import { PlatformSettings } from "@/types/settings";
+
 
 const DEFAULT_SETTINGS: PlatformSettings = {
   pricing: {
@@ -88,3 +95,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+

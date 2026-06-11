@@ -32,11 +32,12 @@ interface Order {
   email: string;
   orderId: string;
   amount: number;
+  totalAmount?: number;
   currency: string;
   type: 'soft' | 'hard';
   templateName?: string;
   bookId?: string;
-  status: 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  status: 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refund_pending' | 'refunded';
   shippingDetails?: any;
   paymentMethod: string;
   customerName?: string;
@@ -384,7 +385,7 @@ export default function AdminOrdersPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="text-white font-black text-sm">
-                            ${((order.amount || 0) / 100).toFixed(2)}
+                            ${(Number(order.amount || order.totalAmount || 0) / 100).toFixed(2)}
                             <span className="text-[10px] text-white/20 ml-1">{(order.currency || 'USD').toUpperCase()}</span>
                         </div>
                       </td>
@@ -604,11 +605,11 @@ export default function AdminOrdersPage() {
                                 <div className="grid grid-cols-2 gap-12 mb-16 relative">
                                     <div className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-100 hidden sm:block" />
                                     <div>
-                                        <p className="text-[10px] font-black uppercase tracking-[4px] text-gray-300 mb-6 flex items-center gap-2">
+                                        <div className="text-[10px] font-black uppercase tracking-[4px] text-gray-300 mb-6 flex items-center gap-2">
                                             <div className="w-1.5 h-1.5 rounded-full bg-[#be2826]" />
                                             Billed To
-                                        </p>
-                                        <p className="text-xl font-black text-gray-900">{invoiceData.customer.name}</p>
+                                        </div>
+                                        <div className="text-xl font-black text-gray-900">{invoiceData.customer.name}</div>
                                         <p className="text-sm font-bold text-[#be2826] mt-1">{invoiceData.customer.email}</p>
                                         <div className="text-xs text-gray-500 mt-4 leading-relaxed font-medium">
                                             <p>{invoiceData.customer.address.line1}</p>
@@ -618,12 +619,12 @@ export default function AdminOrdersPage() {
                                         </div>
                                     </div>
                                     <div className="sm:pl-12">
-                                        <p className="text-[10px] font-black uppercase tracking-[4px] text-gray-300 mb-6 flex items-center gap-2">
+                                        <div className="text-[10px] font-black uppercase tracking-[4px] text-gray-300 mb-6 flex items-center gap-2">
                                             <div className="w-1.5 h-1.5 rounded-full bg-[#ecb52b]" />
                                             From
-                                        </p>
-                                        <p className="text-xl font-black text-gray-900">Dear Bacchanal Ltd.</p>
-                                        <p className="text-sm font-bold text-gray-500 mt-1">billing@dearbacchanal.com</p>
+                                        </div>
+                                        <div className="text-xl font-black text-gray-900">Dear Bacchanal Ltd.</div>
+                                        <div className="text-sm font-bold text-gray-500 mt-1">billing@dearbacchanal.com</div>
                                         <div className="text-xs text-gray-400 mt-4 leading-relaxed font-medium">
                                             <p>123 Carnival Way</p>
                                             <p>Port of Spain, Trinidad & Tobago</p>

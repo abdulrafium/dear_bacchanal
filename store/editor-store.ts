@@ -323,6 +323,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         },
       ],
     });
+    get().save();
   },
 
   duplicateSpread: (index) => {
@@ -340,6 +341,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const newSpreads = [...state.spreads];
     newSpreads.splice(index + 1, 0, duped);
     set({ spreads: newSpreads });
+    get().save();
   },
 
   removeSpread: (index) => {
@@ -351,6 +353,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       spreads: newSpreads,
       currentSpreadIndex: Math.min(state.currentSpreadIndex, newSpreads.length - 1),
     });
+    get().save();
   },
 
   updatePageBackground: (pageId, background) => {
@@ -421,7 +424,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       
       const data = await res.json();
       
-      if (!activeTemplateId && data.templateId) {
+      if (data.templateId) {
         set({ activeTemplateId: data.templateId });
       }
       

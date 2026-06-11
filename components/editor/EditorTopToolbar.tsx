@@ -93,15 +93,15 @@ export function EditorTopToolbar() {
 
         <div className="w-px h-6 bg-gray-200 mx-0.5 sm:mx-1 hidden sm:block" />
 
-        <div className="flex flex-col ml-1 sm:ml-2 mr-2 md:mr-4 hidden xs:flex">
+        <div className="flex flex-col ml-1 sm:ml-2 mr-2 md:mr-4">
           <div className="flex items-center gap-1.5 sm:gap-2">
             <div className="flex flex-col gap-0.5">
               <input 
                 type="text"
-                value={activeTemplateName || "Untitled Book"}
+                value={activeTemplateName || ""}
                 onChange={(e) => useEditorStore.getState().setTemplateMetadata(e.target.value, null)}
                 className="text-[11px] sm:text-sm font-bold text-black bg-white/50 border-b border-gray-100 focus:border-[#2d2d2d] focus:bg-white p-0.5 focus:ring-0 w-20 sm:w-32 md:w-64 outline-none transition-all placeholder:text-gray-300"
-                placeholder="Name..."
+                placeholder="Untitled Book"
               />
             </div>
             <span className="bg-[#2d2d2d] text-white text-[7px] sm:text-[8px] font-bold px-1 sm:px-2 py-0.5 rounded-full uppercase tracking-widest shadow-sm hidden sm:block">

@@ -8,7 +8,7 @@ import { EditorBottomBar } from "./EditorBottomBar";
 import { EditorElementToolbar } from "./EditorElementToolbar";
 import { useEditorStore } from "@/store/editor-store";
 import { useEffect, useState, useRef } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, usePathname } from "next/navigation";
 import { Loader2, Edit3, LayoutGrid, Layout } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
@@ -26,8 +26,9 @@ export default function EditorWorkspace() {
   const { refreshUser } = useAuth();
   
   const searchParams = useSearchParams();
+  const pathname = usePathname();
   const templateName = searchParams.get("templateName");
-  const isAdminParam = searchParams.get("isAdmin") === "true";
+  const isAdminParam = searchParams.get("isAdmin") === "true" || pathname?.includes("/admin");
   
   const [loading, setLoading] = useState(true);
   const lastLoadedRef = useRef<string | null>(null);

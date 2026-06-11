@@ -10,9 +10,14 @@ export async function GET(req: NextRequest) {
     }
 
     const db = await getDatabase();
-    // Fetch orders for this user
+    // Fetch orders for this user by matching their userId or their email
     const orders = await db.collection("orders")
-      .find({ userId: user.id })
+      .find({ 
+        $or: [
+          { userId: user.id },
+          { email: user.email }
+        ]
+      })
       .sort({ createdAt: -1 })
       .toArray();
 

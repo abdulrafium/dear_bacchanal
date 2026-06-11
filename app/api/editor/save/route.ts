@@ -40,14 +40,13 @@ export async function POST(req: NextRequest) {
       
       let query: any = { templateName: finalName };
       
-      // Use ID if available for precision and to allow renaming
-      if (activeTemplateId && typeof activeTemplateId === 'string' && activeTemplateId !== "undefined") {
+      // Use ID if available for precision and to allow renaming. Only use 24-char ObjectIds.
+      if (activeTemplateId && typeof activeTemplateId === 'string' && activeTemplateId !== "undefined" && activeTemplateId !== "preview-id") {
         try {
           if (activeTemplateId.length === 24) {
             query = { _id: new ObjectId(activeTemplateId) };
-          } else {
-            query = { _id: activeTemplateId }; // Hardcoded string ID
           }
+          // Intentionally do NOT use hardcoded string IDs like "bacchanal-2026" as they cause E11000 dup key errors
         } catch (idError) {
           console.error("Invalid template ID format:", activeTemplateId);
           // Fallback to name-based query if ID is invalid
@@ -118,6 +117,7 @@ export async function POST(req: NextRequest) {
             currentSpreadIndex: currentSpreadIndex || 0,
             imageCount: totalImages,
             updatedAt: new Date(),
+            email: user?.email, // Backfill email if missing
           },
           $setOnInsert: {
             userId,

@@ -91,9 +91,13 @@ export async function GET(req: NextRequest) {
           // If the book matches the template series, perform the smart merge
           const currentBook = book;
           if (currentBook.activeTemplateName) {
-            const mergedSpreads = dbTemplate.spreads.map((adminSpread: any, index: number) => {
-              const userSpread = currentBook.spreads && currentBook.spreads[index];
-              if (!userSpread) return adminSpread;
+            const mergedSpreads = currentBook.spreads.map((userSpread: any) => {
+              // Find matching admin spread by ID. If not found, it's a custom user spread.
+              const adminSpread = dbTemplate.spreads.find((as: any) => as.id === userSpread.id);
+              
+              if (!adminSpread) {
+                return userSpread;
+              }
 
               const mergePage = (adminPage: any, userPage: any) => {
                 if (!userPage) return adminPage;

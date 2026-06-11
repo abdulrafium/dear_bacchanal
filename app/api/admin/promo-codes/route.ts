@@ -1,7 +1,14 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 import { NextRequest, NextResponse } from "next/server";
+
 import { stripe } from "@/lib/stripe";
+
 import { auth } from "@/lib/auth";
+
 import { getDatabase } from "@/lib/db";
+
 
 export async function GET() {
   try {
@@ -70,3 +77,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+
