@@ -5,7 +5,7 @@ import { getServerAuth } from "@/lib/server-auth";
 // GET - Retrieve all book text data for the current user
 export async function GET(req: NextRequest) {
   try {
-    const user = await getServerAuth(req);
+    const user = await getServerAuth();
     const userId = user?.id;
 
     if (!userId) {
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
 // POST - Save or update book text data
 export async function POST(req: NextRequest) {
   try {
-    const user = await getServerAuth(req);
+    const user = await getServerAuth();
     const userId = user?.id;
 
     if (!userId) {

@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await getServerAuth(req);
+    const user = await getServerAuth();
     
     // Check if the user is an admin
     const isAdmin = user?.email === "admin@dearbacchanal.com" || process.env.NODE_ENV === "development";
