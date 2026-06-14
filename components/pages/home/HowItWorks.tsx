@@ -32,7 +32,7 @@ const HowItWorks = () => {
     {
       number: "03",
       icon: Truck,
-      title: "RECEIVE BOOK",
+      title: "WE DELIVER",
       description: "We print and ship your premium photo book right to your door",
       color: "bg-accent",
     },
@@ -77,7 +77,7 @@ const HowItWorks = () => {
         stepElements.forEach((step, index) => {
           const icon = step.querySelector(".step-icon");
           const content = step.querySelector(".step-content");
-          
+
           // Icon bounces in
           gsap.fromTo(
             icon,
@@ -118,17 +118,17 @@ const HowItWorks = () => {
       const icons = sectionRef.current?.querySelectorAll(".step-icon");
       icons?.forEach((icon) => {
         icon.addEventListener("mouseenter", () => {
-          gsap.to(icon, { 
-            scale: 1.1, 
-            rotate: 10, 
+          gsap.to(icon, {
+            scale: 1.1,
+            rotate: 10,
             duration: 0.3,
             ease: "power2.out",
           });
         });
         icon.addEventListener("mouseleave", () => {
-          gsap.to(icon, { 
-            scale: 1, 
-            rotate: 0, 
+          gsap.to(icon, {
+            scale: 1,
+            rotate: 0,
             duration: 0.3,
             ease: "power2.out",
           });
@@ -158,7 +158,7 @@ const HowItWorks = () => {
         {/* Steps */}
         <div ref={stepsRef} className="relative max-w-5xl mx-auto">
           {/* Connecting Line */}
-          <div 
+          <div
             ref={lineRef}
             className="hidden md:block absolute top-16 left-[15%] right-[15%] h-1 bg-foreground/20 origin-left"
           />
@@ -169,7 +169,7 @@ const HowItWorks = () => {
               return (
                 <div key={step.number} className="step-item  text-center relative">
                   {/* Icon Circle */}
-                  <div 
+                  <div
                     className={`step-icon ${step.color} w-32 h-32 rounded-full mx-auto mb-8 flex items-center justify-center shadow-lg cursor-pointer`}
                   >
                     <Icon className="w-14 h-14 text-black" strokeWidth={1.5} />
