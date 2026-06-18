@@ -21,7 +21,9 @@ import {
   DollarSign,
   Undo2,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  ThumbsUp,
+  Send
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -37,11 +39,13 @@ interface Order {
   type: 'soft' | 'hard';
   templateName?: string;
   bookId?: string;
-  status: 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refund_pending' | 'refunded';
+  status: 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refund_pending' | 'refunded' | 'pending_approval' | 'approved';
   shippingDetails?: any;
   paymentMethod: string;
   customerName?: string;
   createdAt: string;
+  approvedAt?: string | null;
+  siteFlowOrderId?: string | null;
   refundRequest?: {
     reason: string;
     requestedAt: string;
@@ -170,11 +174,59 @@ export default function AdminOrdersPage() {
       case 'cancelled': return 'bg-red-500/10 text-red-400 border-red-500/20';
       case 'refunded': return 'bg-orange-500/10 text-orange-400 border-orange-500/20';
       case 'refund_pending': return 'bg-red-500/20 text-red-100 border-red-500/50 animate-pulse';
+      case 'pending_approval': return 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
+      case 'approved': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
       default: return 'bg-white/5 text-white/40 border-white/10';
     }
   };
 
   const [syncing, setSyncing] = useState(false);
+  const [approvingOrder, setApprovingOrder] = useState(false);
+  const [simulating, setSimulating] = useState(false);
+
+  const approveOrder = async (orderId: string) => {
+    setApprovingOrder(true);
+    try {
+      const res = await fetch("/api/admin/orders/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Order approved! Customer notified and submitted to PurePrint.");
+        fetchOrders();
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder({ ...selectedOrder, status: 'processing', approvedAt: data.approvedAt });
+        }
+      } else {
+        toast.error(`Approval failed: ${data.error}`);
+      }
+    } catch (error) {
+      toast.error("Approval request failed");
+    } finally {
+      setApprovingOrder(false);
+    }
+  };
+
+  // DEV ONLY: simulate the Stripe webhook for existing hard copy orders
+  const simulateWebhookForHardCopies = async () => {
+    setSimulating(true);
+    try {
+      const res = await fetch('/api/admin/orders/test-webhook', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(`Patched ${data.results?.length || 0} hard copy order(s) to Pending Approval`);
+        fetchOrders();
+      } else {
+        toast.error(data.error || data.message || 'Nothing to patch');
+      }
+    } catch (error) {
+      toast.error('Simulation failed');
+    } finally {
+      setSimulating(false);
+    }
+  };
 
   const syncFromStripe = async () => {
     setSyncing(true);
@@ -203,6 +255,7 @@ export default function AdminOrdersPage() {
         </div>
         
         <div className="flex items-center gap-2">
+
             <button
               onClick={syncFromStripe}
               disabled={syncing}
@@ -273,6 +326,8 @@ export default function AdminOrdersPage() {
               <div className="flex gap-1.5 flex-wrap">
                 {[
                   { value: '', label: 'All' },
+                  { value: 'pending_approval', label: 'Pending Approval', color: 'text-amber-300 bg-amber-500/20 border-amber-500/40' },
+                  { value: 'approved', label: 'Approved', color: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
                   { value: 'paid', label: 'Paid', color: 'text-purple-400 bg-purple-500/10 border-purple-500/20' },
                   { value: 'processing', label: 'Processing', color: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20' },
                   { value: 'shipped', label: 'Shipped', color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
@@ -477,40 +532,94 @@ export default function AdminOrdersPage() {
                             )}
                         </div>
 
-                        <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5">
-                            <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mb-4">Set Fulfillment Status</p>
-                            <div className="grid grid-cols-2 gap-2">
-                                <StatusButton 
-                                    active={selectedOrder.status === 'processing'} 
-                                    onClick={() => updateStatus(selectedOrder.id, 'processing')}
-                                    icon={Clock}
-                                    label="Process"
-                                    color="text-yellow-400"
-                                />
-                                <StatusButton 
-                                    active={selectedOrder.status === 'shipped'} 
-                                    onClick={() => updateStatus(selectedOrder.id, 'shipped')}
-                                    icon={Truck}
-                                    label="Ship"
-                                    color="text-blue-400"
-                                />
-                                <StatusButton 
-                                    active={selectedOrder.status === 'delivered'} 
-                                    onClick={() => updateStatus(selectedOrder.id, 'delivered')}
-                                    icon={CheckCircle}
-                                    label="Deliver"
-                                    color="text-green-400"
-                                />
-                                <StatusButton 
-                                    active={selectedOrder.status === 'cancelled'} 
-                                    onClick={() => updateStatus(selectedOrder.id, 'cancelled')}
-                                    icon={X}
-                                    label="Cancel"
-                                    color="text-red-400"
-                                />
+                        {/* Only show fulfillment status buttons if the order is NOT pending approval */}
+                        {selectedOrder.status !== 'pending_approval' && (
+                            <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5">
+                                <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mb-4">Set Fulfillment Status</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <StatusButton 
+                                        active={selectedOrder.status === 'processing'} 
+                                        onClick={() => updateStatus(selectedOrder.id, 'processing')}
+                                        icon={Clock}
+                                        label="Process"
+                                        color="text-yellow-400"
+                                    />
+                                    <StatusButton 
+                                        active={selectedOrder.status === 'shipped'} 
+                                        onClick={() => updateStatus(selectedOrder.id, 'shipped')}
+                                        icon={Truck}
+                                        label="Ship"
+                                        color="text-blue-400"
+                                    />
+                                    <StatusButton 
+                                        active={selectedOrder.status === 'delivered'} 
+                                        onClick={() => updateStatus(selectedOrder.id, 'delivered')}
+                                        icon={CheckCircle}
+                                        label="Deliver"
+                                        color="text-green-400"
+                                    />
+                                    <StatusButton 
+                                        active={selectedOrder.status === 'cancelled'} 
+                                        onClick={() => updateStatus(selectedOrder.id, 'cancelled')}
+                                        icon={X}
+                                        label="Cancel"
+                                        color="text-red-400"
+                                    />
+                                </div>
                             </div>
-                        </div>
+                        )}
 
+                        {/* ── Pending Approval Panel (Hard Copy) ── */}
+                        {selectedOrder.type === 'hard' && selectedOrder.status === 'pending_approval' && (
+                            <div className="p-6 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 animate-in fade-in slide-in-from-top-4 duration-500">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <Package className="w-5 h-5 text-amber-400" />
+                                    <h4 className="text-white font-bold text-sm uppercase">Awaiting Approval</h4>
+                                </div>
+                                <p className="text-white/60 text-xs mb-6">
+                                    This hard copy order is pending your approval before it is forwarded to PurePrint for printing.
+                                    Approving will:
+                                </p>
+                                <ul className="text-white/50 text-[11px] mb-6 space-y-1.5 list-none">
+                                    <li className="flex items-center gap-2"><CheckCircle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" /> Set status to <strong className="text-yellow-400">Processing</strong></li>
+                                    <li className="flex items-center gap-2"><FileText className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" /> Generate & email invoice PDF to customer</li>
+                                    <li className="flex items-center gap-2"><Send className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" /> Submit print job to PurePrint via Site Flow</li>
+                                </ul>
+                                <button
+                                    onClick={() => approveOrder(selectedOrder.id)}
+                                    disabled={approvingOrder}
+                                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-black text-xs rounded-xl transition-all shadow-xl shadow-emerald-600/20 flex items-center justify-center gap-2"
+                                >
+                                    {approvingOrder ? (
+                                        <><Loader2 className="w-4 h-4 animate-spin" /> APPROVING...</>
+                                    ) : (
+                                        <><ThumbsUp className="w-4 h-4" /> APPROVE ORDER</>
+                                    )}
+                                </button>
+                            </div>
+                        )}
+
+                        {/* ── Already Approved Panel ── */}
+                        {selectedOrder.type === 'hard' && selectedOrder.status === 'approved' && (
+                            <div className="p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 animate-in fade-in duration-500">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <CheckCircle className="w-4 h-4 text-emerald-400" />
+                                    <h4 className="text-emerald-400 font-bold text-xs uppercase tracking-widest">Approved & Sent to PurePrint</h4>
+                                </div>
+                                {selectedOrder.approvedAt && (
+                                    <p className="text-white/30 text-[10px]">
+                                        Approved on {format(new Date(selectedOrder.approvedAt), 'MMM dd, yyyy · HH:mm')}
+                                    </p>
+                                )}
+                                {selectedOrder.siteFlowOrderId && (
+                                    <p className="text-white/30 text-[10px] mt-1">
+                                        Site Flow ID: <span className="text-white/50 font-mono">{selectedOrder.siteFlowOrderId}</span>
+                                    </p>
+                                )}
+                            </div>
+                        )}
+
+                        {/* ── Refund Request Panel ── */}
                         {selectedOrder.status === 'refund_pending' && (
                             <div className="p-6 rounded-2xl bg-red-500/10 border-2 border-red-500/20 animate-in fade-in slide-in-from-top-4 duration-500">
                                 <div className="flex items-center gap-3 mb-4">

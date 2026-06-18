@@ -20,8 +20,14 @@ import {
   Undo2,
   Download,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  CheckCircle,
+  Printer,
+  X
 } from "lucide-react";
+import { format } from "date-fns";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -58,6 +64,54 @@ const CustomizeRitual = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isLoadingOrders, setIsLoadingOrders] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isInvoiceOpen, setIsInvoiceOpen] = useState(false);
+  const [invoiceData, setInvoiceData] = useState<any>(null);
+  const [loadingInvoice, setLoadingInvoice] = useState(false);
+  
+  const [isRefundModalOpen, setIsRefundModalOpen] = useState(false);
+  const [refundReason, setRefundReason] = useState("");
+  const [selectedOrderForRefund, setSelectedOrderForRefund] = useState<any>(null);
+  const [isSubmittingRefund, setIsSubmittingRefund] = useState(false);
+  
+  const invoiceRef = useRef<HTMLDivElement>(null);
+
+  const downloadPDF = async () => {
+    if (!invoiceRef.current) return;
+    
+    const loadingToast = toast.loading("Generating PDF...");
+    
+    try {
+      const element = invoiceRef.current;
+      // Temporarily ensure the element is visible and not constrained for html2canvas
+      const originalStyle = element.style.cssText;
+      
+      const canvas = await html2canvas(element, { 
+        scale: 2, 
+        useCORS: true,
+        logging: false
+      });
+      const imgData = canvas.toDataURL("image/jpeg", 1.0);
+      
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4"
+      });
+      
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      
+      pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Receipt_${invoiceData?.invoiceNumber || 'DearBacchanal'}.pdf`);
+      
+      toast.dismiss(loadingToast);
+      toast.success("PDF downloaded successfully!");
+    } catch (error: any) {
+      console.error("PDF generation error:", error);
+      toast.dismiss(loadingToast);
+      toast.error(`Failed to generate PDF: ${error.message || 'Unknown error'}`);
+    }
+  };
 
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { openModal } = useAuthModal();
@@ -144,6 +198,62 @@ const CustomizeRitual = () => {
       console.error("Error fetching orders:", error);
     } finally {
       setIsLoadingOrders(false);
+    }
+  };
+
+  const submitRefundRequest = async () => {
+    if (!refundReason.trim()) {
+      toast.error("Please provide a description of the issue.");
+      return;
+    }
+    
+    setIsSubmittingRefund(true);
+    try {
+      const res = await fetch("/api/orders/refund/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+            orderId: selectedOrderForRefund._id || selectedOrderForRefund.id, 
+            reason: refundReason 
+        })
+      });
+
+      if (res.ok) {
+        toast.success("Refund request submitted successfully");
+        setOrders(orders.map(o => 
+            (o._id === selectedOrderForRefund._id || o.id === selectedOrderForRefund.id) 
+            ? { ...o, status: 'refund_pending' } 
+            : o
+        ));
+        setIsRefundModalOpen(false);
+        setRefundReason("");
+      } else {
+        toast.error("Failed to submit refund request");
+      }
+    } catch (error) {
+      toast.error("An error occurred");
+    } finally {
+      setIsSubmittingRefund(false);
+    }
+  };
+
+  const openInvoice = async (orderId: string) => {
+    setLoadingInvoice(true);
+    setIsInvoiceOpen(true);
+    try {
+      const res = await fetch(`/api/admin/orders/invoice/${orderId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setInvoiceData({ ...data, orderId }); // passing orderId for reference if needed
+      } else {
+        const errData = await res.json();
+        toast.error(`Receipt Error: ${errData.error || res.statusText}`);
+      }
+    } catch (error: any) {
+      console.error(error);
+      toast.error(`Failed to load receipt: ${error.message || 'Unknown error'}`);
+    } finally {
+      setLoadingInvoice(false);
     }
   };
 
@@ -452,30 +562,98 @@ const CustomizeRitual = () => {
                                     </div>
 
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        <OrderStat label="TYPE" value={order.orderType === 'hard' ? 'Hard Copy' : order.orderType === 'admin_test' ? 'Admin Test' : 'Soft Copy'} />
-                                        <OrderStat label="STATUS" value={order.status?.toUpperCase() || 'PAID'} color="text-teal" />
+                                        <OrderStat label="TYPE" value={(order.type || order.orderType) === 'hard' ? 'Hard Copy' : (order.type || order.orderType) === 'admin_test' ? 'Admin Test' : 'Soft Copy'} />
+                                        {/* STATUS — colour-coded badge */}
+                                        <div className="bg-white/[0.03] rounded-xl p-3 border border-white/5">
+                                            <div className="text-[9px] font-black text-white/30 uppercase tracking-[3px] mb-1.5">Status</div>
+                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                                                order.status === 'pending_approval'
+                                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse'
+                                                : order.status === 'processing'
+                                                    ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
+                                                : order.status === 'paid'
+                                                    ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                                                : order.status === 'shipped'
+                                                    ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                                : order.status === 'delivered'
+                                                    ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                                                : order.status === 'refund_pending'
+                                                    ? 'bg-red-500/20 text-red-300 border-red-500/50'
+                                                : order.status === 'refunded'
+                                                    ? 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+                                                : order.status === 'cancelled'
+                                                    ? 'bg-red-500/10 text-red-400 border-red-500/20'
+                                                : 'bg-teal/10 text-teal border-teal/20'
+                                            }`}>
+                                                {order.status === 'pending_approval' ? 'Pending Approval'
+                                                : order.status === 'processing' ? 'Processing'
+                                                : order.status === 'paid' ? 'Paid'
+                                                : order.status === 'processing' ? 'Processing'
+                                                : order.status === 'shipped' ? 'Shipped'
+                                                : order.status === 'delivered' ? 'Delivered'
+                                                : order.status === 'refund_pending' ? 'Refund Pending'
+                                                : order.status === 'refunded' ? 'Refunded'
+                                                : order.status === 'cancelled' ? 'Cancelled'
+                                                : (order.status || 'Paid').toUpperCase()}
+                                            </span>
+                                        </div>
                                         <OrderStat label="PAGES" value={order.pagesCount || '20+'} />
                                         <OrderStat label="ADD-ONS" value={order.addonsCount || '0'} />
                                     </div>
+
+                                    {/* Pending Approval info banner for hard copy orders */}
+                                    {order.status === 'pending_approval' && (
+                                        <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                                            <span className="text-amber-400 text-lg leading-none mt-0.5">⏳</span>
+                                            <div>
+                                                <p className="text-amber-300 font-black text-xs uppercase tracking-widest">Awaiting Admin Approval</p>
+                                                <p className="text-amber-200/60 text-[11px] mt-0.5">Your hard copy order has been received and is pending approval. You will receive an email with your invoice once approved.</p>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Processing info banner */}
+                                    {order.status === 'processing' && (
+                                        <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                                            <span className="text-emerald-400 text-lg leading-none mt-0.5">✅</span>
+                                            <div>
+                                                <p className="text-emerald-300 font-black text-xs uppercase tracking-widest">Order Approved & Sent to Print</p>
+                                                <p className="text-emerald-200/60 text-[11px] mt-0.5">Your order has been approved and forwarded to PurePrint. Check your email for the invoice and tracking updates.</p>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     <div className="pt-4 flex flex-wrap gap-4">
                                         <Button 
                                             variant="outline" 
                                             size="sm" 
                                             className="bg-white/5 border-white/10 text-white/80 hover:bg-white/10 rounded-xl px-6 h-12 text-xs uppercase font-bold flex gap-2"
-                                            onClick={() => window.open(`/api/admin/orders/invoice/${order._id}`, '_blank')}
+                                            onClick={() => openInvoice(order._id || order.id)}
                                         >
-                                            <Download className="w-4 h-4" />
+                                            <FileText className="w-4 h-4" />
                                             Print Receipt
                                         </Button>
                                         
-                                        {order.status !== 'refunded' && order.status !== 'refund_pending' && (
+
+                                        {order.status === 'refunded' && (
+                                            <div className="flex items-center gap-2 text-orange-500 bg-orange-500/10 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-orange-500/20">
+                                                <Undo2 className="w-4 h-4" />
+                                                Refund Processed
+                                            </div>
+                                        )}
+                                        {/* Only show refund button for fully completed/paid orders — not pending/processing hard copies */}
+                                        {order.status !== 'refunded'
+                                            && order.status !== 'refund_pending'
+                                            && order.status !== 'pending_approval'
+                                            && order.status !== 'processing' && (
                                             <Button 
                                                 variant="ghost" 
                                                 size="sm" 
                                                 className="text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded-xl px-6 h-12 text-xs uppercase font-bold flex gap-2"
                                                 onClick={() => {
-                                                    toast.info("Refund request initiated. Our team will review this based on our 14-day policy.");
+                                                    setSelectedOrderForRefund(order);
+                                                    setRefundReason("");
+                                                    setIsRefundModalOpen(true);
                                                 }}
                                             >
                                                 <Undo2 className="w-4 h-4" />
@@ -678,6 +856,226 @@ const CustomizeRitual = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Refund Request Modal */}
+      <Dialog open={isRefundModalOpen} onOpenChange={(open) => !open && setIsRefundModalOpen(false)}>
+        <DialogContent className="sm:max-w-md bg-[#1a1a1a] border-white/10 shadow-2xl p-0 overflow-hidden">
+          <div className="bg-red-500/10 p-6 flex flex-col items-center text-center border-b border-white/5">
+            <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mb-4">
+              <Undo2 className="w-8 h-8 text-red-500" />
+            </div>
+            <DialogTitle className="text-2xl font-display tracking-tight text-white mb-2">Request Refund</DialogTitle>
+            <DialogDescription className="text-gray-400 font-body text-sm max-w-[280px]">
+              Please describe the legal issue or reason for your refund request. This is mandatory for approval.
+            </DialogDescription>
+          </div>
+          <div className="p-6">
+              <textarea 
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  placeholder="I am requesting a refund because..."
+                  className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-red-500/50 resize-none min-h-[120px]"
+              />
+          </div>
+          <DialogFooter className="p-4 bg-[#111] flex gap-2 sm:justify-center border-t border-white/5">
+            <button
+              onClick={() => setIsRefundModalOpen(false)}
+              className="flex-1 px-4 py-2.5 rounded-xl font-bold text-gray-300 bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
+              disabled={isSubmittingRefund}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={submitRefundRequest}
+              disabled={isSubmittingRefund || !refundReason.trim()}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmittingRefund ? <Loader2 className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4" />}
+              {isSubmittingRefund ? "Submitting..." : "Submit Request"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Invoice / Receipt Modal */}
+      {isInvoiceOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <div 
+                  className="absolute inset-0 bg-black/80 backdrop-blur-sm shadow-2xl" 
+                  onClick={() => setIsInvoiceOpen(false)}
+              />
+              <div className="relative w-full max-w-4xl max-h-[90vh] bg-white rounded-3xl overflow-hidden flex flex-col animate-in fade-in zoom-in duration-300">
+                  <div className="px-8 py-4 bg-gray-100 flex items-center justify-between border-b border-gray-200">
+                      <div className="flex items-center gap-3">
+                          <FileText className="w-5 h-5 text-gray-500" />
+                          <span className="font-bold text-gray-800 uppercase tracking-widest text-sm">Download Receipt</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                          {invoiceData && (
+                              <button 
+                                onClick={downloadPDF}
+                                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black transition-all active:scale-95 shadow-lg shadow-red-600/20"
+                              >
+                                  <Download className="w-4 h-4" />
+                                  DOWNLOAD PDF
+                              </button>
+                          )}
+                          <button 
+                            onClick={() => setIsInvoiceOpen(false)}
+                            className="p-2 hover:bg-gray-200 rounded-lg text-gray-400 transition-all"
+                          >
+                              <X className="w-5 h-5" />
+                          </button>
+                      </div>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto p-4 sm:p-12">
+                    {loadingInvoice ? (
+                        <div className="h-[400px] flex items-center justify-center">
+                            <Loader2 className="w-8 h-8 text-gray-300 animate-spin" />
+                        </div>
+                    ) : invoiceData ? (
+                        <div ref={invoiceRef} className="bg-white text-gray-900 font-sans border-8 border-gray-50 shadow-2xl max-w-[800px] mx-auto overflow-hidden">
+                            {/* Decorative Header */}
+                            <div className="bg-gradient-to-r from-[#9f2e2b] via-[#be2826] to-[#ecb52b] h-3 w-full" />
+                            
+                            <div className="p-8 sm:p-12">
+                                <div className="flex justify-between items-start mb-16">
+                                    <div className="flex items-center gap-6">
+                                        <div className="w-20 h-20 bg-[#be2826] rounded-3xl flex items-center justify-center text-white font-black text-3xl shadow-xl transform -rotate-3 border-4 border-white">DB</div>
+                                        <div>
+                                            <h1 className="text-3xl font-black tracking-tighter uppercase italic text-gray-900 leading-[0.8]">DEAR <br/>BACCHANAL</h1>
+                                            <p className="text-[10px] font-black uppercase tracking-[5px] text-[#be2826] mt-2">Premium Keepsakes</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <h2 className="text-5xl font-black text-gray-100 uppercase tracking-tighter mb-2 leading-none">RECEIPT</h2>
+                                        <p className="text-sm font-black text-gray-900">{invoiceData.invoiceNumber}</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-[#be2826] mt-1">{format(new Date(invoiceData.date), 'MMMM dd, yyyy')}</p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-12 mb-10 relative">
+                                    <div className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-100 hidden sm:block" />
+                                    <div>
+                                        <div className="text-[10px] font-black uppercase tracking-[4px] text-gray-300 mb-6 flex items-center gap-2">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-[#be2826]" />
+                                            Billed To
+                                        </div>
+                                        <div className="text-xl font-black text-gray-900">{invoiceData.customer.name}</div>
+                                        <p className="text-sm font-bold text-[#be2826] mt-1">{invoiceData.customer.email}</p>
+                                        <div className="text-xs text-gray-500 mt-4 leading-relaxed font-medium">
+                                            <p>{invoiceData.customer.address.line1}</p>
+                                            {invoiceData.customer.address.line2 && <p>{invoiceData.customer.address.line2}</p>}
+                                            <p>{invoiceData.customer.address.city}, {invoiceData.customer.address.state} {invoiceData.customer.address.postal_code}</p>
+                                            <p className="font-black text-gray-900 uppercase tracking-wider mt-1">{invoiceData.customer.address.country}</p>
+                                        </div>
+                                    </div>
+                                    <div className="sm:pl-12">
+                                        <div className="text-[10px] font-black uppercase tracking-[4px] text-gray-300 mb-6 flex items-center gap-2">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-[#ecb52b]" />
+                                            From
+                                        </div>
+                                        <div className="text-xl font-black text-gray-900">Dear Bacchanal Ltd.</div>
+                                        <div className="text-sm font-bold text-gray-500 mt-1">billing@dearbacchanal.com</div>
+                                        <div className="text-xs text-gray-400 mt-4 leading-relaxed font-medium">
+                                            <p>123 Carnival Way</p>
+                                            <p>Port of Spain, Trinidad & Tobago</p>
+                                            <p className="mt-2 text-[10px] font-black text-[#be2826] uppercase">Tax ID: DB-TR-2026-X</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-gray-50 rounded-3xl p-8 mb-10">
+                                    <table className="w-full">
+                                        <thead>
+                                            <tr className="border-b-2 border-gray-900/10">
+                                                <th className="pb-4 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Description</th>
+                                                <th className="pb-4 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">Qty</th>
+                                                <th className="pb-4 text-right text-[10px] font-black uppercase tracking-widest text-gray-400">Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200/50">
+                                            {invoiceData.items.map((item: any, idx: number) => (
+                                                <tr key={idx}>
+                                                    <td className="py-8">
+                                                        <p className="font-black text-lg text-gray-900">{item.description}</p>
+                                                        <div className="flex gap-2 mt-2">
+                                                            <span className="text-[9px] font-black bg-[#be2826] text-white px-2 py-0.5 rounded uppercase tracking-widest">
+                                                                {orders.find(o => o._id === invoiceData.orderId || o.id === invoiceData.orderId)?.templateName || "Custom Template"}
+                                                            </span>
+                                                            <span className="text-[9px] font-black bg-gray-900 text-white px-2 py-0.5 rounded uppercase tracking-widest">
+                                                                {orders.find(o => o._id === invoiceData.orderId || o.id === invoiceData.orderId)?.type === 'hard' || orders.find(o => o._id === invoiceData.orderId || o.id === invoiceData.orderId)?.orderType === 'hard' ? 'Hardcover' : 'Softcopy'}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-8 text-center font-black text-gray-900">{item.quantity}</td>
+                                                    <td className="py-8 text-right font-black text-xl text-gray-900">${item.total.toFixed(2)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div className="flex flex-col sm:flex-row justify-between items-end gap-12">
+                                    <div className="flex-1">
+                                        <div className="p-6 rounded-2xl border-2 border-dashed border-gray-100 flex items-center gap-4">
+                                            <CheckCircle className="w-8 h-8 text-green-500" />
+                                            <div>
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Payment Verified</p>
+                                                <p className="font-black text-sm text-gray-900">Transaction ID: {(invoiceData.orderId || '').slice(0, 16)}...</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="w-full sm:w-[250px] space-y-4">
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-gray-400 font-black uppercase tracking-widest">Subtotal</span>
+                                            <span className="font-black text-gray-900">${invoiceData.subtotal.toFixed(2)}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-sm">
+                                            <span className="text-gray-400 font-black uppercase tracking-widest">Processing</span>
+                                            <span className="font-black text-gray-900">$0.00</span>
+                                        </div>
+                                        <div className="pt-6 border-t-4 border-gray-900">
+                                            <div className="flex justify-between items-center mb-1">
+                                                <span className="text-[10px] font-black uppercase tracking-[4px] text-[#be2826]">Grand Total</span>
+                                                <span className="text-3xl font-black text-gray-900">${invoiceData.total.toFixed(2)}</span>
+                                            </div>
+                                            <p className="text-[8px] font-black text-gray-300 uppercase italic text-right">Paid via {invoiceData.paymentMethod} Gateway</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div className="mt-12 pt-8 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-6 opacity-60 grayscale hover:grayscale-0 transition-all duration-700">
+                                    <div className="text-[8px] text-gray-400 font-black uppercase tracking-[6px] text-center sm:text-left">
+                                        Keep the spirit alive. <br/>Bacchanal never ends.
+                                    </div>
+                                    <div className="flex items-center gap-6">
+                                        <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                                            Authentic <CheckCircle className="w-3 h-3" />
+                                        </div>
+                                        <div className="text-[8px] font-black bg-gray-900 text-white px-4 py-2 rounded-full uppercase tracking-widest">
+                                            OFFICIAL PROPERTY OF DEAR BACCHANAL
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Decorative Footer */}
+                            <div className="grid grid-cols-6 h-2 w-full">
+                                <div className="bg-[#be2826]" />
+                                <div className="bg-[#ecb52b]" />
+                                <div className="bg-[#000000]" />
+                                <div className="bg-[#be2826]" />
+                                <div className="bg-[#ecb52b]" />
+                                <div className="bg-[#000000]" />
+                            </div>
+                        </div>
+                    ) : null}
+                  </div>
+              </div>
+          </div>
+      )}
     </div>
   );
 };

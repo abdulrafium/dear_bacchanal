@@ -69,10 +69,11 @@ function PaymentStatusContent() {
   }, [sessionId, canceled]);
 
   useEffect(() => {
-    if (status === "success" && orderInfo?.orderType !== 'hard') {
+    if (status === "success") {
       const timer = setTimeout(() => {
         const tplName = orderInfo?.templateName ? `&templateName=${encodeURIComponent(orderInfo.templateName)}` : '';
-        router.replace(`/editor?payment=success${tplName}`);
+        const paymentType = orderInfo?.orderType === 'hard' ? 'success_hard' : 'success';
+        router.replace(`/editor?payment=${paymentType}${tplName}`);
       }, 5000);
       return () => clearTimeout(timer);
     }
@@ -108,21 +109,19 @@ function PaymentStatusContent() {
               <>
                 <p className="text-lg text-white/70 mb-8 leading-relaxed">
                   Your physical book is now in the <span className="text-teal font-black italic">Print Queue</span>. 
-                  We'll notify you via email once it ships!
+                  We are preparing your files for the printer.
                 </p>
                 <div className="flex flex-col gap-3">
                   <button
-                    onClick={() => router.replace("/customize")}
-                    className="w-full py-4 bg-white/5 border border-white/10 text-white font-black rounded-2xl hover:bg-white/10 transition-all uppercase tracking-widest text-xs"
+                    onClick={() => {
+                      const tplName = orderInfo?.templateName ? `&templateName=${encodeURIComponent(orderInfo.templateName)}` : '';
+                      router.replace(`/editor?payment=success_hard${tplName}`);
+                    }}
+                    className="w-full py-4 bg-[#9f2e2b] text-white font-black rounded-2xl hover:bg-[#c8413d] transition-all shadow-[0_10px_40px_rgba(159,46,43,0.3)] uppercase tracking-widest text-sm"
                   >
-                    View Order History
+                    Process Book For Print
                   </button>
-                  <button
-                    onClick={() => router.push("/editor")}
-                    className="w-full py-4 bg-[#9f2e2b] text-white font-black rounded-2xl hover:bg-[#c8413d] transition-all uppercase tracking-widest text-sm"
-                  >
-                    Back to Editor
-                  </button>
+                  <p className="text-[10px] text-white/30 uppercase font-bold tracking-[2px]">Automatic redirect in 5 seconds...</p>
                 </div>
               </>
             ) : (

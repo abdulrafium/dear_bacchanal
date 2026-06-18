@@ -104,6 +104,8 @@ function ImagesPanel() {
   const addElement = useEditorStore((s) => s.addElement);
   const spreads = useEditorStore((s) => s.spreads);
   const currentSpreadIndex = useEditorStore((s) => s.currentSpreadIndex);
+  const selectedElementId = useEditorStore((s) => s.selectedElementId);
+  const updateElement = useEditorStore((s) => s.updateElement);
 
   // Fetch images on mount
   useEffect(() => {
@@ -170,6 +172,25 @@ function ImagesPanel() {
   const targetPage = targetSide === "left" ? currentSpread?.leftPage : currentSpread?.rightPage;
 
   const handleImageClick = (url: string) => {
+    // 1. If an image or photo frame is selected, replace its src directly (even on locked pages)
+    if (selectedElementId) {
+      let foundPageId = null;
+      let foundElement = null;
+      for (const spread of spreads) {
+        let el = spread.leftPage.elements.find(e => e.id === selectedElementId);
+        if (el) { foundPageId = spread.leftPage.id; foundElement = el; break; }
+        el = spread.rightPage.elements.find(e => e.id === selectedElementId);
+        if (el) { foundPageId = spread.rightPage.id; foundElement = el; break; }
+      }
+      
+      if (foundElement && (foundElement.type === "photo-card" || foundElement.type === "image")) {
+        updateElement(foundPageId!, selectedElementId, { src: url });
+        toast.success("Image placed in frame");
+        return; // Successfully placed in frame, stop here.
+      }
+    }
+
+    // 2. Otherwise, add as a new floating image (requires unlocked page)
     if (targetPage && !targetPage.isLocked) {
       addElement(targetPage.id, {
         type: "image",
@@ -182,7 +203,7 @@ function ImagesPanel() {
       });
       toast.success("Image placed on " + targetSide + " page");
     } else if (targetPage?.isLocked) {
-      toast.error("That page is locked for the final template.");
+      toast.error("That page is locked for the final template. Select a photo frame first to fill it.");
     }
   };
 

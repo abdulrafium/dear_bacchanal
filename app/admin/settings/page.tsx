@@ -28,6 +28,10 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [zoneFilter, setZoneFilter] = useState<string>("All");
+  
+  const [isAddCountryModalOpen, setIsAddCountryModalOpen] = useState(false);
+  const [newCountryForm, setNewCountryForm] = useState<CountrySetting>({ code: "", name: "", zone: "Clear EU", shippingRate: 0, enabled: true });
 
   useEffect(() => {
     fetchSettings();
@@ -110,7 +114,8 @@ export default function AdminSettingsPage() {
   if (!settings) return null;
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <>
+      <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-display font-black text-white tracking-tight">PLATFORM SETTINGS</h1>
@@ -223,17 +228,41 @@ export default function AdminSettingsPage() {
                 <SectionHeader title="Shipping Countries" description="Manage which countries you ship to and their rates." />
                 <button 
                   onClick={() => {
-                    const newCountry: CountrySetting = { code: "", name: "", shippingRate: 0, enabled: true };
-                    setSettings({ ...settings, countries: [...settings.countries, newCountry] });
+                    setNewCountryForm({ 
+                      code: "", 
+                      name: "", 
+                      zone: zoneFilter === "All" ? "Clear EU" : (zoneFilter as any), 
+                      shippingRate: 0, 
+                      enabled: true 
+                    });
+                    setIsAddCountryModalOpen(true);
                   }}
                   className="p-2 bg-white/5 hover:bg-white/10 rounded-lg text-white/60 hover:text-white transition-colors"
                 >
                   <Plus className="w-5 h-5" />
                 </button>
               </div>
+
+              <div className="flex gap-2">
+                {["All", "Clear EU", "Clear Non EU", "Tracked Non EU", "Other"].map(zone => (
+                  <button
+                    key={zone}
+                    onClick={() => setZoneFilter(zone)}
+                    className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                      zoneFilter === zone 
+                      ? "bg-red-500 text-white" 
+                      : "bg-white/5 text-white/60 hover:text-white hover:bg-white/10"
+                    }`}
+                  >
+                    {zone}
+                  </button>
+                ))}
+              </div>
               
-              <div className="space-y-3">
-                {settings.countries.map((country, idx) => (
+              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-white/5 [&::-webkit-scrollbar-thumb]:bg-white/20 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-white/30 transition-colors">
+                {settings.countries.map((country, idx) => {
+                  if (zoneFilter !== "All" && country.zone !== zoneFilter) return null;
+                  return (
                   <div key={idx} className="flex items-center gap-4 bg-white/[0.03] p-4 rounded-2xl border border-white/5 group">
                     <input 
                       className="bg-transparent border-none text-white font-bold w-12 focus:ring-0" 
@@ -255,8 +284,22 @@ export default function AdminSettingsPage() {
                         setSettings({ ...settings, countries: newCountries });
                       }}
                     />
+                    <select
+                      className="bg-transparent border border-white/5 text-white/40 text-xs w-[120px] hidden sm:block focus:ring-0 cursor-pointer rounded-lg px-2 py-1 hover:bg-white/5"
+                      value={country.zone}
+                      onChange={(e) => {
+                        const newCountries = [...settings.countries];
+                        newCountries[idx].zone = e.target.value as any;
+                        setSettings({ ...settings, countries: newCountries });
+                      }}
+                    >
+                      <option value="Clear EU" className="bg-[#0a0a0a]">Clear EU</option>
+                      <option value="Clear Non EU" className="bg-[#0a0a0a]">Clear Non EU</option>
+                      <option value="Tracked Non EU" className="bg-[#0a0a0a]">Tracked Non EU</option>
+                      <option value="Other" className="bg-[#0a0a0a]">Other</option>
+                    </select>
                     <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-xl border border-white/5">
-                      <span className="text-white/30 text-xs">$</span>
+                      <span className="text-white/30 text-xs">£</span>
                       <input 
                         className="bg-transparent border-none text-white text-sm w-16 focus:ring-0 p-0" 
                         type="number"
@@ -283,12 +326,13 @@ export default function AdminSettingsPage() {
                         const newCountries = settings.countries.filter((_, i) => i !== idx);
                         setSettings({ ...settings, countries: newCountries });
                       }}
-                      className="p-2 text-white/20 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                      className="p-2 text-white/40 hover:text-red-500 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -372,6 +416,12 @@ export default function AdminSettingsPage() {
                   onChange={(v) => setSettings({ ...settings, general: { ...settings.general, refundDeadlineDays: v } })}
                   type="number"
                 />
+                <InputGroup 
+                  label="GBP to USD Exchange Rate" 
+                  value={settings.general.exchangeRateGbpToUsd} 
+                  onChange={(v) => setSettings({ ...settings, general: { ...settings.general, exchangeRateGbpToUsd: v } })}
+                  type="number"
+                />
               </div>
               
               <div className="p-6 rounded-3xl border border-red-500/20 bg-red-500/[0.02] flex items-center justify-between">
@@ -435,6 +485,78 @@ export default function AdminSettingsPage() {
         </div>
       </div>
     </div>
+
+    {/* Add Country Modal */}
+      {isAddCountryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[#111] border border-white/10 rounded-2xl p-6 w-full max-w-md animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-bold text-white mb-4">Add New Country</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-white/50 mb-1 block">Country Code (e.g. US, GB)</label>
+                <input 
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-red-500"
+                  value={newCountryForm.code}
+                  onChange={e => setNewCountryForm({...newCountryForm, code: e.target.value.toUpperCase()})}
+                  placeholder="2-letter code"
+                  maxLength={2}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-white/50 mb-1 block">Country Name</label>
+                <input 
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-red-500"
+                  value={newCountryForm.name}
+                  onChange={e => setNewCountryForm({...newCountryForm, name: e.target.value})}
+                  placeholder="e.g. Canada"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-white/50 mb-1 block">Shipping Zone</label>
+                <select 
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-red-500"
+                  value={newCountryForm.zone}
+                  onChange={e => setNewCountryForm({...newCountryForm, zone: e.target.value as any})}
+                >
+                  <option value="Clear EU" className="bg-[#111]">Clear EU</option>
+                  <option value="Clear Non EU" className="bg-[#111]">Clear Non EU</option>
+                  <option value="Tracked Non EU" className="bg-[#111]">Tracked Non EU</option>
+                  <option value="Other" className="bg-[#111]">Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-white/50 mb-1 block">Shipping Rate (£)</label>
+                <input 
+                  type="number"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-red-500"
+                  value={newCountryForm.shippingRate / 100}
+                  onChange={e => setNewCountryForm({...newCountryForm, shippingRate: Math.round(parseFloat(e.target.value || "0") * 100)})}
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <button 
+                onClick={() => setIsAddCountryModalOpen(false)}
+                className="px-4 py-2 text-sm text-white/50 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  if (settings) {
+                    setSettings({ ...settings, countries: [newCountryForm, ...settings.countries] } as PlatformSettings);
+                  }
+                  setIsAddCountryModalOpen(false);
+                }}
+                className="px-4 py-2 text-sm bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold"
+              >
+                Add Country
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

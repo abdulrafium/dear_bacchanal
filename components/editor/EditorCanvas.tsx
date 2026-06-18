@@ -226,6 +226,15 @@ function PhotoCardElement({ el, pageId, canInteract, ...props }: any) {
 
   const isCircle = el.shapeType === "ellipse";
 
+  const handleEmptyClick = (e: any) => {
+    const isPreview = useEditorStore.getState().isPreviewMode;
+    if (!el.src && !isPreview) {
+      e.cancelBubble = true; // prevent default select (we'll handle it)
+      useEditorStore.getState().selectElement(el.id);
+      useEditorStore.getState().setSidebarPanel("images");
+    }
+  };
+
   return (
     <Group {...props}>
       {/* Base Card Background (Supports Rectangle and Circle) */}
@@ -234,21 +243,25 @@ function PhotoCardElement({ el, pageId, canInteract, ...props }: any) {
           x={el.width / 2}
           y={el.height / 2}
           radius={el.width / 2}
-          fill="transparent" 
+          fill={el.src ? "transparent" : "rgba(0,0,0,0.1)"} 
           stroke="white"
           strokeWidth={12}
           shadowBlur={10}
           shadowColor="rgba(0,0,0,0.15)"
+          onClick={handleEmptyClick}
+          onTap={handleEmptyClick}
         />
       ) : (
         <Rect 
           width={el.width} 
           height={el.height} 
-          fill="transparent" 
+          fill={el.src ? "transparent" : "rgba(0,0,0,0.1)"} 
           stroke="white"
           strokeWidth={12}
           shadowBlur={10}
           shadowColor="rgba(0,0,0,0.15)"
+          onClick={handleEmptyClick}
+          onTap={handleEmptyClick}
         />
       )}
 
@@ -273,9 +286,14 @@ function PhotoCardElement({ el, pageId, canInteract, ...props }: any) {
 
       {/* Large Center (+) */}
       {!el.src && (
-        <Group x={el.width / 2} y={el.height / 2}>
-           <Circle radius={45} fill="rgba(255,255,255,0.05)" stroke="white" strokeWidth={2} opacity={0.6} />
-           <Text text="+" fontSize={64} fill="white" x={-20} y={-38} fontFamily="Inter" fontStyle="100" opacity={0.6} />
+        <Group 
+          x={el.width / 2} 
+          y={el.height / 2}
+          onClick={handleEmptyClick}
+          onTap={handleEmptyClick}
+        >
+           <Circle radius={45} fill="rgba(255,255,255,0.15)" stroke="white" strokeWidth={2} opacity={0.8} />
+           <Text text="+" fontSize={64} fill="white" x={-20} y={-38} fontFamily="Inter" fontStyle="100" />
         </Group>
       )}
     </Group>
@@ -283,44 +301,9 @@ function PhotoCardElement({ el, pageId, canInteract, ...props }: any) {
 }
 
 function PhotoCardInput({ el, pageId, isSelected }: any) {
-  const { startUpload, isUploading } = useUploadThing("bookImageUploader");
-  const updateElement = useEditorStore((s) => s.updateElement);
-
-  if (!isSelected || el.type !== "photo-card" || el.src) return null;
-
-  return (
-    <Html>
-      <div style={{ position: 'absolute', top: 0, left: 0, width: 0, height: 0, pointerEvents: 'none' }}>
-        {isUploading && (
-           <div style={{ 
-              position: 'absolute', top: el.y + el.height/2 - 20, left: el.x + el.width/2 - 20,
-              width: 40, height: 40, background: 'white', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-           }}>
-              <div style={{ width: 24, height: 24, border: '3px solid #eee', borderTopColor: '#2d2d2d', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-           </div>
-        )}
-        <input 
-          type="file" 
-          accept="image/*"
-          style={{ 
-            position: 'absolute', top: el.y, left: el.x, width: el.width, height: el.height, 
-            opacity: 0, cursor: 'pointer', pointerEvents: 'auto' 
-          }}
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            const res = await startUpload([file]);
-            if (res?.[0]) {
-               updateElement(pageId, el.id, { src: res[0].url });
-               toast.success("Picture imported correctly!");
-            }
-          }}
-        />
-      </div>
-    </Html>
-  );
+  // We no longer overlay an invisible <input> here because it doesn't map correctly 
+  // with canvas scaling and offsets. Users now click the "+" icon to open the images sidebar.
+  return null;
 }
 
 function CalendarElement({

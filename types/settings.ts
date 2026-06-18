@@ -10,7 +10,8 @@ export interface PricingSettings {
 export interface CountrySetting {
   code: string;
   name: string;
-  shippingRate: number;
+  zone: 'Clear EU' | 'Clear Non EU' | 'Tracked Non EU' | 'Other';
+  shippingRate: number; // Stored in GBP pence (from excel sheet)
   enabled: boolean;
 }
 
@@ -27,6 +28,7 @@ export interface GeneralSettings {
   adminNotificationEmail: string;
   maintenanceMode: boolean;
   refundDeadlineDays: number;
+  exchangeRateGbpToUsd: number; // e.g., 1.30
 }
 
 export interface PlatformSettings {

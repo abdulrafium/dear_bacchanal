@@ -143,7 +143,8 @@ interface EditorState {
   resetEditor: () => void;
   save: (isAdmin?: boolean) => Promise<boolean>;
   isGeneratingPdf: boolean;
-  generatePdfBook: () => Promise<void>;
+  pdfGenerationProgress: { current: number; total: number; status: string } | null;
+  generatePdfBook: (isHardCopy?: boolean) => Promise<void>;
 }
 
 function createDefaultPage(label: string, isLocked = false): BookPage {
@@ -396,7 +397,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     version: s.version + 1
   })),
 
-  save: async (isAdminParam) => {
+  save: async (isAdminParam?: boolean) => {
     const { spreads, isAdmin, activeTemplateId, activeTemplateName, templateDescription, templateCountry, templateYear, currentSpreadIndex, version: startVersion } = get();
     
     try {
@@ -501,7 +502,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   }),
 
   isGeneratingPdf: false,
-  generatePdfBook: async () => {
+  pdfGenerationProgress: null,
+  generatePdfBook: async (isHardCopy = false) => {
     const state = get();
     const { spreads, setCurrentSpread, stageRef, activeTemplateName, currentSpreadIndex, selectElement } = state;
     
@@ -543,7 +545,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         toast.info(`Generating PDF — ${spreads.length} spreads to process...`, { duration: 3000 });
 
+        set({ pdfGenerationProgress: { current: 0, total: spreads.length, status: "Preparing pages..." } });
+
         for (let i = 0; i < spreads.length; i++) {
+            set({ pdfGenerationProgress: { current: i + 1, total: spreads.length, status: `Rendering page ${i + 1} of ${spreads.length}...` } });
             toast.info(`Rendering spread ${i + 1} of ${spreads.length}...`, { duration: 2000, id: 'pdf-progress' });
             
             setCurrentSpread(i, true);
@@ -632,6 +637,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 await new Promise(r => setTimeout(r, 300)); // Let the draw flush
                 
                 // 7. Capture high-quality snapshot
+                set({ pdfGenerationProgress: { current: i + 1, total: spreads.length, status: `Finalizing page ${i + 1}...` } });
+
                 const dataUrl = currentStageRef.toDataURL({ 
                     x: 0,
                     y: 0,
@@ -653,17 +660,51 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         const fileName = `${activeTemplateName?.replace(/\s+/g, '_') || 'Carnival_Book'}_Book.pdf`;
         
-        // Manual download to force correct .pdf filename
         const pdfBlob = pdf.output('blob');
-        const blobUrl = URL.createObjectURL(pdfBlob);
-        const downloadLink = document.createElement('a');
-        downloadLink.href = blobUrl;
-        downloadLink.download = fileName;
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-        document.body.removeChild(downloadLink);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-        toast.success("PDF downloaded successfully!", { duration: 5000 });
+        
+        if (!isHardCopy) {
+          // Manual download to force correct .pdf filename for soft copies
+          const blobUrl = URL.createObjectURL(pdfBlob);
+          const downloadLink = document.createElement('a');
+          downloadLink.href = blobUrl;
+          downloadLink.download = fileName;
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+          document.body.removeChild(downloadLink);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+          toast.success("PDF downloaded successfully!", { duration: 5000 });
+        }
+
+        // ─── Background upload to UploadThing so SiteFlow can fetch it ──────────
+        // This runs silently after the download — any failure is non-blocking.
+        try {
+          const { activeTemplateId: bookId, activeTemplateName: tmplName } = get();
+          const uploadFormData = new FormData();
+          uploadFormData.append(
+            "file",
+            new File([pdfBlob], `${tmplName?.replace(/\s+/g, '_') || 'book'}.pdf`, { type: "application/pdf" })
+          );
+          if (bookId) uploadFormData.append("bookId", bookId);
+          if (tmplName) uploadFormData.append("templateName", tmplName);
+
+          fetch("/api/editor/upload-pdf", {
+            method: "POST",
+            body: uploadFormData,
+          })
+            .then((r) => r.json())
+            .then((data) => {
+              if (data.success) {
+                console.log("[editor] PDF uploaded for SiteFlow:", data.url);
+              } else {
+                console.warn("[editor] PDF upload for SiteFlow failed:", data.error);
+              }
+            })
+            .catch((uploadErr) => {
+              console.warn("[editor] PDF upload for SiteFlow error (non-blocking):", uploadErr);
+            });
+        } catch (uploadSetupErr) {
+          console.warn("[editor] Could not start PDF upload:", uploadSetupErr);
+        }
 
         // Consume purchase - MUST PAY AGAIN FOR NEXT DOWNLOAD
         try {
@@ -680,12 +721,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         console.error("PDF Export Error:", err);
         toast.error("PDF generation failed. Please try again.");
     } finally {
+        set({ isGeneratingPdf: false, pdfGenerationProgress: null });
+        
+        // Restore selection and view mode
         setCurrentSpread(originalIndex, true);
-        // Restore original view mode
         if (originalViewMode !== get().viewMode) {
           set({ viewMode: originalViewMode });
         }
-        set({ isGeneratingPdf: false });
     }
   },
 }));

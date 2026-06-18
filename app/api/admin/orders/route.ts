@@ -2,17 +2,11 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import { NextRequest, NextResponse } from "next/server";
-
 import { getDatabase } from "@/lib/db";
-
 import { adminAuthMiddleware } from "@/lib/admin-auth";
-
 import { ObjectId } from "mongodb";
-
 import { sendEmail } from "@/lib/mail-service";
-
 import { getOrderCompletedEmail, getRefundEmail } from "@/lib/email-templates";
-
 
 // GET - List all orders
 export async function GET(req: NextRequest) {
@@ -66,8 +60,12 @@ export async function GET(req: NextRequest) {
         status: o.status,
         shippingDetails: o.shippingDetails,
         paymentMethod: o.paymentMethod,
+        refundReason: o.refundReason,
+        refundRequestedAt: o.refundRequestedAt,
         refundRequest: o.refundRequest,
         customerName: o.customerName || o.shippingDetails?.name || '',
+        approvedAt: o.approvedAt || null,
+        siteFlowOrderId: o.siteFlowOrderId || null,
         createdAt: o.createdAt,
         updatedAt: o.updatedAt,
       })),
@@ -122,5 +120,3 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-
-

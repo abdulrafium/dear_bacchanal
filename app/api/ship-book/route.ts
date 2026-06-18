@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
         let sku = process.env.HP_BOOK_SKU;
         if (!sku) {
             if (isDev) {
-                sku = "DEV-PLACEHOLDER-SKU";
+                sku = "saffatrinidad_hardback_10x10_staging";
                 console.warn("[ship-book] HP_BOOK_SKU not set. Using placeholder for local testing. Add HP_BOOK_SKU to .env for real orders.");
             } else {
                 return NextResponse.json(

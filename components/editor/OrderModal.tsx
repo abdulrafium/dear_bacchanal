@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSettings } from "@/providers/SettingsProvider";
 
@@ -12,12 +12,9 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Book, Download, Truck, Check, Sparkles, FileText, Loader2, User, Video } from "lucide-react";
+import { Book, Truck, Check, Sparkles, FileText, Loader2, User, Video } from "lucide-react";
 import { toast } from "sonner";
 import { useEditorStore } from "@/store/editor-store";
-
-const PAGE_WIDTH = 400;
-const PAGE_HEIGHT = 550;
 
 interface OrderModalProps {
   isOpen: boolean;
@@ -27,7 +24,9 @@ interface OrderModalProps {
 export function OrderModal({ isOpen, onClose }: OrderModalProps) {
   const [loading, setLoading] = useState(false);
   const [selectedType, setSelectedType] = useState<"soft" | "hard">("soft");
-  const { settings } = useSettings();
+  const { settings: providerSettings, refreshSettings } = useSettings();
+  const [localSettings, setLocalSettings] = useState<any>(null);
+  const settings = localSettings || providerSettings;
   const isGeneratingPdf = useEditorStore((s) => s.isGeneratingPdf);
   const generatePdfBook = useEditorStore((s) => s.generatePdfBook);
   const spreads = useEditorStore((s) => s.spreads);
@@ -45,13 +44,15 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
     city: "",
     state: "",
     postalCode: "",
-    country: "TT", // Default to Trinidad
+    country: "", // No default, user must select
     phone: "",
     email: user?.email || "",
   });
 
   const [shippingRate, setShippingRate] = useState<number | null>(null);
   const [calculatingShipping, setCalculatingShipping] = useState(false);
+  const [shippingCalculated, setShippingCalculated] = useState(false);
+  const [shippingErrors, setShippingErrors] = useState<string[]>([]);
 
   useEffect(() => {
     if (user) {
@@ -63,55 +64,13 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
     }
   }, [user]);
 
-  // Site Flow API Locations Integration
-  const [availableCountries, setAvailableCountries] = useState<any[]>([]);
-  const [availableCities, setAvailableCities] = useState<any[]>([]);
-  const [fetchingLocations, setFetchingLocations] = useState(false);
+  const [selectedZone, setSelectedZone] = useState<string>("");
 
-  // Fetch Countries on load if step is shipping
+  // Reset calculation when country or zone changes
   useEffect(() => {
-    if (step !== "shipping") return;
-    
-    const fetchCountries = async () => {
-        setFetchingLocations(true);
-        try {
-            const res = await fetch("/api/shipping/locations");
-            const data = await res.json();
-            if (data.success && data.data && data.data.length > 0) {
-                setAvailableCountries(data.data);
-            }
-        } catch (e) {
-            console.error("Failed to fetch countries from Siteflow API");
-        } finally {
-            setFetchingLocations(false);
-        }
-    };
-    fetchCountries();
-  }, [step]);
-
-  // Fetch Cities when Country changes
-  useEffect(() => {
-    if (!shippingInfo.country || step !== "shipping") return;
-
-    const fetchCities = async () => {
-        setFetchingLocations(true);
-        try {
-            const res = await fetch(`/api/shipping/locations?country=${shippingInfo.country}`);
-            const data = await res.json();
-            if (data.success && data.data) {
-                setAvailableCities(data.data);
-            } else {
-                setAvailableCities([]);
-            }
-        } catch (e) {
-            console.error("Failed to fetch cities from Siteflow API");
-            setAvailableCities([]);
-        } finally {
-            setFetchingLocations(false);
-        }
-    };
-    fetchCities();
-  }, [shippingInfo.country, step]);
+    setShippingCalculated(false);
+    setShippingRate(null);
+  }, [shippingInfo.country, selectedZone]);
 
   const extraSpreads = Math.max(0, spreads.length - 16);
   const stickersCount = spreads.reduce((acc, s) => {
@@ -121,7 +80,6 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
   }, 0);
 
   const extraSpreadPrice = settings?.pricing?.extraSpreadPrice || 500;
-  const extraStickerPrice = settings?.pricing?.extraStickerPrice || 500;
 
   const addonsTotal = (extraSpreads * extraSpreadPrice);
 
@@ -178,37 +136,34 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
     }
   };
 
-  const calculateShipping = async () => {
-    if (!shippingInfo.line1 || !shippingInfo.city || !shippingInfo.postalCode) {
-        toast.error("Please fill in main address fields");
-        return;
-    }
+  const calculateShipping = () => {
+    const errors: string[] = [];
+    if (!shippingInfo.name) errors.push("name");
+    if (!selectedZone) errors.push("zone");
+    if (!shippingInfo.country) errors.push("country");
+    if (!shippingInfo.line1) errors.push("line1");
+    if (!shippingInfo.city) errors.push("city");
 
+    if (errors.length > 0) {
+      setShippingErrors(errors);
+      return;
+    }
+    
+    setShippingErrors([]);
     setCalculatingShipping(true);
     try {
-        const res = await fetch("/api/shipping/calculate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                shippingInfo,
-                items: [{ 
-                    sku: "hardcover_book", 
-                    quantity: 1,
-                    sourceItemId: bookId || "preview"
-                }]
-            })
-        });
-        const data = await res.json();
-        if (data.success) {
-            setShippingRate(data.rate);
-            toast.success(`Shipping calculated: $${(data.rate / 100).toFixed(2)}`);
-        } else {
-            toast.error(data.error || "Could not calculate shipping");
-        }
-    } catch (err) {
-        toast.error("Shipping calculation failed");
+      const country = settings.countries.find((c: any) => c.code === shippingInfo.country);
+      if (country && country.shippingRate > 0) {
+        // shippingRate is stored in pence (GBP × 100), so divide by 100 to get GBP, then multiply by exchange rate, then × 100 for cents
+        const gbpPence = country.shippingRate; // e.g. 1383 pence = £13.83
+        const usdCents = Math.round((gbpPence / 100) * settings.general.exchangeRateGbpToUsd * 100);
+        setShippingRate(usdCents);
+      } else {
+        setShippingRate(0);
+      }
+      setShippingCalculated(true);
     } finally {
-        setCalculatingShipping(false);
+      setCalculatingShipping(false);
     }
   };
 
@@ -243,7 +198,16 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
   };
 
   useEffect(() => {
-    if (isOpen) console.log("OrderModal Triggered - isOpen:", isOpen);
+    if (isOpen) {
+        // Fetch fresh settings directly to avoid stale cache
+        fetch("/api/public/settings", { cache: "no-store" })
+          .then(r => r.json())
+          .then(data => {
+            setLocalSettings(data);
+          })
+          .catch(() => refreshSettings());
+        console.log("OrderModal Triggered - isOpen:", isOpen);
+    }
   }, [isOpen]);
 
   return (
@@ -367,57 +331,68 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
                             <input 
                                 placeholder="Full Recipient Name"
                                 value={shippingInfo.name}
-                                onChange={e => setShippingInfo({...shippingInfo, name: e.target.value})}
-                                className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500 placeholder-white/30"
+                                onChange={e => {
+                                    setShippingInfo({...shippingInfo, name: e.target.value});
+                                    setShippingErrors(prev => prev.filter(err => err !== "name"));
+                                }}
+                                className={`bg-white/5 border ${shippingErrors.includes("name") ? "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]" : "border-white/10"} rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500 placeholder-white/30 transition-all`}
                             />
-                            
-                            {/* Country Dropdown from API */}
-                            <select 
-                                value={shippingInfo.country}
-                                onChange={e => setShippingInfo({...shippingInfo, country: e.target.value, city: ""})}
-                                className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500"
-                                disabled={fetchingLocations && availableCountries.length === 0}
-                            >
-                                <option value="" className="bg-[#0a0a0a]">Select Country</option>
-                                {availableCountries.length > 0 ? (
-                                    availableCountries.map((c: any) => (
-                                        <option key={c.code || c.isoCode || c.id} value={c.code || c.isoCode || c.id} className="bg-[#0a0a0a]">{c.name}</option>
-                                    ))
-                                ) : (
-                                    settings?.countries?.filter(c => c.enabled).map(c => (
+                            <div className="grid grid-cols-2 gap-2">
+                                <select
+                                    value={selectedZone}
+                                    onChange={e => {
+                                        setSelectedZone(e.target.value);
+                                        setShippingInfo({...shippingInfo, country: ""});
+                                        setShippingCalculated(false);
+                                        setShippingErrors(prev => prev.filter(err => err !== "zone" && err !== "country"));
+                                    }}
+                                    className={`bg-white/5 border ${shippingErrors.includes("zone") ? "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]" : "border-white/10"} rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500 text-white transition-all`}
+                                >
+                                    <option value="" className="bg-[#0a0a0a]">Select Region</option>
+                                    <option value="Clear EU" className="bg-[#0a0a0a]">Europe (EU)</option>
+                                    <option value="Clear Non EU" className="bg-[#0a0a0a]">North America (USA)</option>
+                                    <option value="Tracked Non EU" className="bg-[#0a0a0a]">International (Tracked)</option>
+                                    <option value="Other" className="bg-[#0a0a0a]">Rest of World</option>
+                                </select>
+                                
+                                <select 
+                                    value={shippingInfo.country}
+                                    onChange={e => {
+                                        setShippingInfo({...shippingInfo, country: e.target.value, city: ""});
+                                        setShippingCalculated(false);
+                                        setShippingErrors(prev => prev.filter(err => err !== "country" && err !== "city"));
+                                    }}
+                                    disabled={!selectedZone}
+                                    className={`bg-white/5 border ${shippingErrors.includes("country") ? "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]" : "border-white/10"} rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500 text-white disabled:opacity-50 transition-all`}
+                                >
+                                    <option value="" className="bg-[#0a0a0a]">Select Country</option>
+                                    {settings?.countries?.filter((c: { zone: string; code: string; name: string }) => c.zone === selectedZone).map((c: { zone: string; code: string; name: string }) => (
                                         <option key={c.code} value={c.code} className="bg-[#0a0a0a]">{c.name}</option>
-                                    ))
-                                )}
-                            </select>
+                                    ))}
+                                </select>
+                            </div>
+
 
                             <input 
                                 placeholder="Address Line 1"
                                 value={shippingInfo.line1}
-                                onChange={e => setShippingInfo({...shippingInfo, line1: e.target.value})}
-                                className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500 placeholder-white/30"
+                                onChange={e => {
+                                    setShippingInfo({...shippingInfo, line1: e.target.value});
+                                    setShippingErrors(prev => prev.filter(err => err !== "line1"));
+                                }}
+                                className={`bg-white/5 border ${shippingErrors.includes("line1") ? "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]" : "border-white/10"} rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500 placeholder-white/30 transition-all`}
                             />
                             
                             <div className="grid grid-cols-2 gap-2">
-                                {/* City Dropdown from API (fallback to input if empty) */}
-                                {availableCities.length > 0 ? (
-                                    <select 
-                                        value={shippingInfo.city}
-                                        onChange={e => setShippingInfo({...shippingInfo, city: e.target.value})}
-                                        className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500"
-                                    >
-                                        <option value="" className="bg-[#0a0a0a]">Select City</option>
-                                        {availableCities.map((c: any) => (
-                                            <option key={c.code || c.name || c.id} value={c.name || c.code} className="bg-[#0a0a0a]">{c.name}</option>
-                                        ))}
-                                    </select>
-                                ) : (
-                                    <input 
-                                        placeholder="City"
-                                        value={shippingInfo.city}
-                                        onChange={e => setShippingInfo({...shippingInfo, city: e.target.value})}
-                                        className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500 placeholder-white/30"
-                                    />
-                                )}
+                                <input 
+                                    placeholder="City"
+                                    value={shippingInfo.city}
+                                    onChange={e => {
+                                        setShippingInfo({...shippingInfo, city: e.target.value});
+                                        setShippingErrors(prev => prev.filter(err => err !== "city"));
+                                    }}
+                                    className={`bg-white/5 border ${shippingErrors.includes("city") ? "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]" : "border-white/10"} rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500 placeholder-white/30 transition-all`}
+                                />
                                 
                                 <input 
                                     placeholder="Postcode / ZIP"
@@ -448,7 +423,7 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
 
 
 
-                   {shippingRate !== null && selectedType === 'hard' && (
+                   {shippingCalculated && shippingRate !== null && selectedType === 'hard' && (
                      <div className="flex justify-between items-center text-[9px] font-bold text-green-400 uppercase tracking-widest bg-green-400/5 p-1 px-2 rounded-md border border-green-400/10">
                         <span>Shipping Delivery</span>
                         <span>+${(shippingRate / 100).toFixed(2)}</span>
@@ -492,20 +467,32 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
             </div>
 
             <div className="px-4 sm:px-6 mb-6 flex flex-col gap-2">
-              {step === "shipping" && (
-                <Button
-                    onClick={calculateShipping}
-                    disabled={calculatingShipping || loading}
-                    className="w-full h-12 bg-white/5 border border-white/10 text-white hover:bg-white/10"
-                >
-                    {calculatingShipping ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Truck className="w-4 h-4 mr-2" />}
-                    {shippingRate !== null ? "RE-CALCULATE SHIPPING" : "CALCULATE SHIPPING"}
-                </Button>
+              {step === "shipping" && shippingCalculated && shippingRate !== null && (
+                 <div className="text-center text-[10px] text-green-400/70 font-bold uppercase tracking-widest mb-1">
+                    ✓ Shipping cost confirmed — click below to proceed
+                 </div>
               )}
               
+              {/* Calculate Shipping Button — shown only on shipping step, above Next button */}
+              {step === "shipping" && (
+                <button
+                  onClick={calculateShipping}
+                  disabled={calculatingShipping}
+                  className="w-full h-14 sm:h-16 text-base sm:text-lg font-black rounded-xl sm:rounded-2xl bg-white hover:bg-white/90 text-[#9f2e2b] transition-all active:scale-[0.98] flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(255,255,255,0.1)] disabled:opacity-60"
+                >
+                  {calculatingShipping ? (
+                    <><Loader2 className="w-5 h-5 animate-spin" /> CALCULATING...</>
+                  ) : shippingCalculated ? (
+                    <><Check className="w-5 h-5" /> RECALCULATE SHIPPING</>
+                  ) : (
+                    <><Truck className="w-5 h-5" /> CALCULATE SHIPPING</>
+                  )}
+                </button>
+              )}
+
               <Button
                 onClick={handlePayment}
-                disabled={loading || isGeneratingPdf || (step === "shipping" && shippingRate === null)}
+                disabled={loading || isGeneratingPdf || (step === "shipping" && !shippingCalculated)}
                 className="w-full h-14 sm:h-16 text-base sm:text-lg font-black rounded-xl sm:rounded-2xl bg-[#9f2e2b] hover:bg-[#c8413d] text-white transition-all active:scale-[0.98] flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(159,46,43,0.2)]"
               >
                 {loading ? (
