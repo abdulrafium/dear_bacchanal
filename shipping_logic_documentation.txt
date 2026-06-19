@@ -1,0 +1,47 @@
+PUREPRINT DYNAMIC DISTANCE-BASED SHIPPING LOGIC
+===============================================
+
+1. HOW THE SHIPPING IS CALCULATED
+---------------------------------
+Because the PurePrint HP SiteFlow API does not natively provide a real-time shipping quote endpoint, we built a custom Dynamic Distance Calculator. 
+When a user enters their shipping address, the backend silently converts their text address into GPS coordinates (Latitude and Longitude) and calculates the exact flight-path distance (in kilometers) between their front door and the PurePrint UK Factory.
+
+2. THE PRICING FORMULA
+----------------------
+The dynamic pricing uses a mathematical formula:
+- Base Processing Fee: $5.00
+- Distance Fee: $0.002 per Kilometer
+
+Formula: Total Shipping Cost = $5.00 + (Distance_in_km * 0.002)
+
+3. PUREPRINT FACTORY ORIGIN
+---------------------------
+All distances are measured starting from the PurePrint headquarters:
+- Address: Beacon Road, Crowborough, East Sussex, TN6 1AS, United Kingdom
+- Exact GPS Coordinates: Latitude 51.0457, Longitude 0.1651
+
+4. REAL CALCULATION EXAMPLES
+----------------------------
+Example 1 (Canada):
+- Destination: 290 Bremner Blvd, Toronto, ON, M5V 3L9, Canada
+- Distance from UK Factory: 5,753 km
+- Math: 5753 * 0.002 = $11.51
+- Total Charge: $5.00 Base + $11.51 = $16.51
+
+Example 2 (United Kingdom):
+- Destination: Westminster Bridge Rd, London, SE1 7PB, UK
+- Distance from UK Factory: 54 km
+- Math: 54 * 0.002 = $0.11
+- Total Charge: $5.00 Base + $0.11 = $5.11
+
+5. OPENSTREETMAP GEOCODER & ITS LIMITATIONS
+-------------------------------------------
+To perform the GPS coordinate lookups for free, the system uses the OpenStreetMap (Nominatim) API. It is 100% free and requires no API keys, but has two strict limitations:
+1. Rate Limit: It only allows 1 request per second. If multiple users checkout at the exact same millisecond, the API will temporarily block the request.
+2. Strict Formatting: It is easily confused by typos or unnecessary building names (e.g., adding "Riverside Building" to a street address will cause it to fail to find the location).
+
+6. THE "MANUAL FALLBACK" SAFETY NET
+-----------------------------------
+Because the free geocoder can sometimes fail due to the limitations above, we built a bullet-proof safety net. 
+If the geocoder gets rate-limited, or if the user types a fake/misspelled address that cannot be found on a map, the system will NEVER crash or stop the checkout. 
+Instead, it instantly catches the failure and applies the "Manual Fallback" flat rate that you configured in your Admin Panel Settings (e.g., $15.00 for Canada, $20.00 for the UK). This guarantees the user can always finish paying for their order!

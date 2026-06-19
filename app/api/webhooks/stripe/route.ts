@@ -3,8 +3,13 @@ import { stripe } from "@/lib/stripe";
 import { getDatabase } from "@/lib/db";
 import { ObjectId } from "mongodb";
 import { sendEmail } from "@/lib/mail-service";
-import { getOrderConfirmationEmail } from "@/lib/email-templates";
-import { generateInvoicePDF } from "@/lib/pdf-generator";
+import { getRefundEmail } from "@/lib/email-templates";
+import {
+  upsertOrderFromCheckoutSession,
+  markBookAsOrdered,
+  sendOrderConfirmationEmailIfNeeded,
+  getCustomerEmail,
+} from "@/lib/checkout-fulfillment";
 
 export async function POST(req: NextRequest) {
     const body = await req.text();
@@ -27,33 +32,31 @@ export async function POST(req: NextRequest) {
         const session = event.data.object as any;
         const userId = session.metadata?.userId;
         const shippingDetails = session.shipping_details;
-        const email = session.customer_email || session.customer_details?.email;
+        const email = getCustomerEmail(session);
 
         try {
             const db = await getDatabase();
             const usersCollection = db.collection("users");
-            const ordersCollection = db.collection("orders");
 
-            // Extract metadata
-            const orderType = session.metadata?.orderType || 'soft';
-            const amountTotal = session.amount_total || 0;
-            const currency = session.currency || 'usd';
-
-            let dbUserId = null;
+            let dbUserId: string | ObjectId | null = null;
 
             if (userId) {
-                const userDoc = await usersCollection.findOneAndUpdate(
-                    { _id: new ObjectId(userId) },
-                    {
-                        $set: {
-                            isPurchased: true,
-                            shippingDetails: shippingDetails ?? undefined,
-                            updatedAt: new Date(),
+                try {
+                    const userDoc = await usersCollection.findOneAndUpdate(
+                        { _id: new ObjectId(userId) },
+                        {
+                            $set: {
+                                isPurchased: true,
+                                shippingDetails: shippingDetails ?? undefined,
+                                updatedAt: new Date(),
+                            },
                         },
-                    },
-                    { returnDocument: 'after' }
-                );
-                dbUserId = userDoc ? userDoc._id : userId;
+                        { returnDocument: "after" }
+                    );
+                    dbUserId = userDoc ? userDoc._id : userId;
+                } catch {
+                    dbUserId = userId;
+                }
                 console.log(`User ${userId} purchase updated via webhook`);
             } else if (email) {
                 const existing = await usersCollection.findOne({ email });
@@ -87,128 +90,65 @@ export async function POST(req: NextRequest) {
                 console.log(`Guest user ${email} created/updated via webhook`);
             }
 
-            // CREATE ORDER RECORD
-            const orderRecord = {
-                userId: dbUserId,
-                email: email,
-                orderId: session.id,
-                amount: amountTotal,
-                currency: currency,
-                type: orderType,
-                templateName: session.metadata?.templateName || '',
-                bookId: session.metadata?.bookId || '',
-                status: orderType === 'hard' ? 'processing' : 'paid',
-                shippingDetails: shippingDetails || null,
-                paymentMethod: session.payment_method_types?.[0] || 'card',
-                customerName: session.customer_details?.name || shippingDetails?.name || email?.split('@')[0] || '',
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            };
+            await upsertOrderFromCheckoutSession(session, dbUserId);
+            await markBookAsOrdered(session.metadata?.bookId);
 
-            await ordersCollection.insertOne(orderRecord);
-            console.log(`Order record created for session ${session.id}`);
-
-            // Mark user_book as ordered so it disappears from My Designs
-            if (session.metadata?.bookId) {
-                const userBooksCollection = db.collection("user_books");
-                let bookQuery: any;
-                try {
-                    if (session.metadata.bookId.length === 24) {
-                        bookQuery = { _id: new ObjectId(session.metadata.bookId) };
-                    } else {
-                        bookQuery = { _id: session.metadata.bookId };
-                    }
-                } catch {
-                    bookQuery = { _id: session.metadata.bookId };
-                }
-                await userBooksCollection.updateOne(bookQuery, { $set: { isOrdered: true } });
-                console.log(`Marked book ${session.metadata.bookId} as ordered`);
+            const orderType = session.metadata?.orderType || "soft";
+            if (orderType === "hard") {
+                console.log(
+                    `Hard copy order ${session.id} recorded with status 'pending_approval'. Awaiting admin approval.`
+                );
             }
 
-            // TRIGGER PRINT API FOR HARD COPIES
-            if (orderType === 'hard') {
-                try {
-                    const { HPSiteFlowClient } = await import("@/lib/hp-site-flow");
-                    const client = new HPSiteFlowClient();
-                    const shippingInfo = JSON.parse(session.metadata?.shippingAddress || "{}");
-                    
-                    await client.createOrder({
-                        sourceOrderId: session.id,
-                        items: [{
-                            sourceItemId: session.metadata?.bookId || "preview",
-                            sku: "hardcover_book",
-                            quantity: 1,
-                            components: [
-                                { code: "cover", path: `${process.env.NEXTAUTH_URL || 'https://dearbacchanal.com'}/api/public/export/${session.metadata?.bookId}?type=cover`, fetch: true },
-                                { code: "text", path: `${process.env.NEXTAUTH_URL || 'https://dearbacchanal.com'}/api/public/export/${session.metadata?.bookId}?type=text`, fetch: true }
-                            ]
-                        }],
-                        shippingInfo: {
-                            name: session.metadata?.shippingName || shippingInfo.name || "Customer",
-                            line1: shippingInfo.line1,
-                            line2: shippingInfo.line2,
-                            city: shippingInfo.city,
-                            state: shippingInfo.state,
-                            postalCode: shippingInfo.postalCode,
-                            country: shippingInfo.country,
-                            email: email || "",
-                            shippingMethod: shippingInfo.shippingMethod || "standard"
-                        }
-                    });
-                    console.log(`Order ${session.id} forwarded to HP Site Flow`);
-                } catch (printError) {
-                    console.error("Failed to forward order to HP Site Flow:", printError);
-                }
-            }
-
-            // SEND CONFIRMATION EMAIL
-            if (email) {
-                try {
-                    // Generate PDF Invoice
-                    const pdfBuffer = await generateInvoicePDF({
-                        orderId: session.id,
-                        date: new Date(),
-                        customerName: session.customer_details?.name || "Customer",
-                        customerEmail: email,
-                        amount: amountTotal / 100,
-                        type: orderType,
-                        bookTitle: session.metadata?.templateName || "Dear Bacchanal Edition"
-                    });
-
-                    const emailHtml = getOrderConfirmationEmail({
-                        orderId: session.id,
-                        amount: amountTotal / 100,
-                        type: orderType,
-                        bookTitle: session.metadata?.templateName || "Dear Bacchanal Edition",
-                        transactionId: session.id
-                    });
-
-                    await sendEmail({
-                        to: email,
-                        subject: `Your Dear Bacchanal Order Confirmation - ${session.id.slice(-8).toUpperCase()}`,
-                        html: emailHtml,
-                        attachments: [
-                            {
-                                filename: `Invoice-${session.id.slice(-8).toUpperCase()}.pdf`,
-                                content: pdfBuffer,
-                                contentType: "application/pdf"
-                            }
-                        ]
-                    });
-                    console.log(`Confirmation email with PDF sent to ${email}`);
-                } catch (emailError) {
-                    console.error("Failed to send confirmation email:", emailError);
-                }
-            }
-
+            await sendOrderConfirmationEmailIfNeeded(session);
         } catch (error) {
-            console.error("Error updating user purchase status:", error);
+            console.error("Error processing checkout.session.completed:", error);
             return NextResponse.json(
                 { error: "Internal server error" },
                 { status: 500 }
             );
         }
+    }
 
+    if (event.type === "charge.refunded") {
+        const charge = event.data.object as any;
+        const refunds = charge.refunds?.data || [];
+        const latestRefund = refunds[refunds.length - 1];
+
+        if (latestRefund) {
+            const orderIdStr = latestRefund.metadata?.orderId;
+            const refundAmount = latestRefund.amount;
+
+            if (orderIdStr) {
+                try {
+                    const db = await getDatabase();
+                    const ordersCollection = db.collection("orders");
+                    
+                    const order = await ordersCollection.findOneAndUpdate(
+                        { _id: new ObjectId(orderIdStr) },
+                        {
+                            $set: {
+                                status: "refunded",
+                                refundedAt: new Date(),
+                                refundId: latestRefund.id,
+                            }
+                        },
+                        { returnDocument: "after" }
+                    );
+
+                    if (order && order.email) {
+                        await sendEmail({
+                            to: order.email,
+                            subject: "Your Refund has been Processed",
+                            html: getRefundEmail(order.orderId || order._id.toString(), refundAmount / 100)
+                        });
+                        console.log(`Refund processed via webhook for order ${orderIdStr}`);
+                    }
+                } catch (err) {
+                    console.error("Failed to process refund webhook:", err);
+                }
+            }
+        }
     }
 
     return NextResponse.json({ received: true });

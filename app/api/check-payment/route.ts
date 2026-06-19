@@ -3,6 +3,11 @@ import { stripe } from "@/lib/stripe";
 import { getDatabase } from "@/lib/db";
 import { ObjectId } from "mongodb";
 import { randomBytes } from "crypto";
+import {
+  upsertOrderFromCheckoutSession,
+  markBookAsOrdered,
+  sendOrderConfirmationEmailIfNeeded,
+} from "@/lib/checkout-fulfillment";
 
 export async function GET(req: NextRequest) {
     try {
@@ -13,7 +18,6 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Missing session_id" }, { status: 400 });
         }
 
-        // const checkoutSession = await stripe.checkout.sessions.retrieve(sessionId);
         const checkoutSession = await stripe.checkout.sessions.retrieve(sessionId) as any;
 
         if (checkoutSession.payment_status !== "paid") {
@@ -28,6 +32,8 @@ export async function GET(req: NextRequest) {
         const usersCollection = db.collection("users");
         const userId = checkoutSession.metadata?.userId as string | undefined;
         const email = (checkoutSession.customer_email || (checkoutSession.customer_details as any)?.email) as string | undefined;
+
+        let resolvedUserId: string | null = userId || null;
 
         if (userId) {
             let query: any;
@@ -45,122 +51,65 @@ export async function GET(req: NextRequest) {
                 query,
                 { $set: { isPurchased: true, updatedAt: new Date() } }
             );
+        } else if (email) {
+            let user = await usersCollection.findOne({ email });
+            const oneTimeToken = randomBytes(32).toString("hex");
+            const oneTimeTokenExpiry = new Date(Date.now() + 5 * 60 * 1000);
 
-            // Create order record if webhook hasn't done it yet (fallback)
-            const ordersCollection = db.collection("orders");
-            const existingOrder = await ordersCollection.findOne({ orderId: sessionId });
-            if (!existingOrder) {
-                await ordersCollection.insertOne({
-                    userId: userId,
-                    email: email || checkoutSession.customer_email || '',
-                    orderId: sessionId,
-                    amount: checkoutSession.amount_total || 0,
-                    currency: checkoutSession.currency || 'usd',
-                    type: checkoutSession.metadata?.orderType || 'soft',
-                    templateName: checkoutSession.metadata?.templateName || '',
-                    bookId: checkoutSession.metadata?.bookId || '',
-                    status: (checkoutSession.metadata?.orderType === 'hard') ? 'processing' : 'paid',
-                    shippingDetails: checkoutSession.shipping_details || null,
-                    paymentMethod: checkoutSession.payment_method_types?.[0] || 'card',
-                    customerName: checkoutSession.customer_details?.name || '',
+            if (user) {
+                await usersCollection.updateOne(
+                    { _id: user._id },
+                    {
+                        $set: {
+                            isPurchased: true,
+                            shippingDetails: checkoutSession.shipping_details ?? undefined,
+                            oneTimeToken,
+                            oneTimeTokenExpiry,
+                            updatedAt: new Date(),
+                        },
+                    }
+                );
+                resolvedUserId = user._id.toString();
+            } else {
+                const insert = await usersCollection.insertOne({
+                    email,
+                    name: checkoutSession.customer_details?.name ?? email.split("@")[0],
+                    provider: "stripe",
+                    password: null,
+                    image: null,
+                    emailVerified: new Date(),
+                    isPurchased: true,
+                    shippingDetails: checkoutSession.shipping_details ?? undefined,
+                    oneTimeToken,
+                    oneTimeTokenExpiry,
                     createdAt: new Date(),
                     updatedAt: new Date(),
                 });
+                resolvedUserId = insert.insertedId.toString();
             }
-
-            return NextResponse.json({
-                success: true,
-                session: { 
-                    shipping_details: checkoutSession.shipping_details,
-                    metadata: checkoutSession.metadata
-                }
-            });
-        }
-
-        if (!email) {
+        } else {
             return NextResponse.json({ success: false, error: "No customer email" }, { status: 400 });
         }
 
-        let user = await usersCollection.findOne({ email });
-        const oneTimeToken = randomBytes(32).toString("hex");
-        const oneTimeTokenExpiry = new Date(Date.now() + 5 * 60 * 1000);
+        await upsertOrderFromCheckoutSession(checkoutSession, resolvedUserId);
+        await markBookAsOrdered(checkoutSession.metadata?.bookId);
+        await sendOrderConfirmationEmailIfNeeded(checkoutSession);
 
-        if (user) {
-            await usersCollection.updateOne(
-                { _id: user._id },
-                {
-                    $set: {
-                        isPurchased: true,
-                        shippingDetails: checkoutSession.shipping_details ?? undefined,
-                        oneTimeToken,
-                        oneTimeTokenExpiry,
-                        updatedAt: new Date(),
-                    },
-                }
-            );
-        } else {
-            const insert = await usersCollection.insertOne({
-                email,
-                name: checkoutSession.customer_details?.name ?? email.split("@")[0],
-                provider: "stripe",
-                password: null,
-                image: null,
-                emailVerified: new Date(),
-                isPurchased: true,
-                shippingDetails: checkoutSession.shipping_details ?? undefined,
-                oneTimeToken,
-                oneTimeTokenExpiry,
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            });
-            user = await usersCollection.findOne({ _id: insert.insertedId });
-        }
-
-        // Create order record if webhook hasn't done it yet (fallback)
-        const ordersCollection = db.collection("orders");
-        const existingOrder = await ordersCollection.findOne({ orderId: sessionId });
-        if (!existingOrder) {
-            await ordersCollection.insertOne({
-                userId: user?._id?.toString() || null,
-                email: email,
-                orderId: sessionId,
-                amount: checkoutSession.amount_total || 0,
-                currency: checkoutSession.currency || 'usd',
-                type: checkoutSession.metadata?.orderType || 'soft',
-                templateName: checkoutSession.metadata?.templateName || '',
-                bookId: checkoutSession.metadata?.bookId || '',
-                status: (checkoutSession.metadata?.orderType === 'hard') ? 'processing' : 'paid',
-                shippingDetails: checkoutSession.shipping_details || null,
-                paymentMethod: checkoutSession.payment_method_types?.[0] || 'card',
-                customerName: checkoutSession.customer_details?.name || email?.split('@')[0] || '',
-                createdAt: new Date(),
-                updatedAt: new Date(),
-            });
-        }
-
-        // Mark the user_book as ordered so it disappears from My Designs
-        const bookId = checkoutSession.metadata?.bookId;
-        if (bookId) {
-            const userBooksCollection = db.collection("user_books");
-            let bookQuery: any;
-            try {
-                if (bookId.length === 24) {
-                    bookQuery = { _id: new ObjectId(bookId) };
-                } else {
-                    bookQuery = { _id: bookId };
-                }
-            } catch {
-                bookQuery = { _id: bookId };
-            }
-            await userBooksCollection.updateOne(bookQuery, { $set: { isOrdered: true } });
-        }
-
-        return NextResponse.json({
+        const response: Record<string, unknown> = {
             success: true,
-            session: { shipping_details: checkoutSession.shipping_details, metadata: checkoutSession.metadata },
-            email,
-            oneTimeToken,
-        });
+            session: {
+                shipping_details: checkoutSession.shipping_details,
+                metadata: checkoutSession.metadata,
+            },
+        };
+
+        if (!userId && email) {
+            const user = await usersCollection.findOne({ email });
+            response.email = email;
+            response.oneTimeToken = user?.oneTimeToken;
+        }
+
+        return NextResponse.json(response);
     } catch (error: any) {
         console.error("Payment Check Error:", error);
         return NextResponse.json({ error: error.message }, { status: 500 });

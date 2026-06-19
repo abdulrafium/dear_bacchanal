@@ -99,19 +99,33 @@ export async function POST(req: NextRequest) {
       let bookQuery: any = { userId };
       if (activeTemplateId && typeof activeTemplateId === 'string' && activeTemplateId !== "undefined") {
         try {
-          bookQuery = { _id: new ObjectId(activeTemplateId), userId };
+          // Query strictly by _id for precision.
+          bookQuery = { _id: new ObjectId(activeTemplateId) };
         } catch (e) {
-          // If ID is not a valid ObjectId, fall back to name-based lookup for this user
-          bookQuery = { userId, activeTemplateName: activeTemplateName || "Untitled Book" };
+          // If ID is invalid, fall back to name-based query (also check email to avoid duplicates)
+          bookQuery = {
+            $or: [
+              { userId, activeTemplateName: activeTemplateName || "Untitled Book" },
+              { email: user?.email, activeTemplateName: activeTemplateName || "Untitled Book" },
+            ].filter(q => Object.values(q).every(Boolean)),
+          };
         }
       } else {
-        bookQuery = { userId, activeTemplateName: activeTemplateName || "Untitled Book" };
+        // No ID yet — use name + (userId OR email) to find the existing record
+        bookQuery = {
+          activeTemplateName: activeTemplateName || "Untitled Book",
+          $or: [
+            { userId },
+            ...(user?.email ? [{ email: user.email }] : []),
+          ],
+        };
       }
       
       const result = await userBooksCollection.updateOne(
         bookQuery,
         {
           $set: {
+            userId, // Transfer ownership to current user (handles guest -> logged in transition)
             spreads: spreads || [],
             activeTemplateName: activeTemplateName || "Untitled Book",
             currentSpreadIndex: currentSpreadIndex || 0,
@@ -120,7 +134,6 @@ export async function POST(req: NextRequest) {
             email: user?.email, // Backfill email if missing
           },
           $setOnInsert: {
-            userId,
             createdAt: new Date(),
           },
         },

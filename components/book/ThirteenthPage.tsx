@@ -82,10 +82,7 @@ const ThirteenthPage = () => {
       const response = await fetch('/api/book-data', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('fb_token') || ""}`,
-          'x-user-email': localStorage.getItem('fb_user_email') || "",
-          'x-user-id': localStorage.getItem('fb_user_id') || ""
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           fieldId: 'calendar-events',

@@ -16,6 +16,7 @@ import {
   ChevronRight,
   FileBox,
   Ticket,
+  Undo2,
 } from "lucide-react";
 import { UserAvatar } from "@/components/auth/UserAvatar";
 import { useSession, signOut } from "next-auth/react";
@@ -23,6 +24,7 @@ import { useSession, signOut } from "next-auth/react";
 const navItems = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart },
+  { href: "/admin/refunds", label: "Refunds", icon: Undo2 },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/stickers", label: "Stickers", icon: Palette },
   { href: "/admin/templates", label: "Templates", icon: FileBox },

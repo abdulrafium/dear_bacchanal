@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
           type: orderType,
           templateName: metadata.templateName || '',
           bookId: metadata.bookId || '',
-          status: orderType === 'hard' ? 'processing' : 'paid',
+          status: orderType === 'hard' ? 'pending_approval' : 'paid',
           shippingDetails: (session as any).shipping_details || null,
           paymentMethod: session.payment_method_types?.[0] || 'card',
           customerName: customerName,
@@ -69,6 +69,48 @@ export async function POST(req: NextRequest) {
 
         await ordersCollection.insertOne(orderRecord);
         synced++;
+
+        // Send order received email for newly synced hard copy orders
+        if (orderType === 'hard') {
+           try {
+             const { sendEmail } = require("@/lib/mail-service");
+             const { getHardCopyOrderReceivedEmail } = require("@/lib/email-templates");
+             let emailToSendTo = email;
+
+             if (metadata.userId) {
+                const usersCollection = db.collection("users");
+                const { ObjectId } = require("mongodb");
+                const query = ObjectId.isValid(metadata.userId) ? { _id: new ObjectId(metadata.userId) } : { email: emailToSendTo };
+                const user = await usersCollection.findOne(query);
+                if (user?.email) {
+                    emailToSendTo = user.email;
+                }
+             }
+
+             const orderDate = new Date((session.created || 0) * 1000).toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+             });
+             const orderNumber = `#${session.id.slice(-8).toUpperCase()}`;
+
+             const emailHtml = getHardCopyOrderReceivedEmail({
+                customerName,
+                orderNumber,
+                bookTemplateName: metadata.templateName || "Dear Bacchanal Edition",
+                orderDate,
+             });
+
+             await sendEmail({
+                to: emailToSendTo,
+                subject: "Hard Copy Order Received",
+                html: emailHtml,
+             });
+             console.log(`[sync-stripe] Sent order received email to ${emailToSendTo}`);
+           } catch (e) {
+             console.error("[sync-stripe] Failed to send order received email", e);
+           }
+        }
       }
 
       hasMore = sessions.has_more;

@@ -38,8 +38,19 @@ export async function GET(req: NextRequest) {
       .sort({ updatedAt: -1 })
       .toArray();
 
+    // Deduplicate: if multiple books share the same name (can happen due to race conditions
+    // in past saves), only return the most recently updated one per name.
+    const seen = new Map<string, any>();
+    for (const t of templates) {
+      const key = (t.activeTemplateName || "My Carnival Book").toLowerCase();
+      if (!seen.has(key)) {
+        seen.set(key, t);
+      }
+    }
+    const deduplicated = Array.from(seen.values());
+
     // Map the internal structure to the Template interface the frontend expects
-    const formattedTemplates = templates.map(t => ({
+    const formattedTemplates = deduplicated.map(t => ({
       _id: t._id.toString(),
       bookName: t.activeTemplateName || "My Carnival Book",
       imageCount: t.imageCount || 0,

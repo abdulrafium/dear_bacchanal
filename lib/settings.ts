@@ -3,18 +3,18 @@ import { PlatformSettings } from "@/types/settings";
 
 const DEFAULT_SETTINGS: PlatformSettings = {
   pricing: {
-    hardCopyPrice: Number(process.env.STRIPE_HARD_COPY_PRICE) || 3500,
-    softCopyPrice: Number(process.env.STRIPE_SOFT_COPY_PRICE) || 2000,
+    hardCopyPrice: Number(process.env.STRIPE_HARD_COPY_PRICE) || 5000,
+    softCopyPrice: Number(process.env.STRIPE_SOFT_COPY_PRICE) || 4000,
     stickerPrice: 500,
     extraSpreadPrice: 500,
     extraStickerPrice: 500,
     markupPercentage: 20,
   },
   countries: [
-    { code: "US", name: "United States", shippingRate: 0, enabled: true },
-    { code: "CA", name: "Canada", shippingRate: 1500, enabled: true },
-    { code: "GB", name: "United Kingdom", shippingRate: 2000, enabled: true },
-    { code: "GY", name: "Guyana", shippingRate: 0, enabled: true },
+    { code: "US", name: "United States", zone: "Clear Non EU", shippingRate: 0, enabled: true },
+    { code: "CA", name: "Canada", zone: "Clear Non EU", shippingRate: 1500, enabled: true },
+    { code: "GB", name: "United Kingdom", zone: "Other", shippingRate: 2000, enabled: true },
+    { code: "GY", name: "Guyana", zone: "Other", shippingRate: 0, enabled: true },
   ],
   print: {
     apiKey: "",
@@ -28,6 +28,7 @@ const DEFAULT_SETTINGS: PlatformSettings = {
     adminNotificationEmail: "admin@dearbacchanal.com",
     maintenanceMode: false,
     refundDeadlineDays: 14,
+    exchangeRateGbpToUsd: 1.30,
   },
 };
 

@@ -117,7 +117,9 @@ export async function POST(req: NextRequest) {
         };
 
         if (orderType === 'hard') {
-            const allowedCountries = countries.filter(c => c.enabled).map(c => c.code);
+            const allowedCountries = countries
+                .filter(c => c.enabled && c.code && c.code.length === 2)
+                .map(c => c.code);
             checkoutSessionOptions.shipping_address_collection = {
                 allowed_countries: allowedCountries.length > 0 ? allowedCountries : ["US", "CA", "GB"],
             };

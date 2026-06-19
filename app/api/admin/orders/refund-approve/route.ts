@@ -3,6 +3,8 @@ import { adminAuthMiddleware } from "@/lib/admin-auth";
 import { getDatabase } from "@/lib/db";
 import { ObjectId } from "mongodb";
 import { stripe } from "@/lib/stripe";
+import { sendEmail } from "@/lib/mail-service";
+import { getRefundEmail } from "@/lib/email-templates";
 
 export async function POST(req: NextRequest) {
   try {
@@ -36,6 +38,31 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Stripe Session ID missing from order record" }, { status: 400 });
     }
 
+    // BYPASS STRIPE FOR MOCK/TEST ORDERS (e.g. NAQJ0LQU)
+    if (!stripeSessionId.startsWith('cs_')) {
+        const updatedOrder = await db.collection("orders").findOneAndUpdate(
+            { _id: new ObjectId(orderId) },
+            { 
+                $set: { 
+                    status: 'refunded',
+                    refundedAt: new Date(),
+                    refundId: `mock_refund_${Date.now()}`
+                } 
+            },
+            { returnDocument: 'after' }
+        );
+
+        if (updatedOrder && updatedOrder.email) {
+            await sendEmail({
+                to: updatedOrder.email,
+                subject: "Your Refund has been Processed",
+                html: getRefundEmail(updatedOrder.orderId || updatedOrder._id.toString(), Math.floor(updatedOrder.amount * 0.8) / 100)
+            });
+        }
+
+        return NextResponse.json({ success: true, message: "Mock order refunded locally" });
+    }
+
     const session = await stripe.checkout.sessions.retrieve(stripeSessionId);
     const paymentIntentId = session.payment_intent as string;
 
@@ -43,27 +70,71 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Payment Intent not found for this session" }, { status: 400 });
     }
 
-    // 2. TRIGGER STRIPE REFUND
-    const refund = await stripe.refunds.create({
-        payment_intent: paymentIntentId,
-        reason: 'requested_by_customer'
-    });
+    // 2. CALCULATE 80% NET REFUND (20% DEDUCTION)
+    // order.amount is stored in cents (e.g., 10000 = $100.00)
+    const refundAmount = Math.floor(order.amount * 0.8);
 
-    if (refund.status === 'succeeded' || refund.status === 'pending') {
-        // 3. Update DB
-        await db.collection("orders").updateOne(
-            { _id: new ObjectId(orderId) },
-            { 
-                $set: { 
-                    status: 'refunded',
-                    refundedAt: new Date(),
-                    refundId: refund.id
-                } 
+    // 3. TRIGGER STRIPE PARTIAL REFUND
+    try {
+        const refund = await stripe.refunds.create({
+            payment_intent: paymentIntentId,
+            amount: refundAmount,
+            reason: 'requested_by_customer',
+            metadata: {
+                orderId: orderId.toString()
             }
-        );
-        return NextResponse.json({ success: true, refundId: refund.id });
-    } else {
-        throw new Error(`Stripe refund status: ${refund.status}`);
+        });
+
+        if (refund.status === 'succeeded' || refund.status === 'pending') {
+            const updatedOrder = await db.collection("orders").findOneAndUpdate(
+                { _id: new ObjectId(orderId) },
+                { 
+                    $set: { 
+                        status: 'refunded',
+                        refundedAt: new Date(),
+                        refundId: refund.id
+                    } 
+                },
+                { returnDocument: 'after' }
+            );
+
+            if (updatedOrder && updatedOrder.email) {
+                await sendEmail({
+                    to: updatedOrder.email,
+                    subject: "Your Refund has been Processed",
+                    html: getRefundEmail(updatedOrder.orderId || updatedOrder._id.toString(), Math.floor(updatedOrder.amount * 0.8) / 100)
+                });
+            }
+
+            return NextResponse.json({ success: true, refundId: refund.id });
+        } else {
+            throw new Error(`Stripe refund status: ${refund.status}`);
+        }
+    } catch (stripeError: any) {
+        if (stripeError.code === 'amount_too_large' || stripeError.message?.includes('greater than unrefunded amount')) {
+            console.log(`Order ${orderId} already partially refunded via Stripe. Forcing DB update.`);
+            const updatedOrder = await db.collection("orders").findOneAndUpdate(
+                { _id: new ObjectId(orderId) },
+                { 
+                    $set: { 
+                        status: 'refunded',
+                        refundedAt: new Date()
+                    } 
+                },
+                { returnDocument: 'after' }
+            );
+
+            if (updatedOrder && updatedOrder.email) {
+                await sendEmail({
+                    to: updatedOrder.email,
+                    subject: "Your Refund has been Processed",
+                    html: getRefundEmail(updatedOrder.orderId || updatedOrder._id.toString(), Math.floor(updatedOrder.amount * 0.8) / 100)
+                });
+            }
+            
+            return NextResponse.json({ success: true, message: "Order was already refunded. Status synced." });
+        }
+        throw stripeError;
     }
 
   } catch (error: any) {

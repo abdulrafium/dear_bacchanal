@@ -19,6 +19,7 @@ export default function EditorWorkspace() {
   const activeSidebarPanel = useEditorStore((s) => s.activeSidebarPanel);
   const isOrderModalOpen = useEditorStore((s) => s.isOrderModalOpen);
   const isPreviewMode = useEditorStore((s) => s.isPreviewMode);
+  const pdfProgress = useEditorStore((s) => s.pdfGenerationProgress);
   const resetEditor = useEditorStore((s) => s.resetEditor);
   const loadTemplate = useEditorStore((s) => s.loadTemplate);
   const setCurrentSpread = useEditorStore((s) => s.setCurrentSpread);
@@ -78,25 +79,15 @@ export default function EditorWorkspace() {
   useEffect(() => {
     const loadEditorState = async () => {
       const isNewParam = searchParams.get("new") === "true";
-      const currentKey = `${isAdmin}_${templateName}_${isNewParam}`;
-      
-      // If the store already matches the URL parameters, don't re-load from API
-      const activeNameInStore = useEditorStore.getState().activeTemplateName;
-      const isLoaded = useEditorStore.getState().templateLoaded;
+      const currentKey = `${isAdmin}_${templateName}_${isNewParam}_${Date.now().toString().slice(0, -4)}`;
       
       const isPaymentReturn = searchParams.get("payment") === "success";
       
-      // Skip early-return guards when returning from payment
-      if (!isPaymentReturn) {
-        if (isLoaded && activeNameInStore === templateName && !isNewParam) {
-          setLoading(false);
-          return;
-        }
-
-        if (lastLoadedRef.current === currentKey) {
-          setLoading(false);
-          return;
-        }
+      // Only skip if we literally just loaded this exact configuration (within ~10s)
+      // This prevents re-loading on minor re-renders but always loads fresh on new navigation
+      if (!isPaymentReturn && lastLoadedRef.current === currentKey) {
+        setLoading(false);
+        return;
       }
 
       try {
@@ -230,37 +221,53 @@ export default function EditorWorkspace() {
   // Handle auto-download after payment
   useEffect(() => {
     const isPaymentSuccess = searchParams.get("payment") === "success";
+    const isPaymentSuccessHard = searchParams.get("payment") === "success_hard";
     const isLoaded = useEditorStore.getState().templateLoaded;
     const stage = useEditorStore.getState().stageRef;
 
-    if (isPaymentSuccess && isLoaded && stage && !loading && !downloadTriggeredRef.current) {
+    if ((isPaymentSuccess || isPaymentSuccessHard) && isLoaded && stage && !loading && !downloadTriggeredRef.current) {
       downloadTriggeredRef.current = true;
       
       const triggerDownload = async () => {
         const { generatePdfBook } = useEditorStore.getState();
         const { toast } = await import("sonner");
         
-        toast.info("Payment verified! Starting your automatic book download...", {
-          duration: 5000,
-        });
+        if (!isPaymentSuccessHard) {
+          toast.info("Payment verified! Starting your automatic book download...", { duration: 5000 });
+        }
 
         try {
-          await generatePdfBook();
-          await refreshUser();
+          // generatePdfBook now handles both generating the PDF, downloading it locally, AND uploading it to UploadThing in the background
+          await generatePdfBook(isPaymentSuccessHard);
+          await refreshUser(); // refreshUser from component scope
+          
+          if (isPaymentSuccessHard) {
+             toast.success("Files successfully attached to order! Redirecting...", { duration: 3000 });
+          } else {
+             toast.success("Download initiated! Redirecting...", { duration: 3000 });
+          }
 
-          // Clean up URL
-          const url = new URL(window.location.href);
-          url.searchParams.delete("payment");
-          window.history.replaceState({}, "", url.toString());
+          // Clean up URL and redirect back to customize
+          setTimeout(() => {
+            window.location.href = "/customize";
+          }, 3000);
         } catch (err) {
             console.error("Auto-download failed:", err);
+            toast.error(isPaymentSuccessHard ? "Failed to process files for print." : "Failed to download PDF automatically.");
             downloadTriggeredRef.current = false; // Allow retry if it failed
+            useEditorStore.setState({ pdfGenerationProgress: null });
         }
       };
 
-      triggerDownload();
+      // Set initial overlay immediately so user doesn't see the editor flashing
+      useEditorStore.setState({ 
+        pdfGenerationProgress: { current: 0, total: 100, status: "Initializing print job..." } 
+      });
+
+      // Slight delay to ensure fonts/images are fully rendered
+      setTimeout(triggerDownload, 1500);
     }
-  }, [searchParams, loading]);
+  }, [searchParams, loading, templateName, refreshUser]);
 
   // Sync templateName, isAdmin, and currentSpreadIndex with URL and handle beforeunload
   useEffect(() => {
@@ -316,6 +323,34 @@ export default function EditorWorkspace() {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#f5f5f5] overflow-hidden select-none relative">
+      {/* Show full screen progress overlay during PDF generation */}
+      {pdfProgress && (
+        <div className="absolute inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center text-white">
+          <div className="w-24 h-24 mb-8 relative">
+            <div className="absolute inset-0 border-4 border-white/20 rounded-full"></div>
+            <div 
+              className="absolute inset-0 border-4 border-[#9f2e2b] rounded-full animate-spin border-t-transparent"
+            ></div>
+            <div className="absolute inset-0 flex items-center justify-center font-bold text-xl">
+              {Math.round((pdfProgress.current / pdfProgress.total) * 100)}%
+            </div>
+          </div>
+          
+          <h2 className="text-3xl font-black uppercase tracking-widest mb-4">
+            Preparing Your Legacy
+          </h2>
+          
+          <p className="text-white/70 text-lg mb-2">
+            Please wait while we process your high-resolution files for printing.
+          </p>
+          
+          <div className="bg-white/10 px-6 py-3 rounded-full mt-4 flex items-center gap-3">
+             <Loader2 className="w-5 h-5 animate-spin text-[#9f2e2b]" />
+             <span className="font-mono text-sm tracking-wider">{pdfProgress.status}</span>
+          </div>
+        </div>
+      )}
+
       <EditorElementToolbar />
       <EditorTopToolbar />
 

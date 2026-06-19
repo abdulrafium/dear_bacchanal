@@ -45,15 +45,22 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ error: "Invalid shipping address for print", details: validation.errors }, { status: 400 });
             }
 
-            // Fallback rate if OneFlow didn't provide one in validation
-            const fallbackCountry = settings.countries.find(c => c.code === shippingInfo.country);
-            const rate = validation.shippingRate || fallbackCountry?.shippingRate || 1500;
+            let finalRate = validation.shippingRate;
+            let mode = "api";
+            let carrier = validation.carrier || "Standard Carrier";
+
+            if (validation.unsupported || finalRate === undefined) {
+                 // PurePrint doesn't support live calculations, so we ALWAYS use flat rates
+                 const fallbackCountry = settings.countries.find(c => c.code === shippingInfo.country);
+                 finalRate = fallbackCountry?.shippingRate ?? 1500;
+                 mode = "manual";
+            }
 
             return NextResponse.json({ 
                 success: true, 
-                rate: rate,
-                mode: 'api',
-                carrier: validation.carrier || "Standard Carrier"
+                rate: finalRate,
+                mode: mode,
+                carrier: carrier
             });
         } catch (apiError) {
             console.error("Print API Shipping Error:", apiError);

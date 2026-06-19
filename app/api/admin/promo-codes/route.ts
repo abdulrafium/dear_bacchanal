@@ -1,14 +1,10 @@
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
 import { NextRequest, NextResponse } from "next/server";
-
 import { stripe } from "@/lib/stripe";
-
 import { auth } from "@/lib/auth";
-
 import { getDatabase } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET() {
   try {
@@ -17,13 +13,36 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // List promotion codes from Stripe
-    const promoCodes = await stripe.promotionCodes.list({
+    // Get Stripe promotion codes
+    const stripeCodes = await stripe.promotionCodes.list({
       limit: 100,
-      expand: ['data.coupon']
+      expand: ["data.coupon"],
     });
 
-    return NextResponse.json({ promoCodes: promoCodes.data }, { status: 200 });
+    // Get MongoDB metadata (bannerActive, startDate, stripeId)
+    const db = await getDatabase();
+    const dbCodes = await db.collection("promo_codes").find({}).toArray();
+
+    // Merge Stripe data with MongoDB metadata (supports both old `id` and new `stripeId` field)
+    const merged = stripeCodes.data
+      .map((sc) => {
+        const dbEntry = dbCodes.find(
+          (d) => d.stripeId === sc.id || d.id === sc.id
+        );
+        return {
+          ...sc,
+          bannerActive: dbEntry?.bannerActive === true, // strict boolean check
+          startDate: dbEntry?.startDate ?? null,
+          dbId: dbEntry?._id?.toString() ?? null,
+        };
+      })
+      .filter((m) => {
+        // Hide codes that are inactive AND not in MongoDB (meaning they were deleted)
+        if (!m.active && !m.dbId) return false;
+        return true;
+      });
+
+    return NextResponse.json({ promoCodes: merged }, { status: 200 });
   } catch (error: any) {
     console.error("Error fetching promo codes:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -37,7 +56,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { code, type, value, name } = await req.json();
+    const { code, type, value, name, startDate, expireDate } = await req.json();
 
     // 1. Create a Coupon in Stripe
     const couponParams: any = {
@@ -48,26 +67,34 @@ export async function POST(req: NextRequest) {
     if (type === "percentage") {
       couponParams.percent_off = value;
     } else {
-      couponParams.amount_off = value * 100; // Stripe uses cents
+      couponParams.amount_off = value * 100;
       couponParams.currency = "usd";
     }
 
     const coupon = await stripe.coupons.create(couponParams);
 
     // 2. Create a Promotion Code for that Coupon
-    const promoCode = await stripe.promotionCodes.create({
+    const promoParams: any = {
       coupon: coupon.id,
       code: code.toUpperCase(),
-    } as any);
+    };
+    
+    if (expireDate) {
+       promoParams.expires_at = Math.floor(new Date(expireDate).getTime() / 1000);
+    }
 
-    // Optional: Store in MongoDB
+    const promoCode = await stripe.promotionCodes.create(promoParams);
+
+    // 3. Store in MongoDB with extra fields
     const db = await getDatabase();
     await db.collection("promo_codes").insertOne({
-      id: promoCode.id,
+      stripeId: promoCode.id,
       stripeCouponId: coupon.id,
       code: code.toUpperCase(),
       type,
       value,
+      startDate: startDate || null,
+      bannerActive: false,
       createdAt: new Date(),
     });
 
@@ -77,5 +104,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
-
-

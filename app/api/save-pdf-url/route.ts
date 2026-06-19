@@ -25,8 +25,10 @@ export async function POST(req: NextRequest) {
         console.log("Attempting to save PDF URL for user:", user.id);
         console.log("File URL:", fileUrl);
 
+        const query = ObjectId.isValid(user.id) ? { _id: new ObjectId(user.id) } : { email: user.email };
+
         const result = await usersCollection.updateOne(
-            { _id: new ObjectId(user.id) },
+            query,
             {
                 $set: {
                     savedPdfUrl: fileUrl,
