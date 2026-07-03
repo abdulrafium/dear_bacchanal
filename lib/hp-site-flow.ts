@@ -225,16 +225,6 @@ export class HPSiteFlowClient {
             console.error("Error validating HP Site Flow order:", error);
             throw error;
         }
-    async validateOrder(orderData: OrderData): Promise<{ errors?: any; shippingRate?: number; carrier?: string }> {
-        // Determine carrier alias based on shipping method logic (standard vs international)
-        const carrierAlias = orderData.shippingInfo.shippingMethod === 'international' ? 'international' : 'standard';
-        
-        // Mocking the validation response since OneFlow validation requires specific setup
-        // This satisfies the API requirements while letting the fallback logic calculate the rate
-        return {
-            shippingRate: undefined, // Will fall back to manual rates if needed
-            carrier: carrierAlias
-        };
     }
 
     async fetchCountries() {
