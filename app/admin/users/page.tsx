@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, RotateCcw, Ban, CheckCircle, CreditCard, ChevronLeft, ChevronRight, User as UserIcon } from "lucide-react";
+import { Search, RotateCcw, Ban, CheckCircle, CreditCard, ChevronLeft, ChevronRight, User as UserIcon, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 interface User {
   id: string;
@@ -23,6 +24,45 @@ export default function AdminUsersPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [deletingUsers, setDeletingUsers] = useState<Set<string>>(new Set());
+
+  // Confirm modal state
+  const [confirmModal, setConfirmModal] = useState<{ open: boolean; title: string; description: string; onConfirm: () => Promise<void> }>({
+    open: false, title: '', description: '', onConfirm: async () => {}
+  });
+
+  const openConfirm = (title: string, description: string, onConfirm: () => Promise<void>) => {
+    setConfirmModal({ open: true, title, description, onConfirm });
+  };
+
+  const executeDeleteUser = async (userId: string) => {
+    setDeletingUsers(prev => new Set(prev).add(userId));
+    try {
+      const res = await fetch(`/api/admin/users?userId=${userId}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success("User deleted");
+        fetchUsers();
+      } else {
+        toast.error("Failed to delete user");
+      }
+    } catch (e) {
+      toast.error("Delete failed");
+    } finally {
+      setDeletingUsers(prev => {
+        const next = new Set(prev);
+        next.delete(userId);
+        return next;
+      });
+    }
+  };
+
+  const deleteUser = (userId: string) => {
+    openConfirm(
+      "Delete User",
+      "This will permanently delete this user account. Their orders and books will remain in the database. This cannot be undone.",
+      () => executeDeleteUser(userId)
+    );
+  };
 
   useEffect(() => {
     fetchUsers();
@@ -70,6 +110,14 @@ export default function AdminUsersPage() {
 
   return (
     <div className="space-y-6">
+      <ConfirmModal
+        isOpen={confirmModal.open}
+        onClose={() => setConfirmModal(m => ({ ...m, open: false }))}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        description={confirmModal.description}
+        confirmLabel="Yes, Delete"
+      />
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4">
           <div>
@@ -199,6 +247,14 @@ export default function AdminUsersPage() {
                           title={user.isDisabled ? "Enable User" : "Disable User"}
                         >
                           {user.isDisabled ? <CheckCircle className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
+                        </button>
+                        <button
+                          onClick={() => deleteUser(user.id)}
+                          disabled={deletingUsers.has(user.id)}
+                          className="p-2 rounded-lg bg-red-500/5 text-white/40 hover:text-red-400 hover:bg-red-500/20 transition-all disabled:opacity-50 inline-flex items-center"
+                          title="Delete User"
+                        >
+                          {deletingUsers.has(user.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                         </button>
                       </div>
                     </td>

@@ -13,6 +13,7 @@ import {
   ShoppingCart,
   Layout,
   Download,
+  ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
@@ -31,6 +32,7 @@ export function EditorTopToolbar() {
   const activeTemplateName = useEditorStore((s) => s.activeTemplateName);
 
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "modified">("saved");
+  const [showPdfDropdown, setShowPdfDropdown] = useState(false);
 
   const save = useEditorStore((s) => s.save);
 
@@ -165,24 +167,73 @@ export function EditorTopToolbar() {
         </button>
 
         {isAdmin && (
-          <button 
-            onClick={async () => {
-              const { generatePdfBook, spreads } = useEditorStore.getState();
-              toast.info("Generating free Admin PDF for testing...");
-              try {
-                await generatePdfBook();
-                toast.success("PDF generated successfully!");
-              } catch (err) {
-                console.error("PDF generation failed:", err);
-                toast.error("Failed to generate PDF");
-              }
-            }}
-            className="flex items-center gap-1 sm:gap-1.5 bg-red-600/10 text-red-600 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs font-bold hover:bg-red-600 hover:text-white transition-all ml-0.5 sm:ml-2 border border-red-200"
-            title="Admin Quick PDF Test"
-          >
-            <Download className="w-4 h-4" />
-            <span className="hidden lg:block uppercase tracking-tight">Admin PDF</span>
-          </button>
+          <div className="relative">
+            <button 
+              onClick={() => setShowPdfDropdown(!showPdfDropdown)}
+              className="flex items-center gap-1 sm:gap-1.5 bg-red-600/10 text-red-600 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs font-bold hover:bg-red-600 hover:text-white transition-all ml-0.5 sm:ml-2 border border-red-200"
+              title="Admin Quick PDF Test"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden lg:block uppercase tracking-tight">Admin PDF</span>
+              <ChevronDown className="w-3 h-3" />
+            </button>
+
+            {showPdfDropdown && (
+              <>
+                <div 
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowPdfDropdown(false)}
+                />
+                <div className="absolute top-full mt-2 right-0 bg-white border border-gray-200 shadow-xl rounded-lg py-1 w-48 z-50">
+                  <button 
+                    onClick={async () => {
+                      setShowPdfDropdown(false);
+                      const { generatePdfBook } = useEditorStore.getState();
+                      toast.info("Generating HardCover PDF...");
+                      try {
+                        await generatePdfBook(false, false, 'cover');
+                      } catch (err) {
+                        toast.error("Failed to generate HardCover PDF");
+                      }
+                    }}
+                    className="w-full text-left px-4 py-2 text-xs font-bold hover:bg-red-50 text-gray-700 hover:text-red-600 transition-colors"
+                  >
+                    HardCover PDF
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      setShowPdfDropdown(false);
+                      const { generatePdfBook } = useEditorStore.getState();
+                      toast.info("Generating Inner Pages PDF...");
+                      try {
+                        await generatePdfBook(false, false, 'inner');
+                      } catch (err) {
+                        toast.error("Failed to generate Inner Pages PDF");
+                      }
+                    }}
+                    className="w-full text-left px-4 py-2 text-xs font-bold hover:bg-red-50 text-gray-700 hover:text-red-600 transition-colors border-t border-gray-50"
+                  >
+                    Inner Pages PDF
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      setShowPdfDropdown(false);
+                      const { generatePdfBook } = useEditorStore.getState();
+                      toast.info("Generating Both PDFs...");
+                      try {
+                        await generatePdfBook(false, false, 'both');
+                      } catch (err) {
+                        toast.error("Failed to generate PDFs");
+                      }
+                    }}
+                    className="w-full text-left px-4 py-2 text-xs font-bold hover:bg-red-50 text-gray-700 hover:text-red-600 transition-colors border-t border-gray-50"
+                  >
+                    Generate Both
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         )}
 
         {!isAdmin && (

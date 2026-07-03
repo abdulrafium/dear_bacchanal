@@ -12,8 +12,8 @@ export interface BookTemplate {
   isActive?: boolean;
 }
 
-const PAGE_WIDTH = 400;
-const PAGE_HEIGHT = 550;
+const PAGE_WIDTH = 500;
+const PAGE_HEIGHT = 500;
 
 function createText(text: string, x: number, y: number, fontSize: number, fill: string, width: number = PAGE_WIDTH, align: "left" | "center" | "right" = "center"): EditorElement {
   return {
@@ -62,21 +62,17 @@ function createPage(
 
 export function createBacchanaleTemplate(): BookTemplate {
   const spreads: BookSpread[] = [
-    // Spread 0 — Cover (FirstPage is actually back cover, EigthPage is front cover)
+    // Spread 0 — Cover (FirstPage is back cover, EigthPage is front cover)
     {
       id: uuidv4(),
-      leftPage: createPage("Back cover", "#ffffff", [
-        {...createBgImage("/assets/layer-2.png"), isLocked: true, x: PAGE_WIDTH * 0.2, y: PAGE_HEIGHT * 0.4, width: PAGE_WIDTH * 0.8, height: PAGE_HEIGHT * 0.6},
-        createText("Dear Bacchanal", 30, 70, 16, "#000000", 250, "left"),
-        createText("First edition 2023\nSecond edition 2026", 30, 120, 12, "#000000", 250, "left"),
-        createText("Copyright © SAFFA Trinidad Ltd.\nAll rights reserved.\nNo part of this book may be reproduced\nin any form or by any means without\nthe written permission of the copyright owner.", 30, 180, 11, "#000000", 250, "left"),
-        createText("Ami Aqui Sirjoo, Creative Director\nAarad Homer, Assistant Creative Director\nAya Ataeva, Web Development and Design", 30, 290, 11, "#000000", 250, "left"),
+      leftPage: createPage("Back cover", "#b5251a", [
+        {...createBgImage("/assets/layer-12.png"), isLocked: true, opacity: 0.25},
+        { ...createText("The tabanka is real\nThank you Carnival 2026", 60, PAGE_HEIGHT / 2 - 30, 22, "#ffffff", PAGE_WIDTH - 120, "left"), fontFamily: "Kalam", fontStyle: "italic" },
       ], true),
-      rightPage: createPage("Front cover", "#ffffff", [
-        createBgImage("/assets/layer-12.png"),
-        createText("We tried to behave.", 0, 100, 20, "#000000", PAGE_WIDTH, "center"),
-        createText("DEAR", 0, 210, 52, "#000000", PAGE_WIDTH, "center"),
-        createText("BACCHANAL", 0, 270, 72, "#000000", PAGE_WIDTH, "center"),
+      rightPage: createPage("Front cover", "#b5251a", [
+        {...createBgImage("/assets/layer-12.png"), isLocked: true},
+        createText("DEAR", 40, PAGE_HEIGHT / 2 - 80, 88, "#ffffff", PAGE_WIDTH * 0.5, "left"),
+        createText("BACCHANAL", 40, PAGE_HEIGHT / 2 + 20, 88, "#ffffff", PAGE_WIDTH * 0.55, "left"),
       ], true),
     },
     // Spread 1 — Quote + Letter (TenthPage equivalent split across two pages)
@@ -164,18 +160,18 @@ export function createBacchanaleTemplate(): BookTemplate {
         { ...createText("LIMIN'", 100, 70, 85, "#ffffff", 300, "center"), fontFamily: "Poppins", rotation: 5 },
         
         // Definition
-        { ...createText("Trinidadian slang (pronounced lime-in) means to hang out in relaxed leisurely manner, often with food, drinks and music without specific agenda.", 40, 180, 18, "#ffffff", PAGE_WIDTH - 80, "center"), fontFamily: "Kalam" },
+        { ...createText("Trinidadian slang (pronounced lime-in) means to hang out in relaxed leisurely manner, often with food, drinks and music without specific agenda.", 40, 160, 18, "#ffffff", PAGE_WIDTH - 80, "center"), fontFamily: "Kalam" },
 
         // Prompts
-        { ...createText("My drink of choice this Carnival:", 40, 270, 15, "#ffffff", PAGE_WIDTH - 80, "left"), fontFamily: "Poppins" },
-        { ...createText("Who I limed with the most:", 40, 310, 15, "#ffffff", PAGE_WIDTH - 80, "left"), fontFamily: "Poppins" },
-        { ...createText("I spent this epic time with:", 40, 350, 15, "#ffffff", PAGE_WIDTH - 80, "left"), fontFamily: "Poppins" },
-        { ...createText("The best part of Carnival I'll be telling stories about for years:", 40, 390, 15, "#ffffff", PAGE_WIDTH - 80, "left"), fontFamily: "Poppins" },
+        { ...createText("My drink of choice this Carnival:", 40, 240, 15, "#ffffff", PAGE_WIDTH - 80, "left"), fontFamily: "Poppins" },
+        { ...createText("Who I limed with the most:", 40, 280, 15, "#ffffff", PAGE_WIDTH - 80, "left"), fontFamily: "Poppins" },
+        { ...createText("I spent this epic time with:", 40, 320, 15, "#ffffff", PAGE_WIDTH - 80, "left"), fontFamily: "Poppins" },
+        { ...createText("The best part of Carnival I'll be telling stories about for years:", 40, 360, 15, "#ffffff", PAGE_WIDTH - 80, "left"), fontFamily: "Poppins" },
 
         // Writing Lines (Shapes)
-        { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 40, y: 460, width: PAGE_WIDTH - 80, height: 1, rotation: 0, shapeFill: "#ffffff", opacity: 0.6 },
-        { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 40, y: 495, width: PAGE_WIDTH - 80, height: 1, rotation: 0, shapeFill: "#ffffff", opacity: 0.6 },
-        { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 40, y: 530, width: PAGE_WIDTH - 80, height: 1, rotation: 0, shapeFill: "#ffffff", opacity: 0.6 },
+        { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 40, y: 400, width: PAGE_WIDTH - 80, height: 1, rotation: 0, shapeFill: "#ffffff", opacity: 0.6 },
+        { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 40, y: 440, width: PAGE_WIDTH - 80, height: 1, rotation: 0, shapeFill: "#ffffff", opacity: 0.6 },
+        { id: uuidv4(), type: "shape", shapeType: "rectangle", x: 40, y: 480, width: PAGE_WIDTH - 80, height: 1, rotation: 0, shapeFill: "#ffffff", opacity: 0.6 },
       ]),
       rightPage: createPage("Page 10", "#ffffff", [
         // Background Lime Pattern (Symmetrical)

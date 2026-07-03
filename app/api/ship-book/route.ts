@@ -53,8 +53,8 @@ export async function POST(req: NextRequest) {
 
         // 2. Prepare Order Data for HP Site Flow
         // We need a unique order ID. We can use the user ID + timestamp or a new UUID.
-        // Let's use a simple timestamp-based ID for now, or maybe nanoid if available.
-        const sourceOrderId = `${user.id}-${Date.now()}`;
+        const rawOrderId = `${user.id}-${Date.now()}`;
+        const sourceOrderId = rawOrderId.length > 18 ? rawOrderId.substring(rawOrderId.length - 18) : rawOrderId;
         const isDev = process.env.NODE_ENV === "development";
         let sku = process.env.HP_BOOK_SKU;
         if (!sku) {
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
         const orderRes = await hpClient.createOrder({
             sourceOrderId: sourceOrderId,
             items: [{
-                sourceItemId: `item-${sourceOrderId}`,
+                sourceItemId: `i-${sourceOrderId.substring(0, 16)}`,
                 sku,
                 quantity: 1,
                 components: [{

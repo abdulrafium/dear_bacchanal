@@ -13,9 +13,9 @@ export async function POST(req: NextRequest) {
         const client = new HPSiteFlowClient();
 
         // Generate unique IDs for the test order as requested by the client
-        const timestamp = Date.now().toString();
-        const sourceOrderId = `TEST-ORDER-${timestamp}`;
-        const sourceItemId = `TEST-ITEM-${timestamp}`;
+        const timestamp = Date.now().toString(); // 13 chars
+        const sourceOrderId = `T-${timestamp}`; // 15 chars max
+        const sourceItemId = `I-${timestamp}`;
 
         const testOrderData = {
             sourceOrderId: sourceOrderId,

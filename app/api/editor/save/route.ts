@@ -96,55 +96,58 @@ export async function POST(req: NextRequest) {
       // Save to user books
       const userBooksCollection = db.collection("user_books");
       
-      let bookQuery: any = { userId };
+      let templateId: string | null = null;
+      let bookQuery: any = null;
       if (activeTemplateId && typeof activeTemplateId === 'string' && activeTemplateId !== "undefined") {
         try {
           // Query strictly by _id for precision.
           bookQuery = { _id: new ObjectId(activeTemplateId) };
         } catch (e) {
-          // If ID is invalid, fall back to name-based query (also check email to avoid duplicates)
-          bookQuery = {
-            $or: [
-              { userId, activeTemplateName: activeTemplateName || "Untitled Book" },
-              { email: user?.email, activeTemplateName: activeTemplateName || "Untitled Book" },
-            ].filter(q => Object.values(q).every(Boolean)),
-          };
+          console.error("Invalid activeTemplateId during user save:", activeTemplateId);
         }
-      } else {
-        // No ID yet — use name + (userId OR email) to find the existing record
-        bookQuery = {
-          activeTemplateName: activeTemplateName || "Untitled Book",
-          $or: [
-            { userId },
-            ...(user?.email ? [{ email: user.email }] : []),
-          ],
-        };
       }
       
-      const result = await userBooksCollection.updateOne(
-        bookQuery,
-        {
-          $set: {
-            userId, // Transfer ownership to current user (handles guest -> logged in transition)
-            spreads: spreads || [],
-            activeTemplateName: activeTemplateName || "Untitled Book",
-            currentSpreadIndex: currentSpreadIndex || 0,
-            imageCount: totalImages,
-            updatedAt: new Date(),
-            email: user?.email, // Backfill email if missing
+      if (bookQuery) {
+        // Update existing specific book
+        await userBooksCollection.updateOne(
+          bookQuery,
+          {
+            $set: {
+              userId, // Transfer ownership to current user (handles guest -> logged in transition)
+              spreads: spreads || [],
+              activeTemplateName: activeTemplateName || "Untitled Book",
+              templateDescription: finalDesc,
+              templateCountry,
+              templateYear,
+              currentSpreadIndex: currentSpreadIndex || 0,
+              totalImages,
+              updatedAt: new Date()
+            },
+            $setOnInsert: {
+              email: user?.email,
+              createdAt: new Date()
+            }
           },
-          $setOnInsert: {
-            createdAt: new Date(),
-          },
-        },
-        { upsert: true }
-      );
-      
-      let templateId = result.upsertedId ? result.upsertedId.toString() : null;
-      if (!templateId) {
-        // Find existing ID for update consistency
-        const existing = await userBooksCollection.findOne(bookQuery, { projection: { _id: 1 } });
-        if (existing) templateId = existing._id.toString();
+          { upsert: true }
+        );
+        templateId = activeTemplateId;
+      } else {
+        // THIS IS A BRAND NEW BOOK (fresh=true or no ID provided)
+        // ALWAYS insert a new document! Never overwrite by name!
+        const insertResult = await userBooksCollection.insertOne({
+          userId,
+          email: user?.email,
+          spreads: spreads || [],
+          activeTemplateName: activeTemplateName || "Untitled Book",
+          templateDescription: finalDesc,
+          templateCountry,
+          templateYear,
+          currentSpreadIndex: currentSpreadIndex || 0,
+          totalImages,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        });
+        templateId = insertResult.insertedId.toString();
       }
       
       return NextResponse.json({ 

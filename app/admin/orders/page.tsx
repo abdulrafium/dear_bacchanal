@@ -23,11 +23,13 @@ import {
   AlertTriangle,
   RefreshCw,
   ThumbsUp,
-  Send
+  Send,
+  Trash2
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useReactToPrint } from "react-to-print";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 interface Order {
   id: string;
@@ -183,6 +185,73 @@ export default function AdminOrdersPage() {
   const [syncing, setSyncing] = useState(false);
   const [approvingOrder, setApprovingOrder] = useState(false);
   const [simulating, setSimulating] = useState(false);
+  const [deletingOrders, setDeletingOrders] = useState<Set<string>>(new Set());
+  const [deletingAll, setDeletingAll] = useState(false);
+
+  // Confirm modal state
+  const [confirmModal, setConfirmModal] = useState<{ open: boolean; title: string; description: string; onConfirm: () => Promise<void> }>({
+    open: false, title: '', description: '', onConfirm: async () => {}
+  });
+
+  const openConfirm = (title: string, description: string, onConfirm: () => Promise<void>) => {
+    setConfirmModal({ open: true, title, description, onConfirm });
+  };
+
+  const executeDeleteOrder = async (orderId: string) => {
+    setDeletingOrders(prev => new Set(prev).add(orderId));
+    try {
+      const res = await fetch(`/api/admin/orders?orderId=${orderId}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success("Order deleted");
+        if (selectedOrder?.id === orderId) setSelectedOrder(null);
+        fetchOrders();
+      } else {
+        toast.error("Failed to delete order");
+      }
+    } catch (e) {
+      toast.error("Delete failed");
+    } finally {
+      setDeletingOrders(prev => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
+    }
+  };
+
+  const deleteOrder = (orderId: string) => {
+    openConfirm(
+      "Delete Order",
+      "This will permanently delete the order and the customer's book. This action cannot be undone.",
+      () => executeDeleteOrder(orderId)
+    );
+  };
+
+  const executeDeleteAllOrders = async () => {
+    setDeletingAll(true);
+    try {
+      const res = await fetch(`/api/admin/orders?deleteAll=true`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success("All orders deleted");
+        setSelectedOrder(null);
+        fetchOrders();
+      } else {
+        toast.error("Failed to delete all orders");
+      }
+    } catch (e) {
+      toast.error("Delete all failed");
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
+  const deleteAllOrders = () => {
+    openConfirm(
+      "Delete ALL Orders",
+      "This will permanently delete every order and all associated customer books. This CANNOT be undone.",
+      executeDeleteAllOrders
+    );
+  };
 
   const approveOrder = async (orderId: string) => {
     setApprovingOrder(true);
@@ -194,7 +263,7 @@ export default function AdminOrdersPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success("Order approved! Customer notified and submitted to PurePrint.");
+        toast.success(`Order ${orderId} approved. Status set to 'processing'`);
         fetchOrders();
         if (selectedOrder?.id === orderId) {
           setSelectedOrder({ ...selectedOrder, status: 'processing', approvedAt: data.approvedAt });
@@ -248,6 +317,14 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <ConfirmModal
+        isOpen={confirmModal.open}
+        onClose={() => setConfirmModal(m => ({ ...m, open: false }))}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        description={confirmModal.description}
+        confirmLabel="Yes, Delete"
+      />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-display font-black text-white tracking-tight uppercase">Order Management</h1>
@@ -263,6 +340,14 @@ export default function AdminOrdersPage() {
             >
               <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
               {syncing ? 'Syncing...' : 'Sync Stripe'}
+            </button>
+            <button
+              onClick={deleteAllOrders}
+              disabled={deletingAll || orders.length === 0}
+              className="flex items-center gap-1.5 px-3 py-2.5 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 hover:bg-red-500/20 transition-all text-[10px] font-bold uppercase tracking-wider disabled:opacity-50"
+            >
+              {deletingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+              {deletingAll ? 'Deleting All...' : 'Delete All'}
             </button>
             <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
@@ -385,10 +470,10 @@ export default function AdminOrdersPage() {
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
         {/* Table Area */}
-        <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl overflow-hidden shadow-2xl">
-          <div className="overflow-x-auto">
+        <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[calc(100vh-220px)] min-h-[400px]">
+          <div className="overflow-x-auto overflow-y-auto custom-scrollbar flex-1">
             <table className="w-full text-left border-collapse">
-              <thead>
+              <thead className="sticky top-0 z-10 bg-[#0f0f0f]">
                 <tr className="bg-white/[0.02] border-b border-white/5">
                   <th className="px-6 py-4 text-[10px] font-black text-white/30 uppercase tracking-widest leading-none">ORDER / DATE</th>
                   <th className="px-6 py-4 text-[10px] font-black text-white/30 uppercase tracking-widest leading-none">CUSTOMER</th>
@@ -450,12 +535,21 @@ export default function AdminOrdersPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button 
-                            onClick={(e) => { e.stopPropagation(); openInvoice(order); }}
-                            className="p-2 hover:bg-white/10 rounded-lg text-white/40 hover:text-white transition-all"
-                        >
-                            <FileText className="w-4 h-4" />
-                        </button>
+                        <div className="flex justify-end gap-2">
+                          <button 
+                              onClick={(e) => { e.stopPropagation(); openInvoice(order); }}
+                              className="p-2 hover:bg-white/10 rounded-lg text-white/40 hover:text-white transition-all"
+                          >
+                              <FileText className="w-4 h-4" />
+                          </button>
+                          <button 
+                              onClick={(e) => { e.stopPropagation(); deleteOrder(order.id); }}
+                              disabled={deletingOrders.has(order.id)}
+                              className="p-2 hover:bg-red-500/20 rounded-lg text-white/40 hover:text-red-400 transition-all disabled:opacity-50"
+                          >
+                              {deletingOrders.has(order.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -505,6 +599,34 @@ export default function AdminOrdersPage() {
                     </div>
 
                     <div className="space-y-4">
+                        <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5">
+                            <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mb-2">Order Identifiers</p>
+                            <div className="space-y-3">
+                                <div>
+                                    <p className="text-[10px] font-semibold text-white/40 mb-1">Order ID</p>
+                                    <p className="text-white/90 text-xs font-mono bg-black/20 p-2 rounded border border-white/5 truncate">
+                                        {selectedOrder.id || 'N/A'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-semibold text-white/40 mb-1">Book ID</p>
+                                    <p className="text-white/90 text-xs font-mono bg-black/20 p-2 rounded border border-white/5 truncate">
+                                        {selectedOrder.bookId || 'N/A'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-semibold text-white/40 mb-1">Source Order ID (18 chars for SiteFlow)</p>
+                                    <p className="text-white/90 text-xs font-mono bg-black/20 p-2 rounded border border-white/5 truncate">
+                                        {selectedOrder.id 
+                                            ? (selectedOrder.id.length > 18 
+                                                ? selectedOrder.id.substring(selectedOrder.id.length - 18) 
+                                                : selectedOrder.id) 
+                                            : 'N/A'}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5">
                             <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mb-2">Customer & Account</p>
                             <div className="flex items-center gap-3">

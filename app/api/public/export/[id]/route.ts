@@ -30,6 +30,42 @@ export async function GET(
     let book: any = null;
     if (ObjectId.isValid(id) && id.length === 24) {
       book = await db.collection("user_books").findOne({ _id: new ObjectId(id) });
+    } else if (id.length === 18) {
+      // Support matching by the 18-character truncated Book ID
+      const match = await db.collection("user_books").aggregate([
+        { $addFields: { idString: { $toString: "$_id" } } },
+        { $match: { idString: { $regex: `${id}$` } } }
+      ]).toArray();
+      
+      if (match.length > 0) {
+        book = match[0];
+      }
+    }
+
+    // Fallback: If they accidentally provided the Order ID (24 or 18 char) instead of the Book ID
+    if (!book) {
+      let orderQuery: any = { sourceOrderId: id };
+      let order: any = null;
+
+      if (ObjectId.isValid(id) && id.length === 24) {
+        orderQuery = { $or: [{ sourceOrderId: id }, { _id: new ObjectId(id) }] };
+        order = await db.collection("orders").findOne(orderQuery);
+      } else if (id.length === 18) {
+        // Find order where _id ends with the 18-character string, or sourceOrderId matches
+        const orderMatch = await db.collection("orders").aggregate([
+          { $addFields: { idString: { $toString: "$_id" } } },
+          { $match: { $or: [{ idString: { $regex: `${id}$` } }, { sourceOrderId: id }] } }
+        ]).toArray();
+        if (orderMatch.length > 0) {
+          order = orderMatch[0];
+        }
+      } else {
+        order = await db.collection("orders").findOne(orderQuery);
+      }
+      
+      if (order && order.bookId) {
+        book = await db.collection("user_books").findOne({ _id: new ObjectId(order.bookId) });
+      }
     }
 
     if (!book) {
@@ -41,7 +77,16 @@ export async function GET(
     }
 
     // ─── 2. Find the associated user to get their savedPdfUrl ─────────────────
-    let pdfUrl: string | null = book.savedPdfUrl || null;
+    let pdfUrl: string | null = null;
+    
+    // Select the exact URL based on type
+    if (type === "cover" && book.savedCoverPdfUrl) {
+      pdfUrl = book.savedCoverPdfUrl;
+    } else if (type === "text" && book.savedTextPdfUrl) {
+      pdfUrl = book.savedTextPdfUrl;
+    } else if (book.savedPdfUrl) {
+      pdfUrl = book.savedPdfUrl; // Fallback
+    }
 
     if (!pdfUrl && book.userId) {
       const usersCollection = db.collection("users");
@@ -62,8 +107,10 @@ export async function GET(
         });
       }
 
-      if (user?.savedPdfUrl) {
-        pdfUrl = user.savedPdfUrl;
+      if (user) {
+        if (type === "cover" && user.savedCoverPdfUrl) pdfUrl = user.savedCoverPdfUrl;
+        else if (type === "text" && user.savedTextPdfUrl) pdfUrl = user.savedTextPdfUrl;
+        else if (user.savedPdfUrl) pdfUrl = user.savedPdfUrl;
       }
     }
 

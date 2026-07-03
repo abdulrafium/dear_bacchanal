@@ -21,54 +21,49 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = user.id || user.email || "";
-    const formData = await req.formData();
-    const file = formData.get("file") as File | null;
-    const bookId = formData.get("bookId") as string | null;
-    const templateName = formData.get("templateName") as string | null;
+    const contentType = req.headers.get("content-type") || "";
+    
+    let coverUrl: string | undefined;
+    let textUrl: string | undefined;
+    let bookId: string | null = null;
+    let templateName: string | null = null;
 
-    if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+    if (contentType.includes("application/json")) {
+      const body = await req.json();
+      coverUrl = body.coverUrl;
+      textUrl = body.textUrl;
+      bookId = body.bookId;
+      templateName = body.templateName;
+    } else {
+      return NextResponse.json({ error: "Invalid Content-Type, expected application/json" }, { status: 400 });
     }
 
-    console.log(`[upload-pdf] Uploading PDF for user ${userId}, book ${bookId}, template "${templateName}"`);
-
-    // ─── 1. Upload to UploadThing ─────────────────────────────────────────────
-    const utapi = new UTApi();
-    const uploadResult = await utapi.uploadFiles(file);
-
-    if (uploadResult.error) {
-      console.error("[upload-pdf] UploadThing error:", uploadResult.error);
-      return NextResponse.json(
-        { error: `Upload failed: ${uploadResult.error.message}` },
-        { status: 500 }
-      );
+    if (!coverUrl || !textUrl) {
+      return NextResponse.json({ error: "Failed to retrieve URLs" }, { status: 500 });
     }
 
-    const fileUrl = uploadResult.data?.ufsUrl || uploadResult.data?.url;
-    if (!fileUrl) {
-      return NextResponse.json({ error: "No URL returned from upload" }, { status: 500 });
-    }
-
-    console.log(`[upload-pdf] PDF uploaded successfully: ${fileUrl}`);
+    console.log(`[upload-pdf] PDFs uploaded successfully: Cover(${coverUrl}) Text(${textUrl})`);
 
     const db = await getDatabase();
 
-    // ─── 2. Save URL to user record ───────────────────────────────────────────
+    const updateFields = {
+      savedCoverPdfUrl: coverUrl,
+      savedTextPdfUrl: textUrl,
+      pdfUploadedAt: new Date()
+    };
+
+    // ─── 2. Save URLs to user record ───────────────────────────────────────────
     try {
       const userQuery = ObjectId.isValid(userId) && userId.length === 24
         ? { _id: new ObjectId(userId) }
         : { email: user.email };
 
-      await db.collection("users").updateOne(
-        userQuery,
-        { $set: { savedPdfUrl: fileUrl, pdfUploadedAt: new Date() } }
-      );
-      console.log("[upload-pdf] Saved PDF URL to user record");
+      await db.collection("users").updateOne(userQuery, { $set: updateFields });
     } catch (userErr) {
       console.error("[upload-pdf] Failed to save to user record:", userErr);
     }
 
-    // ─── 3. Save URL to user_book record ──────────────────────────────────────
+    // ─── 3. Save URLs to user_book record ──────────────────────────────────────
     try {
       let bookQuery: any = null;
 
@@ -82,11 +77,7 @@ export async function POST(req: NextRequest) {
       }
 
       if (bookQuery) {
-        await db.collection("user_books").updateOne(
-          bookQuery,
-          { $set: { savedPdfUrl: fileUrl, pdfUploadedAt: new Date() } }
-        );
-        console.log("[upload-pdf] Saved PDF URL to user_books record");
+        await db.collection("user_books").updateOne(bookQuery, { $set: updateFields });
       }
     } catch (bookErr) {
       console.error("[upload-pdf] Failed to save to user_books record:", bookErr);
@@ -94,8 +85,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      url: fileUrl,
-      message: "PDF uploaded and saved. SiteFlow will now be able to fetch it.",
+      coverUrl,
+      textUrl,
+      message: "PDFs uploaded and saved. SiteFlow will now be able to fetch them.",
     });
   } catch (error: any) {
     console.error("[upload-pdf] Unhandled error:", error);

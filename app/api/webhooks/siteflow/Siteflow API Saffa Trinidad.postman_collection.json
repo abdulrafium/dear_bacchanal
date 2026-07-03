@@ -1,0 +1,154 @@
+{
+  "info": {
+    "_postman_id": "b881249d-4e5c-43e5-9388-234e6a9415c1",
+    "name": "Siteflow API Saffa Trinidad",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "3024296"
+  },
+  "item": [
+    {
+      "name": "https://pro-api.oneflowcloud.com/api/order/order",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "var crypto = require(\"crypto-js\");\r",
+              "\r",
+              "var method = \"POST\";\r",
+              "var path = \"/api/order\"\r",
+              "var timestamp = Math.floor(Date.now() / 1000);\r",
+              "var secret = \"df0a55737c3fc3d50d7c2c50cd2b4f913ff587847a477e13\";\r",
+              "var token = \"602992397545\";\r",
+              "\r",
+              "    \r",
+              "var stringToSign = method + \" \" + path + \" \" + timestamp;\r",
+              "var signature = crypto.HmacSHA1(stringToSign,secret).toString(crypto.enc.Hex);\r",
+              "var authHeader = token + \":\" + signature;\r",
+              "\r",
+              "console.log(authHeader);\r",
+              "\r",
+              "pm.globals.set(\"cryptokey\",authHeader);\r",
+              "pm.globals.set(\"timestamp\",timestamp);"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-oneflow-authorization",
+            "value": "{{cryptokey}}",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "x-oneflow-date",
+            "value": "{{timestamp}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"destination\": {\r\n        \"name\": \"pureprint\"\r\n    },\r\n    \"orderData\": {\r\n        \"sourceOrderId\": \"saffa_Test_005\",\r\n        \"items\": [\r\n            {\r\n                \"sku\": \"saffatrinidad_hardback_10x10_staging\",\r\n               \"sourceItemId\": \"000001\",                             \r\n                \"quantity\": 1,\r\n                \"components\": [\r\n{\r\n                        \"code\": \"cover\",\r\n                        \"fetch\": true,\r\n                        \"path\": \"https://testcover.pdf\"\r\n                    },\r\n                    {\r\n                        \"code\": \"text\",                       \r\n                        \"fetch\": true,\r\n                        \"path\": \"https://testtext.pdf\"\r\n                    }\r\n                ]\r\n            }\r\n        ],\r\n        \"shipments\": [\r\n            {\r\n                \"shipTo\": {\r\n                    \"name\": \"TestName\",\r\n                    \"address1\": \"Add1\",\r\n                    \"address2\": \"Add2\",\r\n                    \"town\": \"Town1\",\r\n                    \"postcode\": \"AA12 1AB\",\r\n                    \"isoCountry\": \"GB\",\r\n                    \"email\": \"test@test.com\",\r\n                    \"phone\": \"00000\"\r\n                },\r\n                \"returnAddress\": {\r\n                    \"name\": \"Returns Department\",\r\n                    \"companyName\": \"Pureprint Group\",\r\n                    \"address1\": \"Beacon House, Bellbrook Park\",\r\n                    \"town\": \"Uckfield\",\r\n                    \"postcode\": \"TN22 1PL\",\r\n                    \"isoCountry\": \"GB\",\r\n                    \"email\": \"siteflow@pureprint.com\",\r\n                    \"phone\": \"01825 768811\"\r\n                },\r\n                \"carrier\": {\r\n                    \"alias\": \"standard\"\r\n                }\r\n            }\r\n        ]\r\n    }\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://orders.oneflow.io/api/order",
+          "protocol": "https",
+          "host": [
+            "orders",
+            "oneflow",
+            "io"
+          ],
+          "path": [
+            "api",
+            "order"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Get Order Details",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "var crypto = require(\"crypto-js\");\r",
+              "\r",
+              "var method = \"GET\";\r",
+              "var path = \"/api/order/details/698dc228ed022967516bb044\"\r",
+              "var timestamp = Math.floor(Date.now() / 1000);\r",
+              "var secret = \"df0a55737c3fc3d50d7c2c50cd2b4f913ff587847a477e13\";\r",
+              "var token = \"602992397545\";\r",
+              "\r",
+              "\r",
+              "    \r",
+              "var stringToSign = method + \" \" + path + \" \" + timestamp;\r",
+              "var signature = crypto.HmacSHA1(stringToSign,secret).toString(crypto.enc.Hex);\r",
+              "var authHeader = token + \":\" + signature;\r",
+              "\r",
+              "console.log(authHeader);\r",
+              "\r",
+              "pm.globals.set(\"cryptokey\",authHeader);\r",
+              "pm.globals.set(\"timestamp\",timestamp);"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-oneflow-authorization",
+            "value": "{{cryptokey}}",
+            "type": "text"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "x-oneflow-date",
+            "value": "{{timestamp}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "https://pro-api.oneflowcloud.com/api/order/details/698dc228ed022967516bb044",
+          "protocol": "https",
+          "host": [
+            "pro-api",
+            "oneflowcloud",
+            "com"
+          ],
+          "path": [
+            "api",
+            "order",
+            "details",
+            "698dc228ed022967516bb044"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

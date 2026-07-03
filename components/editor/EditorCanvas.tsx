@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback } from "react";
-import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group, Circle } from "react-konva";
+import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group, Circle, Line } from "react-konva";
 import { Html } from "react-konva-utils";
 import { useEditorStore, EditorElement, BookPage } from "@/store/editor-store";
 import Konva from "konva";
@@ -11,8 +11,8 @@ import { EditorPageTools } from "./EditorPageTools";
 import { toast } from "sonner";
 import { useUploadThing } from "@/lib/uploadthing-client";
 
-const PAGE_WIDTH = 400;
-const PAGE_HEIGHT = 550;
+const PAGE_WIDTH = 500;
+const PAGE_HEIGHT = 500;
 
 function PageElement({
   el,
@@ -68,6 +68,9 @@ function PageElement({
   const canInteract = !isPreviewMode && (!pageIsLocked && !el.isLocked || isAdmin);
   const isCircle = el.shapeType === "ellipse";
 
+  const previewElement = useEditorStore((s) => s.previewElement);
+  const displayEl = previewElement?.id === el.id ? { ...el, ...previewElement.updates } : el;
+
   const commonProps = {
     ref: shapeRef,
     id: el.id, // CRITICAL: Allow floating toolbar to find this node
@@ -77,15 +80,16 @@ function PageElement({
     width: el.width,
     height: el.height,
     rotation: el.rotation,
+    shadowBlur: (displayEl as any)?.shadowBlur,
+    shadowColor: (displayEl as any)?.shadowColor,
+    shadowOffsetX: (displayEl as any)?.shadowOffsetX,
+    shadowOffsetY: (displayEl as any)?.shadowOffsetY,
     draggable: canInteract,
     onClick: canInteract ? onSelect : undefined,
     onTap: canInteract ? onSelect : undefined,
     onDragEnd: handleDragEnd,
     onTransformEnd: handleTransformEnd,
   };
-
-  const previewElement = useEditorStore((s) => s.previewElement);
-  const displayEl = previewElement?.id === el.id ? { ...el, ...previewElement.updates } : el;
 
   const renderElement = () => {
     switch (displayEl.type) {
@@ -101,6 +105,7 @@ function PageElement({
             fontStyle={`${displayEl.fontStyle || ""}`.includes("bold") && `${displayEl.fontStyle || ""}`.includes("italic") ? "bold italic" : (`${displayEl.fontStyle || ""}`.includes("bold") ? "bold" : (`${displayEl.fontStyle || ""}`.includes("italic") ? "italic" : "normal"))}
             textDecoration={displayEl.fontStyle?.includes("underline") ? "underline" : "none"}
             padding={8}
+            lineHeight={displayEl.lineHeight || 1.2}
             onDblClick={() => {
               if (!canInteract) return;
               setIsEditing(true);
@@ -113,6 +118,48 @@ function PageElement({
       case "image":
       case "sticker":
         return <ImageElement {...commonProps} src={el.src || ""} />;
+
+      case "checkbox": {
+        const boxSize = displayEl.fontSize ? displayEl.fontSize : 24;
+        const handleToggle = (e: any) => {
+          if (isPreviewMode) return;
+          updateElement(pageId, el.id, { isChecked: !el.isChecked });
+          e.cancelBubble = true;
+          if (canInteract && onSelect) onSelect();
+        };
+        return (
+          <Group 
+            {...commonProps} 
+            onClick={handleToggle} 
+            onTap={handleToggle}
+          >
+            <Rect
+              x={0}
+              y={0}
+              width={boxSize}
+              height={boxSize}
+              stroke={displayEl.fill || "#ffffff"}
+              strokeWidth={2}
+              fill="rgba(255,255,255,0.01)" // Guaranteed hit detection
+            />
+            {displayEl.isChecked && (
+              <Text
+                x={0}
+                y={0}
+                width={boxSize}
+                height={boxSize}
+                text="✓"
+                fontFamily="'Caveat', cursive, sans-serif"
+                fontSize={boxSize * 1.2}
+                fill={displayEl.fill || "#ffffff"}
+                align="center"
+                verticalAlign="middle"
+                listening={false}
+              />
+            )}
+          </Group>
+        );
+      }
 
       case "calendar":
         return <CalendarElement {...commonProps} el={el} pageId={pageId} canInteract={canInteract} isPreviewMode={isPreviewMode} onEditNote={onEditCalendarNote} />;
@@ -186,7 +233,7 @@ function PageElement({
                 padding: "4px",
                 resize: "none",
                 outline: "none",
-                lineHeight: "1.2",
+                lineHeight: el.lineHeight ? String(el.lineHeight) : "1.2",
               }}
             />
           </Html>
@@ -212,7 +259,7 @@ function ImageElement(props: any) {
 
 function PhotoCardElement({ el, pageId, canInteract, ...props }: any) {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
-  
+
   useEffect(() => {
     if (el.src) {
       const img = new window.Image();
@@ -239,11 +286,11 @@ function PhotoCardElement({ el, pageId, canInteract, ...props }: any) {
     <Group {...props}>
       {/* Base Card Background (Supports Rectangle and Circle) */}
       {isCircle ? (
-        <Circle 
+        <Circle
           x={el.width / 2}
           y={el.height / 2}
           radius={el.width / 2}
-          fill={el.src ? "transparent" : "rgba(0,0,0,0.1)"} 
+          fill={el.src ? "transparent" : "rgba(0,0,0,0.1)"}
           stroke="white"
           strokeWidth={12}
           shadowBlur={10}
@@ -252,10 +299,10 @@ function PhotoCardElement({ el, pageId, canInteract, ...props }: any) {
           onTap={handleEmptyClick}
         />
       ) : (
-        <Rect 
-          width={el.width} 
-          height={el.height} 
-          fill={el.src ? "transparent" : "rgba(0,0,0,0.1)"} 
+        <Rect
+          width={el.width}
+          height={el.height}
+          fill={el.src ? "transparent" : "rgba(0,0,0,0.1)"}
           stroke="white"
           strokeWidth={12}
           shadowBlur={10}
@@ -276,24 +323,24 @@ function PhotoCardElement({ el, pageId, canInteract, ...props }: any) {
           }
           ctx.closePath();
         }}>
-           <KonvaImage 
-              image={image} 
-              width={el.width} 
-              height={el.height}
-           />
+          <KonvaImage
+            image={image}
+            width={el.width}
+            height={el.height}
+          />
         </Group>
       )}
 
       {/* Large Center (+) */}
       {!el.src && (
-        <Group 
-          x={el.width / 2} 
+        <Group
+          x={el.width / 2}
           y={el.height / 2}
           onClick={handleEmptyClick}
           onTap={handleEmptyClick}
         >
-           <Circle radius={45} fill="rgba(255,255,255,0.15)" stroke="white" strokeWidth={2} opacity={0.8} />
-           <Text text="+" fontSize={64} fill="white" x={-20} y={-38} fontFamily="Inter" fontStyle="100" />
+          <Circle radius={45} fill="rgba(255,255,255,0.15)" stroke="white" strokeWidth={2} opacity={0.8} />
+          <Text text="+" fontSize={64} fill="white" x={-20} y={-38} fontFamily="Inter" fontStyle="100" />
         </Group>
       )}
     </Group>
@@ -326,7 +373,7 @@ function CalendarElement({
   const firstDayOfMonth = (month: number, year: number) => new Date(year, month, 1).getDay();
   const days = Array.from({ length: daysInMonth(settings.month, settings.year) }, (_, i) => i + 1);
   const blanks = Array.from({ length: firstDayOfMonth(settings.month, settings.year) }, (_, i) => i);
-  const weekDays = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+  const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const cellWidth = el.width / 7;
   const headerHeight = 60;
   const subHeaderHeight = 30;
@@ -337,19 +384,35 @@ function CalendarElement({
   return (
     <Group {...props} x={el.x} y={el.y} width={el.width} height={el.height} rotation={el.rotation} draggable={canInteract}>
       <Rect width={el.width} height={el.height} fill="transparent" />
-      <Text 
-        text={months[settings.month]} 
-        width={el.width} 
-        y={10} 
-        align="center" 
-        fontSize={36} 
-        fontStyle="900" 
-        fill="#000" 
-        fontFamily="Boogaloo"
-        letterSpacing={2}
-      />
+      {!settings.hideTitle && (
+        <Text
+          text={months[settings.month]}
+          width={el.width}
+          y={10}
+          align="center"
+          fontSize={36}
+          fontStyle="900"
+          fill="#000"
+          fontFamily="Boogaloo"
+          letterSpacing={2}
+        />
+      )}
       {weekDays.map((day, i) => (
-        <Text key={day} text={day} x={i * cellWidth} y={headerHeight} width={cellWidth} align="center" fontSize={12} fontStyle="bold" fill="#000" opacity={0.6} />
+        <Text
+          key={day}
+          text={day}
+          x={i * cellWidth}
+          y={headerHeight}
+          width={cellWidth}
+          align="center"
+          fontSize={el.fontSize ? el.fontSize + 4 : 20}
+          fontFamily="Caveat"
+          fontStyle="bold"
+          fill={el.fill || "#000"}
+          stroke={el.fill || "#000"}
+          strokeWidth={0.8}
+          opacity={0.8}
+        />
       ))}
       <Group y={gridY}>
         {days.map((day, i) => {
@@ -357,10 +420,12 @@ function CalendarElement({
           const x = (index % 7) * cellWidth;
           const y = Math.floor(index / 7) * cellHeight;
           const dateKey = `${settings.year}-${String(settings.month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const fullWeekDays = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"];
+          const dayName = fullWeekDays[index % 7];
           const note = settings.data[dateKey] || "";
 
           return (
-            <Group 
+            <Group
               key={day} x={x} y={y}
               onClick={(e) => {
                 e.cancelBubble = true;
@@ -372,32 +437,42 @@ function CalendarElement({
               }}
             >
               <Rect width={cellWidth} height={cellHeight} fill="rgba(0,0,0,0)" hitStrokeWidth={10} />
-              <Text 
-                text={day.toString()} 
-                width={cellWidth} 
+              <Text
+                text={day.toString()}
+                width={cellWidth}
                 y={6}
                 align="center"
-                fontSize={el.fontSize || 16} 
-                fill={el.fill || "#000"} 
-                fontFamily={el.fontFamily || "Boogaloo"} 
-                fontStyle={el.fontStyle?.includes("bold") ? "bold" : "normal"}
-                opacity={0.8}
+                fontSize={16}
+                fontStyle="bold"
+                fill="#000"
+                opacity={0.6}
                 listening={false}
               />
               {note && (
-                <Group y={30} listening={false}>
-                  <Text 
-                    text={note} 
-                    width={cellWidth - 8} 
-                    x={4}
+                <Group y={4} x={cellWidth / 2} rotation={-8} listening={false}>
+                  <Text
+                    text={`${note.trim().toUpperCase()}\n${dayName}`}
+                    width={cellWidth * 1.5}
+                    offsetX={(cellWidth * 1.5) / 2}
                     align="center"
-                    fontSize={8} 
-                    fill="#000" 
-                    fontFamily="Outfit"
-                    wrap="char"
-                    ellipsis
+                    fontSize={11}
+                    fill="#fff"
+                    stroke="#000"
+                    strokeWidth={3}
+                    lineJoin="round"
+                    fontFamily="Luckiest Guy"
+                    lineHeight={1}
                   />
-                  <Circle x={cellWidth/2} y={15} radius={1.5} fill="#000" opacity={0.3} />
+                  <Text
+                    text={`${note.trim().toUpperCase()}\n${dayName}`}
+                    width={cellWidth * 1.5}
+                    offsetX={(cellWidth * 1.5) / 2}
+                    align="center"
+                    fontSize={11}
+                    fill="#fff"
+                    fontFamily="Luckiest Guy"
+                    lineHeight={1}
+                  />
                 </Group>
               )}
             </Group>
@@ -412,14 +487,17 @@ function PageCanvas({
   page,
   offsetX,
   onEditCalendarNote,
+  hasShadow = true,
 }: {
   page: BookPage;
   offsetX: number;
   onEditCalendarNote?: (elId: string, pageId: string, dateKey: string, initialValue: string) => void;
+  hasShadow?: boolean;
 }) {
   const selectedElementId = useEditorStore((s) => s.selectedElementId);
   const selectElement = useEditorStore((s) => s.selectElement);
-  
+  const isGeneratingPdf = useEditorStore((s) => s.isGeneratingPdf);
+
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
 
   useEffect(() => {
@@ -435,18 +513,18 @@ function PageCanvas({
 
   return (
     <Group x={offsetX} y={0}>
-      <Rect 
-        width={PAGE_WIDTH} 
-        height={PAGE_HEIGHT} 
-        fill={bgImage ? undefined : page.background} 
+      <Rect
+        width={PAGE_WIDTH}
+        height={PAGE_HEIGHT}
+        fill={bgImage ? undefined : page.background}
         fillPatternImage={bgImage || undefined}
-        fillPatternScale={{ 
-            x: bgImage ? PAGE_WIDTH / bgImage.width : 1, 
-            y: bgImage ? PAGE_HEIGHT / bgImage.height : 1 
+        fillPatternScale={{
+          x: bgImage ? PAGE_WIDTH / bgImage.width : 1,
+          y: bgImage ? PAGE_HEIGHT / bgImage.height : 1
         }}
-        shadowBlur={8} 
-        shadowColor="rgba(0,0,0,0.15)" 
-        shadowOffsetY={2} 
+        shadowBlur={(isGeneratingPdf || !hasShadow) ? 0 : 8}
+        shadowColor={(isGeneratingPdf || !hasShadow) ? "transparent" : "rgba(0,0,0,0.15)"}
+        shadowOffsetY={(isGeneratingPdf || !hasShadow) ? 0 : 2}
       />
       <Group clipX={0} clipY={0} clipWidth={PAGE_WIDTH} clipHeight={PAGE_HEIGHT}>
         {page.elements.map((el) => (
@@ -460,6 +538,66 @@ function PageCanvas({
             onEditCalendarNote={onEditCalendarNote}
           />
         ))}
+        {/* SAFE ZONE OVERLAY */}
+        {!isGeneratingPdf && (() => {
+          const spreads = useEditorStore.getState().spreads;
+          const currentSpreadIndex = useEditorStore.getState().currentSpreadIndex;
+          const isCover = currentSpreadIndex === 0;
+          const isLeftPage = page.id === spreads[currentSpreadIndex].leftPage.id;
+
+          let safeX = 16;
+          let safeY = 16;
+          let safeWidth = PAGE_WIDTH - 32;
+          let safeHeight = PAGE_HEIGHT - 32;
+
+          if (isCover) {
+            // Perfect physical mapping for 570x300mm Cover (Ratio mapped to 1000x500px UI)
+            // Left page represents 285mm: 20mm bleed (35.08px), 260mm face (456.15px), 5mm spine (8.77px)
+            // Right page represents 285mm: 5mm spine (8.77px), 260mm face (456.15px), 20mm bleed (35.08px)
+            // Height represents 300mm: 20mm bleed (33.33px), 260mm face (433.34px), 20mm bleed (33.33px)
+
+            safeY = 33.33;
+            safeHeight = 433.34;
+
+            if (isLeftPage) {
+              // Left Page (Back Cover)
+              safeX = 35.08;
+              safeWidth = 456.15;
+            } else {
+              // Right Page (Front Cover)
+              safeX = 8.77;
+              safeWidth = 456.15;
+            }
+          } else {
+            // Inner Pages: To make the design perfectly continuous across the spread,
+            // we remove the bleed margin in the center so the safe zones touch.
+            // 500px = 260mm => 3mm margin = 5.77px
+            safeY = 5.77;
+            safeHeight = PAGE_HEIGHT - 11.54;
+
+            if (isLeftPage) {
+              safeX = 5.77;
+              safeWidth = PAGE_WIDTH - 5.77; // Touches the right edge (center of spread)
+            } else {
+              safeX = 0; // Touches the left edge (center of spread)
+              safeWidth = PAGE_WIDTH - 5.77;
+            }
+          }
+
+          return (
+            <Rect
+              x={safeX}
+              y={safeY}
+              width={safeWidth}
+              height={safeHeight}
+              stroke="#00e5ff"
+              strokeWidth={1.5}
+              dash={[6, 4]}
+              opacity={isCover ? 1 : 0.8}
+              listening={false}
+            />
+          );
+        })()}
       </Group>
     </Group>
   );
@@ -478,6 +616,7 @@ export function EditorCanvas() {
   const prevSpread = useEditorStore((s) => s.prevSpread);
   const isPreviewMode = useEditorStore((s) => s.isPreviewMode);
   const templateLoaded = useEditorStore((s) => s.templateLoaded);
+  const isGeneratingPdf = useEditorStore((s) => s.isGeneratingPdf);
   const currentSpread = spreads[currentSpreadIndex];
 
   const [editingCalendarNote, setEditingCalendarNote] = useState<{
@@ -520,10 +659,11 @@ export function EditorCanvas() {
   const [mobilePage, setMobilePage] = useState<"left" | "right">("left");
 
   const isSingle = viewMode === "single";
-  const totalWidth = isSingle ? PAGE_WIDTH : (PAGE_WIDTH * 2 + 8);
+  const gap = 0; // Set gap to 0 so left and right pages merge continuously
+  const totalWidth = isSingle ? PAGE_WIDTH : (PAGE_WIDTH * 2 + gap);
   const totalHeight = PAGE_HEIGHT;
   const [fitScale, setFitScale] = useState(1);
-  
+
   useEffect(() => {
     if (containerSize.width > 0 && containerSize.height > 0) {
       const padding = isSingle ? 20 : 40;
@@ -568,7 +708,8 @@ export function EditorCanvas() {
 
   return (
     <div ref={containerRef} className="w-full h-full bg-[#f1f1f1] overflow-auto relative flex flex-col custom-scrollbar" onDragOver={(e) => e.preventDefault()} onDrop={handleDrop}>
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Kalam:wght@300;400;700&family=Poppins:wght@300;400;500;600;700;800;900&family=Luckiest+Guy&family=Caveat:wght@400;700&family=Pacifico&family=Anton&family=Bangers&family=Lobster&family=Montserrat:wght@400;700&family=Oswald:wght@400;700&family=Playfair+Display:wght@400;700&family=Inter:wght@400;700&family=Boogaloo&family=Fredoka+One&family=Baloo+2:wght@400;700&family=Titan+ One&family=Architects+Daughter&family=Patrick+Hand&display=swap');
         .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
@@ -577,19 +718,17 @@ export function EditorCanvas() {
       `}} />
       {isSingle && (
         <div className="flex justify-center absolute top-4 left-1/2 -translate-x-1/2 z-[30] bg-white/90 backdrop-blur-md rounded-full shadow-lg border border-gray-200 p-1.5 gap-1 scale-90 sm:scale-100">
-          <button 
-            onClick={() => setMobilePage("left")} 
-            className={`px-5 py-2 rounded-full text-[10px] font-semibold uppercase tracking-widest transition-all duration-300 ${
-              mobilePage === "left" ? "bg-black text-white shadow-md scale-105" : "text-gray-400 hover:text-gray-900"
-            }`}
+          <button
+            onClick={() => setMobilePage("left")}
+            className={`px-5 py-2 rounded-full text-[10px] font-semibold uppercase tracking-widest transition-all duration-300 ${mobilePage === "left" ? "bg-black text-white shadow-md scale-105" : "text-gray-400 hover:text-gray-900"
+              }`}
           >
             Left
           </button>
-          <button 
-            onClick={() => setMobilePage("right")} 
-            className={`px-5 py-2 rounded-full text-[10px] font-semibold uppercase tracking-widest transition-all duration-300 ${
-              mobilePage === "right" ? "bg-black text-white shadow-md scale-105" : "text-gray-400 hover:text-gray-900"
-            }`}
+          <button
+            onClick={() => setMobilePage("right")}
+            className={`px-5 py-2 rounded-full text-[10px] font-semibold uppercase tracking-widest transition-all duration-300 ${mobilePage === "right" ? "bg-black text-white shadow-md scale-105" : "text-gray-400 hover:text-gray-900"
+              }`}
           >
             Right
           </button>
@@ -612,21 +751,34 @@ export function EditorCanvas() {
                   page={mobilePage === "left" ? currentSpread.leftPage : currentSpread.rightPage}
                   offsetX={0}
                   onEditCalendarNote={(elId, pgId, date, val) => setEditingCalendarNote({ elementId: elId, pageId: pgId, dateKey: date, initialValue: val, note: val })}
+                  hasShadow={true}
                 />
               ) : (
                 <Group>
-                  <PageCanvas 
-                    page={currentSpread.leftPage} 
-                    offsetX={0} 
+                  {!isGeneratingPdf && (
+                    <Rect
+                      x={0}
+                      y={0}
+                      width={PAGE_WIDTH * 2}
+                      height={PAGE_HEIGHT}
+                      fill="white"
+                      shadowBlur={8}
+                      shadowColor="rgba(0,0,0,0.15)"
+                      shadowOffsetY={2}
+                    />
+                  )}
+                  <PageCanvas
+                    page={currentSpread.leftPage}
+                    offsetX={0}
                     onEditCalendarNote={(elId, pgId, date, val) => setEditingCalendarNote({ elementId: elId, pageId: pgId, dateKey: date, initialValue: val, note: val })}
+                    hasShadow={false}
                   />
-                  <Group x={PAGE_WIDTH} y={0}>
-                    <Rect width={8} height={PAGE_HEIGHT} fillLinearGradientStartPoint={{ x: 0, y: 0 }} fillLinearGradientEndPoint={{ x: 8, y: 0 }} fillLinearGradientColorStops={[0, "rgba(0,0,0,0.15)", 0.5, "rgba(0,0,0,0.05)", 1, "rgba(0,0,0,0.15)"]} />
-                  </Group>
-                  <PageCanvas 
-                    page={currentSpread.rightPage} 
-                    offsetX={PAGE_WIDTH + 8} 
+                  {/* Spine shadow removed for seamless viewing */}
+                  <PageCanvas
+                    page={currentSpread.rightPage}
+                    offsetX={PAGE_WIDTH + gap}
                     onEditCalendarNote={(elId, pgId, date, val) => setEditingCalendarNote({ elementId: elId, pageId: pgId, dateKey: date, initialValue: val, note: val })}
+                    hasShadow={false}
                   />
                 </Group>
               )}
@@ -651,7 +803,7 @@ export function EditorCanvas() {
           <div className="bg-white rounded-[2.5rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] w-full max-w-md overflow-hidden border border-white/20 animate-in zoom-in-95 slide-in-from-bottom-10 duration-500">
             {/* Top Carnival bar */}
             <div className="h-2 bg-gradient-to-r from-[#fbba00] via-[#d22e56] to-[#009d94]" />
-            
+
             <div className="p-8">
               <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-4">
@@ -665,7 +817,7 @@ export function EditorCanvas() {
                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Calendar Note</p>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={() => setEditingCalendarNote(null)}
                   className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400"
                 >
@@ -711,9 +863,9 @@ export function EditorCanvas() {
                       }
 
                       updateElement(pageId, elementId, {
-                        calendarSettings: el.calendarSettings ? { 
-                          ...el.calendarSettings, 
-                          data: newData 
+                        calendarSettings: el.calendarSettings ? {
+                          ...el.calendarSettings,
+                          data: newData
                         } : undefined
                       });
                     }

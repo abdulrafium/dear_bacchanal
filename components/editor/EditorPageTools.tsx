@@ -1,7 +1,7 @@
 "use client";
 
 import { useEditorStore } from "@/store/editor-store";
-import { Type, Image, QrCode, LayoutGrid, Square, Circle } from "lucide-react";
+import { Type, Image, QrCode, LayoutGrid, Square, Circle, CheckSquare } from "lucide-react";
 
 const tools = [
   { id: "text" as const, label: "Text", icon: Type },
@@ -9,6 +9,7 @@ const tools = [
   { id: "layout" as const, label: "Layout", icon: LayoutGrid },
   { id: "rectangle" as const, label: "Rectangle", icon: Square },
   { id: "ellipse" as const, label: "Ellipse", icon: Circle },
+  { id: "checkbox" as const, label: "Checkbox", icon: CheckSquare },
 ];
 
 export function EditorPageTools({ pageId, align }: { pageId: string, align: "left" | "right" | "center" }) {
@@ -72,6 +73,20 @@ export function EditorPageTools({ pageId, align }: { pageId: string, align: "lef
           height: 300,
           rotation: 0,
           shapeType: "rectangle",
+        });
+        break;
+
+      case "checkbox":
+        addElement(pageId, {
+          type: "checkbox",
+          x: 100,
+          y: 200,
+          width: 20,
+          height: 20,
+          rotation: 0,
+          fontSize: 20, // Box size
+          fill: "#ffffff",
+          isChecked: false,
         });
         break;
 

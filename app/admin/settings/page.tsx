@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { PlatformSettings, CountrySetting } from "@/types/settings";
 import { toast } from "sonner";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 type SettingSection = "pricing" | "countries" | "print" | "general" | "security";
 
@@ -30,6 +31,25 @@ export default function AdminSettingsPage() {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [zoneFilter, setZoneFilter] = useState<string>("All");
   
+  const [clearingRevenue, setClearingRevenue] = useState(false);
+  const [revenueModal, setRevenueModal] = useState(false);
+
+  const executeClearRevenue = async () => {
+    setClearingRevenue(true);
+    try {
+      const res = await fetch('/api/admin/stats/clear-revenue', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        toast.success(data.message || 'Revenue stats cleared');
+      } else {
+        toast.error('Failed to clear revenue');
+      }
+    } catch (e) {
+      toast.error('Clear revenue failed');
+    } finally {
+      setClearingRevenue(false);
+    }
+  };
   const [isAddCountryModalOpen, setIsAddCountryModalOpen] = useState(false);
   const [newCountryForm, setNewCountryForm] = useState<CountrySetting>({ code: "", name: "", zone: "Clear EU", shippingRate: 0, enabled: true });
 
@@ -116,6 +136,14 @@ export default function AdminSettingsPage() {
   return (
     <>
       <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <ConfirmModal
+          isOpen={revenueModal}
+          onClose={() => setRevenueModal(false)}
+          onConfirm={executeClearRevenue}
+          title="Clear Revenue Stats"
+          description="Are you absolutely sure you want to clear the revenue stats? This will set all order amounts to zero and cannot be undone."
+          confirmLabel="Yes, Clear Revenue"
+        />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-display font-black text-white tracking-tight">PLATFORM SETTINGS</h1>
@@ -424,22 +452,31 @@ export default function AdminSettingsPage() {
                 />
               </div>
               
-              <div className="p-6 rounded-3xl border border-red-500/20 bg-red-500/[0.02] flex items-center justify-between">
-                <div className="flex gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-500">
-                        <AlertCircle className="w-6 h-6" />
-                    </div>
-                    <div>
-                        <h4 className="text-white font-bold">Maintenance Mode</h4>
-                        <p className="text-white/40 text-sm">Temporarily disable the storefront for maintenance.</p>
-                    </div>
+              {/* Danger Zone: Clear Revenue */}
+              <div className="p-6 rounded-3xl border border-red-600/30 bg-red-600/[0.04] space-y-4">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 rounded-2xl bg-red-600/15 flex items-center justify-center">
+                    <Trash2 className="w-5 h-5 text-red-500" />
+                  </div>
+                  <div>
+                    <h4 className="text-white font-bold text-sm">Danger Zone</h4>
+                    <p className="text-white/30 text-xs">Destructive actions — use with caution</p>
+                  </div>
                 </div>
-                <button 
-                  onClick={() => setSettings({ ...settings, general: { ...settings.general, maintenanceMode: !settings.general.maintenanceMode } })}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${settings.general.maintenanceMode ? 'bg-red-600' : 'bg-white/10'}`}
-                >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.general.maintenanceMode ? 'translate-x-6' : 'translate-x-1'}`} />
-                </button>
+                <div className="flex items-center justify-between p-4 rounded-2xl bg-black/30 border border-white/5">
+                  <div>
+                    <p className="text-white font-semibold text-sm">Clear Revenue Stats</p>
+                    <p className="text-white/30 text-xs mt-0.5">Zeros out all order amounts. Resets Revenue, EST Profit &amp; Avg Ticket on the dashboard.</p>
+                  </div>
+                  <button
+                    onClick={() => setRevenueModal(true)}
+                    disabled={clearingRevenue}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-red-600/10 hover:bg-red-600/20 border border-red-600/30 text-red-400 font-bold text-xs uppercase tracking-wider rounded-xl transition-all disabled:opacity-50 flex-shrink-0 ml-4"
+                  >
+                    {clearingRevenue ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    Clear Revenue
+                  </button>
+                </div>
               </div>
             </div>
           )}

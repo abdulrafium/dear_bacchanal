@@ -195,24 +195,37 @@ export async function POST(req: NextRequest) {
         console.warn(`[approve] ⚠️ Incomplete shipping address. Raw shippingDetails:`, JSON.stringify(shippingDetails));
       }
 
-      const baseUrl = process.env.NEXTAUTH_URL || "https://dearbacchanal.com";
+      let baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || "https://dearbacchanal.com";
+      // SiteFlow is an external service and cannot download from localhost.
+      // Force production domain if the environment variable resolves to localhost
+      if (baseUrl.includes("localhost")) {
+        console.warn(`[approve] WARNING: baseUrl was set to localhost. Forcing https://dearbacchanal.com for SiteFlow payload.`);
+        baseUrl = "https://dearbacchanal.com";
+      }
+
+      // Use the MongoDB _id to generate the 18-character SiteFlow ID so it matches the original format
+      const rawOrderId = orderId;
+      const shortOrderId = rawOrderId.length > 18 ? rawOrderId.substring(rawOrderId.length - 18) : rawOrderId;
+
+      const rawItemId = order.bookId || rawOrderId;
+      const shortItemId = rawItemId.length > 18 ? rawItemId.substring(rawItemId.length - 18) : rawItemId;
 
       const siteFlowResult = await client.createOrder({
-        sourceOrderId: order.orderId || orderId,
+        sourceOrderId: shortOrderId,
         items: [
           {
-            sourceItemId: order.bookId || order.orderId || orderId,
+            sourceItemId: shortItemId,
             sku: process.env.HP_BOOK_SKU || "saffatrinidad_hardback_10x10_staging",
             quantity: 1,
             components: [
               {
                 code: "cover",
-                path: registeredUser?.savedPdfUrl || `${baseUrl}/api/public/export/${order.bookId}?type=cover`,
+                path: `${baseUrl}/api/public/export/${order.bookId}?type=cover`,
                 fetch: true,
               },
               {
                 code: "text",
-                path: registeredUser?.savedPdfUrl || `${baseUrl}/api/public/export/${order.bookId}?type=text`,
+                path: `${baseUrl}/api/public/export/${order.bookId}?type=text`,
                 fetch: true,
               },
             ],
@@ -241,6 +254,7 @@ export async function POST(req: NextRequest) {
         {
           $set: {
             siteFlowOrderId,
+            sourceOrderId: shortOrderId,
             siteFlowSubmittedAt: new Date(),
           },
         }

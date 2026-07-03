@@ -9,10 +9,12 @@ import {
   Package,
   X,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Trash2
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 interface Order {
   id: string;
@@ -35,6 +37,74 @@ export default function AdminRefundsPage() {
   const [selectedRefund, setSelectedRefund] = useState<Order | null>(null);
   const [processingAction, setProcessingAction] = useState<'accept' | 'reject' | null>(null);
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending');
+  const [deletingRefunds, setDeletingRefunds] = useState<Set<string>>(new Set());
+  const [deletingAll, setDeletingAll] = useState(false);
+
+  // Confirm modal state
+  const [confirmModal, setConfirmModal] = useState<{ open: boolean; title: string; description: string; onConfirm: () => Promise<void> }>({
+    open: false, title: '', description: '', onConfirm: async () => {}
+  });
+
+  const openConfirm = (title: string, description: string, onConfirm: () => Promise<void>) => {
+    setConfirmModal({ open: true, title, description, onConfirm });
+  };
+
+  const executeDeleteRefund = async (orderId: string) => {
+    setDeletingRefunds(prev => new Set(prev).add(orderId));
+    try {
+      const res = await fetch(`/api/admin/orders?orderId=${orderId}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success("Record deleted");
+        if (selectedRefund?.id === orderId) setSelectedRefund(null);
+        fetchRefunds();
+      } else {
+        toast.error("Failed to delete record");
+      }
+    } catch (e) {
+      toast.error("Delete failed");
+    } finally {
+      setDeletingRefunds(prev => {
+        const next = new Set(prev);
+        next.delete(orderId);
+        return next;
+      });
+    }
+  };
+
+  const deleteRefund = (orderId: string) => {
+    openConfirm(
+      "Delete Refund Record",
+      "This will permanently delete this refund record and the associated customer book. This cannot be undone.",
+      () => executeDeleteRefund(orderId)
+    );
+  };
+
+  const executeDeleteAllRefunds = async () => {
+    setDeletingAll(true);
+    const statusFilter = activeTab === 'pending' ? 'refund_pending' : 'refunded';
+    try {
+      const res = await fetch(`/api/admin/orders?deleteAll=true&status=${statusFilter}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success("Records deleted");
+        setSelectedRefund(null);
+        fetchRefunds();
+      } else {
+        toast.error("Failed to delete records");
+      }
+    } catch (e) {
+      toast.error("Delete all failed");
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
+  const deleteAllRefunds = () => {
+    openConfirm(
+      `Delete All ${activeTab === 'pending' ? 'Pending Refunds' : 'Refund History'}`,
+      `This will permanently delete all ${activeTab === 'pending' ? 'pending refund requests' : 'refund history records'} and their associated customer books. This CANNOT be undone.`,
+      executeDeleteAllRefunds
+    );
+  };
 
   useEffect(() => {
     fetchRefunds(activeTab);
@@ -110,6 +180,14 @@ export default function AdminRefundsPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <ConfirmModal
+        isOpen={confirmModal.open}
+        onClose={() => setConfirmModal(m => ({ ...m, open: false }))}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        description={confirmModal.description}
+        confirmLabel="Yes, Delete"
+      />
       <div>
         <h1 className="text-3xl font-display font-black text-white tracking-tight uppercase flex items-center gap-3">
           <Undo2 className="w-8 h-8 text-red-500" />
@@ -131,6 +209,15 @@ export default function AdminRefundsPage() {
         >
             Refund History
         </button>
+        <div className="flex-1" />
+        <button
+            onClick={deleteAllRefunds}
+            disabled={deletingAll || refunds.length === 0}
+            className="flex items-center gap-1.5 px-4 py-2.5 bg-red-500/10 border border-red-500/20 rounded-full text-red-400 hover:bg-red-500/20 transition-all text-[10px] font-bold uppercase tracking-wider disabled:opacity-50"
+        >
+            {deletingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+            {deletingAll ? 'Deleting All...' : 'Delete All'}
+        </button>
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-6">
@@ -144,6 +231,7 @@ export default function AdminRefundsPage() {
                   <th className="px-6 py-4 text-[10px] font-black text-white/30 uppercase tracking-widest leading-none">CUSTOMER</th>
                   <th className="px-6 py-4 text-[10px] font-black text-white/30 uppercase tracking-widest leading-none">TYPE</th>
                   <th className="px-6 py-4 text-[10px] font-black text-white/30 uppercase tracking-widest leading-none text-right">ORIGINAL AMOUNT</th>
+                  <th className="px-6 py-4"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -189,6 +277,15 @@ export default function AdminRefundsPage() {
                         <div className="text-white font-black text-sm">
                             ${(Number(refund.amount || 0) / 100).toFixed(2)}
                         </div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <button 
+                            onClick={(e) => { e.stopPropagation(); deleteRefund(refund.id); }}
+                            disabled={deletingRefunds.has(refund.id)}
+                            className="p-2 hover:bg-red-500/20 rounded-lg text-white/40 hover:text-red-400 transition-all disabled:opacity-50 inline-flex items-center"
+                        >
+                            {deletingRefunds.has(refund.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        </button>
                       </td>
                     </tr>
                   ))
