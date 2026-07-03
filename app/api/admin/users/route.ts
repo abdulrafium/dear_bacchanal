@@ -2,15 +2,10 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 import { NextRequest, NextResponse } from "next/server";
-
 import { getDatabase } from "@/lib/db";
-
 import { adminAuthMiddleware } from "@/lib/admin-auth";
-
 import { ObjectId } from "mongodb";
-
 import { hash } from "bcryptjs";
-
 
 // GET - List all users
 export async function GET(req: NextRequest) {
@@ -109,11 +104,29 @@ export async function PATCH(req: NextRequest) {
       }
 
       default:
-        return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+        return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
 
+// DELETE - Delete user
+export async function DELETE(req: NextRequest) {
+  const authError = await adminAuthMiddleware();
+  if (authError) return authError;
 
+  try {
+    const db = await getDatabase();
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get("userId");
+
+    if (userId) {
+      await db.collection("users").deleteOne({ _id: new ObjectId(userId) });
+      return NextResponse.json({ success: true, message: "User deleted" });
+    }
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}

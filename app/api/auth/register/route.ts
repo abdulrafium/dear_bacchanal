@@ -8,7 +8,7 @@ import { getWelcomeEmail } from "@/lib/email-templates";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    
+
     // Validate input
     const parsed = signUpSchema.safeParse(body);
     if (!parsed.success) {
@@ -24,8 +24,8 @@ export async function POST(req: NextRequest) {
     const usersCollection = db.collection("users");
 
     // Check if user already exists
-    const existingUser = await usersCollection.findOne({ 
-      email: { $regex: new RegExp(`^${email}$`, "i") } 
+    const existingUser = await usersCollection.findOne({
+      email: { $regex: new RegExp(`^${email}$`, "i") }
     });
     if (existingUser) {
       return NextResponse.json(
@@ -51,14 +51,14 @@ export async function POST(req: NextRequest) {
 
     // Send Welcome Email
     try {
-        await sendEmail({
-            to: email,
-            subject: "Welcome to Dear Bacchanal!",
-            html: getWelcomeEmail(name)
-        });
-        console.log(`Welcome email sent to ${email}`);
+      await sendEmail({
+        to: email,
+        subject: "Welcome to Dear Bacchanal!",
+        html: getWelcomeEmail(name)
+      });
+      console.log(`Welcome email sent to ${email}`);
     } catch (emailError) {
-        console.error("Failed to send welcome email:", emailError);
+      console.error("Failed to send welcome email:", emailError);
     }
 
     return NextResponse.json(

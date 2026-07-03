@@ -2,9 +2,10 @@ import { create } from "zustand";
 import { v4 as uuidv4 } from "uuid";
 import Konva from "konva";
 import { toast } from "sonner";
+import { uploadFiles } from "@/lib/uploadthing-client";
 
 // Element types that can be placed on a page
-export type ElementType = "image" | "text" | "shape" | "sticker" | "qrcode" | "calendar" | "photo-card";
+export type ElementType = "image" | "text" | "shape" | "sticker" | "qrcode" | "calendar" | "photo-card" | "checkbox";
 export type ShapeType = "rectangle" | "ellipse";
 
 export interface CalendarSettings {
@@ -14,6 +15,7 @@ export interface CalendarSettings {
   backgroundColor?: string;
   textColor?: string;
   titleColor?: string;
+  hideTitle?: boolean;
 }
 
 export interface EditorElement {
@@ -34,6 +36,7 @@ export interface EditorElement {
   fontStyle?: string;
   fill?: string;
   align?: "left" | "center" | "right";
+  lineHeight?: number;
   // Shape-specific
   shapeType?: ShapeType;
   stroke?: string;
@@ -46,6 +49,8 @@ export interface EditorElement {
   calendarSettings?: CalendarSettings;
   // Others
   opacity?: number;
+  // Checkbox-specific
+  isChecked?: boolean;
 }
 
 export interface BookPage {
@@ -60,10 +65,11 @@ export interface BookSpread {
   id: string;
   leftPage: BookPage;
   rightPage: BookPage;
+  isV2?: boolean;
 }
 
 export type SidebarPanel = "images" | "templates" | "layouts" | "backgrounds" | "stickers" | "calendar" | "text" | null;
-export type RightTool = "text" | "photo" | "qrcode" | "layout" | "rectangle" | "ellipse" | null;
+export type RightTool = "text" | "photo" | "qrcode" | "layout" | "rectangle" | "ellipse" | "checkbox" | null;
 
 interface HistoryEntry {
   spreads: BookSpread[];
@@ -144,7 +150,7 @@ interface EditorState {
   save: (isAdmin?: boolean) => Promise<boolean>;
   isGeneratingPdf: boolean;
   pdfGenerationProgress: { current: number; total: number; status: string } | null;
-  generatePdfBook: (isHardCopy?: boolean) => Promise<void>;
+  generatePdfBook: (isHardCopy?: boolean, keepOverlayOpen?: boolean, pdfType?: 'cover' | 'inner' | 'both') => Promise<void>;
 }
 
 function createDefaultPage(label: string, isLocked = false): BookPage {
@@ -194,10 +200,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setIsOrderModalOpen: (open) => set({ isOrderModalOpen: open }),
 
   // Navigation
-  setCurrentSpread: (index, skipDirty = false) => set((s) => ({ 
-    currentSpreadIndex: index, 
-    selectedElementId: null, 
-    isDirty: skipDirty ? s.isDirty : true 
+  setCurrentSpread: (index, skipDirty = false) => set((s) => ({
+    currentSpreadIndex: index,
+    selectedElementId: null,
+    isDirty: skipDirty ? s.isDirty : true
   })),
   nextSpread: () => {
     const { currentSpreadIndex, spreads } = get();
@@ -265,8 +271,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   selectElement: (elementId) => set({ selectedElementId: elementId }),
 
-  setPreviewElement: (elementId, updates) => set({ 
-    previewElement: elementId ? { id: elementId, updates: updates || {} } : null 
+  setPreviewElement: (elementId, updates) => set({
+    previewElement: elementId ? { id: elementId, updates: updates || {} } : null
   }),
 
   toggleElementLock: (pageId, elementId) => {
@@ -293,7 +299,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       id: uuidv4(),
       rotation: 0,
     } as EditorElement));
-    
+
     set({
       spreads: state.spreads.map((spread) => ({
         ...spread,
@@ -370,6 +376,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   loadTemplate: (spreads: BookSpread[], name: string, description?: string | null, country?: string | null, year?: string | null, id?: string | null) => {
+
     set({
       spreads: JSON.parse(JSON.stringify(spreads)),
       currentSpreadIndex: 0,
@@ -388,9 +395,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     });
   },
 
-  setTemplateMetadata: (name: string | null, description: string | null, country?: string | null, year?: string | null) => set((s) => ({ 
-    activeTemplateName: name !== null ? name : s.activeTemplateName, 
-    templateDescription: description !== null ? description : s.templateDescription, 
+  setTemplateMetadata: (name: string | null, description: string | null, country?: string | null, year?: string | null) => set((s) => ({
+    activeTemplateName: name !== null ? name : s.activeTemplateName,
+    templateDescription: description !== null ? description : s.templateDescription,
     templateCountry: country !== undefined ? country : s.templateCountry,
     templateYear: year !== undefined ? year : s.templateYear,
     isDirty: true,
@@ -399,22 +406,22 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   save: async (isAdminParam?: boolean) => {
     const { spreads, isAdmin, activeTemplateId, activeTemplateName, templateDescription, templateCountry, templateYear, currentSpreadIndex, version: startVersion } = get();
-    
+
     try {
       const res = await fetch("/api/editor/save", {
         method: "POST",
-        headers: { 
-            "Content-Type": "application/json",
+        headers: {
+          "Content-Type": "application/json",
         },
-        body: JSON.stringify({ 
-          spreads, 
-          isAdmin: isAdminParam !== undefined ? isAdminParam : isAdmin, 
-          activeTemplateId: activeTemplateId === "undefined" ? null : activeTemplateId, 
-          activeTemplateName: activeTemplateName || "My Book", 
+        body: JSON.stringify({
+          spreads,
+          isAdmin: isAdminParam !== undefined ? isAdminParam : isAdmin,
+          activeTemplateId: activeTemplateId === "undefined" ? null : activeTemplateId,
+          activeTemplateName: activeTemplateName || "My Book",
           templateDescription,
           templateCountry,
           templateYear,
-          currentSpreadIndex 
+          currentSpreadIndex
         }),
       });
 
@@ -422,17 +429,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.error || "Failed to save");
       }
-      
+
       const data = await res.json();
-      
+
       if (data.templateId) {
         set({ activeTemplateId: data.templateId });
       }
-      
+
       if (get().version === startVersion) {
         set({ isDirty: false });
       }
-      
+
       return true;
     } catch (error: any) {
       console.error("Save error:", error);
@@ -503,231 +510,496 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   isGeneratingPdf: false,
   pdfGenerationProgress: null,
-  generatePdfBook: async (isHardCopy = false) => {
+  generatePdfBook: async (isHardCopy = false, keepOverlayOpen = false, pdfType = 'both') => {
     const state = get();
     const { spreads, setCurrentSpread, stageRef, activeTemplateName, currentSpreadIndex, selectElement } = state;
-    
+
     if (!stageRef) {
-        toast.error("Editor canvas not ready. Please wait a moment and try again.");
-        return;
+      toast.error("Editor canvas not ready. Please wait a moment and try again.");
+      return;
     }
 
     if (spreads.length === 0) {
-        toast.error("No pages to generate PDF from.");
-        return;
+      toast.error("No pages to generate PDF from.");
+      return;
     }
 
     set({ isGeneratingPdf: true });
     const originalIndex = currentSpreadIndex;
     const originalViewMode = state.viewMode;
-    
+
     // Force spread (dual-page) view for PDF export
     if (originalViewMode === 'single') {
       set({ viewMode: 'spread' });
       await new Promise(r => setTimeout(r, 500));
     }
-    
+
     // Clear selection so the transformer box doesn't appear in the PDF
     selectElement(null);
 
     try {
-        const { jsPDF } = await import("jspdf");
-        const PAGE_WIDTH = 400;
-        const PAGE_HEIGHT = 550;
-        const spreadWidth = PAGE_WIDTH * 2 + 8;
-        const spreadHeight = PAGE_HEIGHT;
+      const { jsPDF } = await import("jspdf");
+      const PAGE_WIDTH = 500;
+      const PAGE_HEIGHT = 500;
+
+      // SiteFlow precise dimensions in points
+      // Cover Template: 260mm (Back) + 10mm (Spine) + 260mm (Front) + 40mm (Bleed left/right) = 570mm
+      // Cover Template: 260mm (Height) + 40mm (Bleed top/bottom) = 300mm
+      // 1 mm = 2.83465 pt
+      const COVER_WIDTH = 570 * 2.83465; // 1615.75
+      const COVER_HEIGHT = 300 * 2.83465; // 850.39
+      // Inner Page Template: 254mm safe zone + 3mm Bleed on all sides = 260mm x 260mm per page
+      const TEXT_PAGE_WIDTH = 260 * 2.83465; // 737.009
+      const TEXT_PAGE_HEIGHT = 260 * 2.83465; // 737.009
+
+      const coverPdf = new jsPDF({
+        orientation: "landscape",
+        unit: "pt",
+        format: [COVER_WIDTH, COVER_HEIGHT],
+        compress: true
+      });
+      
+      // Determine the cover's background color to paint the bleed and spine
+      let coverBg = '#ffffff';
+      if (spreads.length > 0 && spreads[0].rightPage?.background) {
+        coverBg = spreads[0].rightPage.background;
+      }
+      const hexToRgb = (hex: string) => {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : { r: 255, g: 255, b: 255 };
+      };
+      const bgRgb = hexToRgb(coverBg.startsWith('#') ? coverBg : '#ffffff');
+      
+      coverPdf.setFillColor(bgRgb.r, bgRgb.g, bgRgb.b);
+      coverPdf.rect(0, 0, COVER_WIDTH, COVER_HEIGHT, 'F');
+
+      const textPdf = new jsPDF({
+        orientation: "portrait",
+        unit: "pt",
+        format: [TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT],
+        compress: true
+      });
+
+      // ── Embed a real TTF font so printer pre-flight checks pass ──
+      const embedFontIntoPdf = async (doc: InstanceType<typeof jsPDF>) => {
+        try {
+          // Use API route — server reads the file and returns clean base64 (no browser binary conversion)
+          const fontRes = await fetch('/api/font-embed');
+          if (!fontRes.ok) return;
+          const { fontBase64 } = await fontRes.json();
+          if (!fontBase64) return;
+          doc.addFileToVFS('EmbedFont.ttf', fontBase64);
+          doc.addFont('EmbedFont.ttf', 'EmbedFont', 'normal');
+          doc.setFont('EmbedFont');
+          doc.setFontSize(0.1);
+          doc.setTextColor(255, 255, 255);
+          doc.text('.', 0, 0);
+          console.log('[PDF] Font embedded successfully');
+        } catch (e) {
+          console.warn('[PDF] Font embedding skipped:', e);
+        }
+      };
+
+      await embedFontIntoPdf(coverPdf);
+      await embedFontIntoPdf(textPdf);
+
+      // Generate the automated Title Page on PDF Page 1 (Right-hand side of the spread)
+      if (pdfType === 'inner' || pdfType === 'both') {
+        try {
+          const titleCanvas = document.createElement('canvas');
+          const PIXEL_RATIO = 4; // High resolution for print
+          titleCanvas.width = TEXT_PAGE_WIDTH * PIXEL_RATIO; 
+          titleCanvas.height = TEXT_PAGE_HEIGHT * PIXEL_RATIO;
+          const ctx = titleCanvas.getContext('2d');
+          if (ctx) {
+            ctx.scale(PIXEL_RATIO, PIXEL_RATIO);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
+            
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // Draw Main Title
+            ctx.fillStyle = coverBg.startsWith('#') ? coverBg : '#b5251a';
+            ctx.font = '70px "Luckiest Guy", cursive';
+            ctx.fillText('DEAR BACCHANAL', TEXT_PAGE_WIDTH / 2, TEXT_PAGE_HEIGHT / 2 - 40);
+            
+            // Draw Subtitle
+            ctx.fillStyle = '#666666';
+            ctx.font = 'italic 35px "Caveat", cursive';
+            ctx.fillText('Trinidad Carnival 2026', TEXT_PAGE_WIDTH / 2, TEXT_PAGE_HEIGHT / 2 + 60);
+            
+            const titleDataUrl = titleCanvas.toDataURL('image/jpeg', 0.85);
+            textPdf.addImage(titleDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
+          }
+        } catch (e) {
+          console.error("Failed to generate title page", e);
+        }
+      }
+
+      toast.info(`Generating PDFs — ${spreads.length} spreads to process...`, { duration: 3000 });
+
+      set({ pdfGenerationProgress: { current: 0, total: spreads.length, status: "Preparing pages..." } });
+
+      for (let i = 0; i < spreads.length; i++) {
+        if (pdfType === 'inner' && i === 0) continue;
+        if (pdfType === 'cover' && i > 0) break;
+
+        set({ pdfGenerationProgress: { current: i + 1, total: spreads.length, status: `Rendering page ${i + 1} of ${spreads.length}...` } });
+        toast.info(`Rendering spread ${i + 1} of ${spreads.length}...`, { duration: 2000, id: 'pdf-progress' });
+
+        setCurrentSpread(i, true);
+
+        // Preload all image assets directly from the spread data model
+        // This ensures they are fully cached before we even ask Konva to render them
+        const spread = spreads[i];
+        const urlsToPreload: string[] = [];
         
-        const pdf = new jsPDF({
-          orientation: "landscape",
-          unit: "px",
-          format: [spreadWidth, spreadHeight]
+        const isValidUrl = (url?: string) => url && (url.startsWith('http') || url.startsWith('/') || url.startsWith('data:'));
+        const extractUrls = (page: BookPage | null) => {
+          if (!page) return;
+          if (isValidUrl(page.background)) urlsToPreload.push(page.background!);
+          page.elements.forEach(el => {
+            if (isValidUrl(el.src)) urlsToPreload.push(el.src!);
+          });
+        };
+        
+        extractUrls(spread.leftPage);
+        extractUrls(spread.rightPage);
+
+        const preloadPromises = urlsToPreload.map(url => new Promise<void>(resolve => {
+          const img = new window.Image();
+          img.crossOrigin = "anonymous";
+          const onDone = () => resolve();
+          img.onload = onDone;
+          img.onerror = onDone;
+          img.src = url;
+          setTimeout(onDone, 15000); // 15s timeout
+        }));
+
+        if (preloadPromises.length > 0) {
+           await Promise.all(preloadPromises);
+        }
+
+        // Wait for React to mount components and images to start loading
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        // 2. Re-fetch stageRef from store (it updates when canvas re-renders)
+        const currentStageRef = get().stageRef;
+        if (!currentStageRef) {
+          console.warn(`stageRef lost on spread ${i}, skipping...`);
+          continue;
+        }
+
+        // 3. Force a full redraw
+        currentStageRef.batchDraw();
+
+        const exportBg = new Konva.Rect({
+          x: -100,
+          y: -100,
+          width: PAGE_WIDTH * 2 + 200,
+          height: PAGE_HEIGHT + 200,
+          fill: 'white',
+          listening: false
         });
 
-        toast.info(`Generating PDF — ${spreads.length} spreads to process...`, { duration: 3000 });
+        const layers = currentStageRef.getLayers();
+        if (layers.length > 0) {
+          const firstLayer = layers[0];
+          firstLayer.add(exportBg);
+          exportBg.moveToBottom();
 
-        set({ pdfGenerationProgress: { current: 0, total: spreads.length, status: "Preparing pages..." } });
+          // 4. DEEP-WAIT FOR ALL ASSETS
+          // Wait for web fonts
+          await document.fonts.ready;
 
-        for (let i = 0; i < spreads.length; i++) {
-            set({ pdfGenerationProgress: { current: i + 1, total: spreads.length, status: `Rendering page ${i + 1} of ${spreads.length}...` } });
-            toast.info(`Rendering spread ${i + 1} of ${spreads.length}...`, { duration: 2000, id: 'pdf-progress' });
-            
-            setCurrentSpread(i, true);
-            
-            // 1. Wait for React to mount components and images to start loading
-            await new Promise(resolve => setTimeout(resolve, 3000)); 
-            
-            // 2. Re-fetch stageRef from store (it updates when canvas re-renders)
-            const currentStageRef = get().stageRef;
-            if (!currentStageRef) {
-                console.warn(`stageRef lost on spread ${i}, skipping...`);
-                continue;
-            }
-            
-            // 3. Force a full redraw
-            currentStageRef.batchDraw();
+          // Find all image/pattern nodes and wait for them
+          const allNodes = currentStageRef.find('Image, Rect, Text, Group');
+          const loadPromises: Promise<void>[] = [];
 
-            // 4. Calculate export dimensions from the CURRENT stage
-            const stageWidthExport = currentStageRef.width() / currentStageRef.scaleX();
-            const stageHeightExport = currentStageRef.height() / currentStageRef.scaleY();
-
-            const exportBg = new Konva.Rect({
-                x: -100,
-                y: -100,
-                width: stageWidthExport + 200, 
-                height: stageHeightExport + 200,
-                fill: 'white',
-                listening: false
-            });
-            
-            const layers = currentStageRef.getLayers();
-            if (layers.length > 0) {
-                const firstLayer = layers[0];
-                firstLayer.add(exportBg);
-                exportBg.moveToBottom();
-                
-                // 4. DEEP-WAIT FOR ALL ASSETS
-                // Wait for web fonts
-                await document.fonts.ready;
-
-                // Find all image/pattern nodes and wait for them
-                const allNodes = currentStageRef.find('Image, Rect, Text, Group');
-                const loadPromises: Promise<void>[] = [];
-
-                allNodes.forEach((node: any) => {
-                    // Standard Image nodes (photos, stickers)
-                    if (node.getClassName() === 'Image') {
-                        const img = node.image();
-                        if (img instanceof HTMLImageElement) {
-                            if (!img.complete || img.naturalWidth === 0) {
-                                loadPromises.push(new Promise<void>(resolve => {
-                                    const onDone = () => resolve();
-                                    img.addEventListener('load', onDone, { once: true });
-                                    img.addEventListener('error', onDone, { once: true });
-                                    setTimeout(onDone, 15000); // 15s max per asset
-                                }));
-                            }
-                        }
-                    }
-                    // Background pattern images in Rects
-                    if (node.getClassName() === 'Rect') {
-                        const patternImg = (node as Konva.Rect).fillPatternImage();
-                        if (patternImg instanceof HTMLImageElement) {
-                            if (!patternImg.complete || patternImg.naturalWidth === 0) {
-                                loadPromises.push(new Promise<void>(resolve => {
-                                    const onDone = () => resolve();
-                                    patternImg.addEventListener('load', onDone, { once: true });
-                                    patternImg.addEventListener('error', onDone, { once: true });
-                                    setTimeout(onDone, 15000);
-                                }));
-                            }
-                        }
-                    }
-                });
-
-                if (loadPromises.length > 0) {
-                    toast.info(`Waiting for ${loadPromises.length} assets on spread ${i + 1}...`, { duration: 2000, id: 'pdf-progress' });
-                    await Promise.all(loadPromises);
+          allNodes.forEach((node: any) => {
+            // Standard Image nodes (photos, stickers)
+            if (node.getClassName() === 'Image') {
+              const img = node.image();
+              if (img instanceof HTMLImageElement) {
+                if (!img.complete || img.naturalWidth === 0) {
+                  loadPromises.push(new Promise<void>(resolve => {
+                    const onDone = () => resolve();
+                    img.addEventListener('load', onDone, { once: true });
+                    img.addEventListener('error', onDone, { once: true });
+                    setTimeout(onDone, 15000); // 15s max per asset
+                  }));
                 }
-                
-                // 5. Extra settling time for SVG renders, complex stickers, etc.
-                await new Promise(r => setTimeout(r, 1000));
-                
-                // 6. Final redraw after everything is loaded
-                currentStageRef.batchDraw();
-                await new Promise(r => setTimeout(r, 300)); // Let the draw flush
-                
-                // 7. Capture high-quality snapshot
-                set({ pdfGenerationProgress: { current: i + 1, total: spreads.length, status: `Finalizing page ${i + 1}...` } });
-
-                const dataUrl = currentStageRef.toDataURL({ 
-                    x: 0,
-                    y: 0,
-                    width: stageWidthExport,
-                    height: stageHeightExport,
-                    pixelRatio: 4, 
-                    mimeType: "image/jpeg",
-                    quality: 1.0
-                });
-
-                // Clean up the white background
-                exportBg.destroy();
-                currentStageRef.batchDraw();
-
-                if (i > 0) pdf.addPage([spreadWidth, spreadHeight], "landscape");
-                pdf.addImage(dataUrl, 'JPEG', 0, 0, spreadWidth, spreadHeight);
+              }
             }
+            // Background pattern images in Rects
+            if (node.getClassName() === 'Rect') {
+              const patternImg = (node as Konva.Rect).fillPatternImage();
+              if (patternImg instanceof HTMLImageElement) {
+                if (!patternImg.complete || patternImg.naturalWidth === 0) {
+                  loadPromises.push(new Promise<void>(resolve => {
+                    const onDone = () => resolve();
+                    patternImg.addEventListener('load', onDone, { once: true });
+                    patternImg.addEventListener('error', onDone, { once: true });
+                    setTimeout(onDone, 15000);
+                  }));
+                }
+              }
+            }
+          });
+
+          if (loadPromises.length > 0) {
+            toast.info(`Waiting for ${loadPromises.length} assets on spread ${i + 1}...`, { duration: 2000, id: 'pdf-progress' });
+            await Promise.all(loadPromises);
+          }
+
+          // 5. Extra settling time for SVG renders, complex stickers, etc.
+          await new Promise(r => setTimeout(r, 1000));
+
+          // 6. Final redraw after everything is loaded
+          currentStageRef.batchDraw();
+          await new Promise(r => setTimeout(r, 300)); // Let the draw flush
+
+          // 7. Capture high-quality snapshot for the ENTIRE continuous spread (Left + Right, gap is removed in UI)
+          set({ pdfGenerationProgress: { current: i + 1, total: spreads.length, status: `Finalizing page ${i + 1}...` } });
+
+          // Clean up the white background
+          exportBg.destroy();
+          currentStageRef.batchDraw();
+
+          if (i === 0) {
+            // Spread 0 is the Cover.
+            const spreadDataUrl = currentStageRef.toDataURL({
+              x: 0, y: 0, width: PAGE_WIDTH * 2, height: PAGE_HEIGHT,
+              pixelRatio: 4, mimeType: "image/jpeg", quality: 0.85
+            });
+            // To ensure the safe zones exactly match the UI and nothing is cropped off the edges:
+            // We scale the 1000x500 canvas to exactly fit the 1615.75 x 850.39 PDF page.
+            // This introduces a tiny ~5% vertical stretch, but prevents any unexpected edge cropping.
+            coverPdf.addImage(spreadDataUrl, 'JPEG', 0, 0, COVER_WIDTH, COVER_HEIGHT);
+          } else {
+            // INNER PAGES (Spreads 1..N) - Output as single 260x260mm pages
+            // To ensure a perfectly continuous design across the spread after the printer cuts the 3mm bleed,
+            // we must "borrow" 3mm (5.77px) of the opposite page to serve as the inside bleed!
+            const bleedPx = 5.77;
+
+            // Left Page: captures from x=0 to x=500+5.77
+            const leftDataUrl = currentStageRef.toDataURL({
+              x: 0,
+              y: 0,
+              width: PAGE_WIDTH + bleedPx,
+              height: PAGE_HEIGHT,
+              pixelRatio: 4,
+              mimeType: "image/jpeg",
+              quality: 0.85
+            });
+            textPdf.addPage([TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT], "portrait");
+            textPdf.addImage(leftDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
+
+            // Right Page: captures from x=500-5.77 to x=1000
+            const rightDataUrl = currentStageRef.toDataURL({
+              x: PAGE_WIDTH - bleedPx,
+              y: 0,
+              width: PAGE_WIDTH + bleedPx,
+              height: PAGE_HEIGHT,
+              pixelRatio: 4,
+              mimeType: "image/jpeg",
+              quality: 0.85
+            });
+            textPdf.addPage([TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT], "portrait");
+            textPdf.addImage(rightDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
+          }
+        }
+      }
+
+      // Add a final beautiful "The End" spread to ensure the back page of the book is clean
+      if (pdfType === 'inner' || pdfType === 'both') {
+        try {
+          textPdf.addPage([TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT], "portrait");
+          const endCanvas = document.createElement('canvas');
+          const PIXEL_RATIO = 4;
+          endCanvas.width = TEXT_PAGE_WIDTH * PIXEL_RATIO; 
+          endCanvas.height = TEXT_PAGE_HEIGHT * PIXEL_RATIO;
+          const ctx = endCanvas.getContext('2d');
+          if (ctx) {
+            ctx.scale(PIXEL_RATIO, PIXEL_RATIO);
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
+            
+            // Draw subtle closing logo/text on the LEFT side of the final spread
+            ctx.fillStyle = '#666666'; // Match Trinidad text color
+            ctx.font = 'italic 24px "Caveat", cursive';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('Created with Dear Bacchanal', TEXT_PAGE_WIDTH / 2, TEXT_PAGE_HEIGHT - 100);
+            
+            const endDataUrl = endCanvas.toDataURL('image/jpeg', 0.85);
+            textPdf.addImage(endDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
+          }
+        } catch(e) {}
+      }
+
+      const baseFileName = activeTemplateName?.replace(/\s+/g, '_') || 'Carnival_Book';
+
+      // ── Post-process with pdf-lib to guarantee font embedding at binary level ──
+      const embedFontWithPdfLib = async (inputBlob: Blob): Promise<Blob> => {
+        try {
+          const { PDFDocument, rgb } = await import('pdf-lib');
+          // Fetch font as base64 from our server API (reliable, no browser binary conversion)
+          const fontRes = await fetch('/api/font-embed');
+          const { fontBase64 } = await fontRes.json();
+          // Decode base64 to bytes
+          const fontBinary = atob(fontBase64);
+          const fontBytes = new Uint8Array(fontBinary.length);
+          for (let i = 0; i < fontBinary.length; i++) fontBytes[i] = fontBinary.charCodeAt(i);
+
+          const inputBytes = await inputBlob.arrayBuffer();
+          const pdfDoc = await PDFDocument.load(inputBytes, { ignoreEncryption: true });
+          
+          // Must register fontkit to embed custom TTF fonts
+          const fontkitModule = await import('@pdf-lib/fontkit');
+          const fontkit = fontkitModule.default || fontkitModule;
+          pdfDoc.registerFontkit(fontkit);
+
+          // Embed our custom TTF — this is a real embed, not a standard font reference
+          const font = await pdfDoc.embedFont(fontBytes, { subset: false });
+          // Draw a dot with standard opacity off-screen or tiny so strict parsers don't strip it
+          const pages = pdfDoc.getPages();
+          pages.forEach(page => {
+            page.drawText('.', {
+              x: -50, y: -50, // Off-screen
+              size: 12,
+              font,
+              color: rgb(0, 0, 0), // Solid black
+            });
+          });
+          const pdfBytes = await pdfDoc.save();
+          // Use ArrayBuffer to avoid TypeScript Uint8Array/BlobPart compat issue
+          return new Blob([pdfBytes.buffer as ArrayBuffer], { type: 'application/pdf' });
+        } catch (e) {
+          console.warn('[PDF] pdf-lib post-processing failed, using original:', e);
+          return inputBlob;
+        }
+      };
+
+      const rawCoverBlob = coverPdf.output('blob');
+      const rawTextBlob = textPdf.output('blob');
+
+      const coverBlob = await embedFontWithPdfLib(rawCoverBlob);
+      const textBlob = await embedFontWithPdfLib(rawTextBlob);
+
+      if (!isHardCopy) {
+        if (pdfType === 'cover' || pdfType === 'both') {
+          // Download Cover PDF
+          const coverBlobUrl = URL.createObjectURL(coverBlob);
+          const coverLink = document.createElement('a');
+          coverLink.href = coverBlobUrl;
+          coverLink.download = `${baseFileName}_Cover.pdf`;
+          document.body.appendChild(coverLink);
+          coverLink.click();
+          document.body.removeChild(coverLink);
+          setTimeout(() => URL.revokeObjectURL(coverBlobUrl), 5000);
         }
 
-        const fileName = `${activeTemplateName?.replace(/\s+/g, '_') || 'Carnival_Book'}_Book.pdf`;
-        
-        const pdfBlob = pdf.output('blob');
-        
-        if (!isHardCopy) {
-          // Manual download to force correct .pdf filename for soft copies
-          const blobUrl = URL.createObjectURL(pdfBlob);
-          const downloadLink = document.createElement('a');
-          downloadLink.href = blobUrl;
-          downloadLink.download = fileName;
-          document.body.appendChild(downloadLink);
-          downloadLink.click();
-          document.body.removeChild(downloadLink);
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
-          toast.success("PDF downloaded successfully!", { duration: 5000 });
+        if (pdfType === 'inner' || pdfType === 'both') {
+          // Download Text PDF with a tiny delay so the browser doesn't block the second download
+          setTimeout(() => {
+            const textBlobUrl = URL.createObjectURL(textBlob);
+            const textLink = document.createElement('a');
+            textLink.href = textBlobUrl;
+            textLink.download = `${baseFileName}_Text.pdf`;
+            document.body.appendChild(textLink);
+            textLink.click();
+            document.body.removeChild(textLink);
+            setTimeout(() => URL.revokeObjectURL(textBlobUrl), 5000);
+          }, pdfType === 'both' ? 500 : 0);
         }
+        
+        toast.success("PDFs downloaded successfully!", { duration: 5000 });
+      }
 
-        // ─── Background upload to UploadThing so SiteFlow can fetch it ──────────
-        // This runs silently after the download — any failure is non-blocking.
+      // ─── Background upload to UploadThing so SiteFlow can fetch it ──────────
+      // This runs silently after the download — any failure is non-blocking.
+      if (pdfType === 'both') {
         try {
           const { activeTemplateId: bookId, activeTemplateName: tmplName } = get();
-          const uploadFormData = new FormData();
-          uploadFormData.append(
-            "file",
-            new File([pdfBlob], `${tmplName?.replace(/\s+/g, '_') || 'book'}.pdf`, { type: "application/pdf" })
-          );
-          if (bookId) uploadFormData.append("bookId", bookId);
-          if (tmplName) uploadFormData.append("templateName", tmplName);
+          
+          const coverPdfFile = new File([coverBlob], `${baseFileName}_Cover.pdf`, { type: "application/pdf" });
+          const textPdfFile = new File([textBlob], `${baseFileName}_Text.pdf`, { type: "application/pdf" });
 
-          fetch("/api/editor/upload-pdf", {
-            method: "POST",
-            body: uploadFormData,
-          })
-            .then((r) => r.json())
-            .then((data) => {
-              if (data.success) {
-                console.log("[editor] PDF uploaded for SiteFlow:", data.url);
-              } else {
-                console.warn("[editor] PDF upload for SiteFlow failed:", data.error);
-              }
-            })
-            .catch((uploadErr) => {
-              console.warn("[editor] PDF upload for SiteFlow error (non-blocking):", uploadErr);
+          // 1. Upload files DIRECTLY to UploadThing from the browser (bypasses Next.js 4.5MB body limit)
+          const uploadResult = await uploadFiles("bookPdfUploader", {
+            files: [coverPdfFile, textPdfFile]
+          });
+
+          if (uploadResult && uploadResult.length === 2) {
+            const coverUrl = uploadResult.find(r => r.name.includes("_Cover"))?.url || uploadResult[0].url;
+            const textUrl = uploadResult.find(r => r.name.includes("_Text"))?.url || uploadResult[1].url;
+
+            // 2. Send the resulting URLs to the backend to save in the database
+            const uploadResponse = await fetch("/api/editor/upload-pdf", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                coverUrl,
+                textUrl,
+                bookId,
+                templateName: tmplName
+              }),
             });
+            
+            const data = await uploadResponse.json();
+            
+            if (data.success) {
+              console.log("[editor] PDFs uploaded for SiteFlow!");
+            } else {
+              console.warn("[editor] PDF upload for SiteFlow failed:", data.error);
+            }
+          } else {
+            console.warn("[editor] Failed to upload files to UploadThing");
+          }
         } catch (uploadSetupErr) {
           console.warn("[editor] Could not start PDF upload:", uploadSetupErr);
         }
+      }
 
-        // Consume purchase - MUST PAY AGAIN FOR NEXT DOWNLOAD
-        try {
-          await fetch("/api/auth/consume-purchase", {
-            method: "POST",
-            headers: { 
-                "Content-Type": "application/json",
-            }
-          });
-        } catch (consumeError) {
-          console.error("Failed to consume purchase:", consumeError);
-        }
-    } catch (err) {
-        console.error("PDF Export Error:", err);
-        toast.error("PDF generation failed. Please try again.");
+      // Consume purchase - MUST PAY AGAIN FOR NEXT DOWNLOAD
+      try {
+        await fetch("/api/auth/consume-purchase", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          }
+        });
+      } catch (consumeError) {
+        console.error("Failed to consume purchase:", consumeError);
+      }
+    } catch (err: any) {
+      console.error("PDF Export Error:", err);
+      try {
+        fetch('/api/log-error', {
+          method: 'POST',
+          body: JSON.stringify({ message: err?.message, stack: err?.stack, stringified: String(err) })
+        });
+      } catch(e){}
+      toast.error("PDF generation failed. Please try again.");
     } finally {
-        set({ isGeneratingPdf: false, pdfGenerationProgress: null });
-        
-        // Restore selection and view mode
-        setCurrentSpread(originalIndex, true);
-        if (originalViewMode !== get().viewMode) {
-          set({ viewMode: originalViewMode });
-        }
+      set({ isGeneratingPdf: false });
+      if (!keepOverlayOpen) {
+        set({ pdfGenerationProgress: null });
+      } else {
+        set((state) => ({
+          pdfGenerationProgress: state.pdfGenerationProgress
+            ? { ...state.pdfGenerationProgress, current: state.pdfGenerationProgress.total + 1, status: "Complete! Redirecting..." }
+            : null
+        }));
+      }
+
+      // Restore selection and view mode
+      setCurrentSpread(originalIndex, true);
+      if (originalViewMode !== get().viewMode) {
+        set({ viewMode: originalViewMode });
+      }
     }
   },
 }));

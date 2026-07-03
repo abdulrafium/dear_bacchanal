@@ -72,8 +72,9 @@ function PaymentStatusContent() {
     if (status === "success") {
       const timer = setTimeout(() => {
         const tplName = orderInfo?.templateName ? `&templateName=${encodeURIComponent(orderInfo.templateName)}` : '';
+        const bId = orderInfo?.bookId ? `&bookId=${orderInfo.bookId}` : '';
         const paymentType = orderInfo?.orderType === 'hard' ? 'success_hard' : 'success';
-        router.replace(`/editor?payment=${paymentType}${tplName}`);
+        router.replace(`/editor?payment=${paymentType}${tplName}${bId}`);
       }, 5000);
       return () => clearTimeout(timer);
     }
@@ -115,7 +116,8 @@ function PaymentStatusContent() {
                   <button
                     onClick={() => {
                       const tplName = orderInfo?.templateName ? `&templateName=${encodeURIComponent(orderInfo.templateName)}` : '';
-                      router.replace(`/editor?payment=success_hard${tplName}`);
+                      const bId = orderInfo?.bookId ? `&bookId=${orderInfo.bookId}` : '';
+                      router.replace(`/editor?payment=success_hard${tplName}${bId}`);
                     }}
                     className="w-full py-4 bg-[#9f2e2b] text-white font-black rounded-2xl hover:bg-[#c8413d] transition-all shadow-[0_10px_40px_rgba(159,46,43,0.3)] uppercase tracking-widest text-sm"
                   >
@@ -133,7 +135,8 @@ function PaymentStatusContent() {
                   <button
                     onClick={() => {
                       const tplName = orderInfo?.templateName ? `&templateName=${encodeURIComponent(orderInfo.templateName)}` : '';
-                      router.replace(`/editor?payment=success${tplName}`);
+                      const bId = orderInfo?.bookId ? `&bookId=${orderInfo.bookId}` : '';
+                      router.replace(`/editor?payment=success${tplName}${bId}`);
                     }}
                     className="w-full py-4 bg-[#9f2e2b] text-white font-black rounded-2xl hover:bg-[#c8413d] transition-all shadow-[0_10px_40px_rgba(159,46,43,0.3)] uppercase tracking-widest text-sm"
                   >

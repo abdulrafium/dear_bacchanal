@@ -19,13 +19,12 @@ export async function DELETE(req: Request) {
     const db = await getDatabase();
     const userBooksCollection = db.collection("user_books");
 
-    const result = await userBooksCollection.deleteOne({
-      _id: new ObjectId(id),
-      $or: [
-        { userId: user.id },
-        { email: user.email }
-      ]
-    });
+    const query: any = { _id: new ObjectId(id) };
+    const conditions: any[] = [{ userId: user.id }];
+    if (user.email) conditions.push({ email: user.email });
+    query.$or = conditions;
+
+    const result = await userBooksCollection.deleteOne(query);
 
     if (result.deletedCount === 0) {
       return NextResponse.json({ error: "Book not found or unauthorized" }, { status: 404 });

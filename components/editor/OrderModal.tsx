@@ -72,7 +72,7 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
     setShippingRate(null);
   }, [shippingInfo.country, selectedZone]);
 
-  const extraSpreads = Math.max(0, spreads.length - 16);
+  const extraSpreads = Math.max(0, spreads.length - 17);
   const stickersCount = spreads.reduce((acc, s) => {
     const leftS = s.leftPage?.elements?.filter(e => e.type === 'sticker').length || 0;
     const rightS = s.rightPage?.elements?.filter(e => e.type === 'sticker').length || 0;

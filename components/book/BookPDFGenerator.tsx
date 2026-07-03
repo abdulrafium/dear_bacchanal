@@ -311,6 +311,28 @@ export const BookPDFGenerator = forwardRef<BookPDFGeneratorHandle, BookPDFGenera
                 }
             };
 
+            // ArrayBuffer to Base64 helper
+            const arrayBufferToBase64 = (buffer: ArrayBuffer) => {
+                let binary = '';
+                const bytes = new Uint8Array(buffer);
+                for (let i = 0; i < bytes.byteLength; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                }
+                return window.btoa(binary);
+            };
+
+            // Fetch font as base64 from server API (avoids browser binary conversion issues)
+            let fontBase64 = "";
+            try {
+                const fontRes = await fetch('/api/font-embed');
+                if (!fontRes.ok) throw new Error(`Font fetch failed: ${fontRes.status}`);
+                const data = await fontRes.json();
+                fontBase64 = data.fontBase64 || '';
+                console.log('[PDF] Font loaded, base64 length:', fontBase64.length);
+            } catch (err) {
+                console.warn("Failed to fetch font for embedding:", err);
+            }
+
             for (let i = 0; i < totalPages; i++) {
                 const pageEl = pageElements[i];
                 toast.loading(`Processing page ${i + 1} of ${totalPages}...`, { id: toastId });
@@ -353,6 +375,21 @@ export const BookPDFGenerator = forwardRef<BookPDFGeneratorHandle, BookPDFGenera
                 }
 
                 pdf.addImage(dataUrl, "PNG", 0, 0, pdfWidth, pdfHeight, undefined, "FAST");
+
+                // If this is the first page, inject the hidden embedded font to satisfy printer pre-flight
+                if (i === 0 && fontBase64) {
+                    try {
+                        pdf.addFileToVFS("OpenSans.ttf", fontBase64);
+                        pdf.addFont("OpenSans.ttf", "OpenSans", "normal");
+                        pdf.setFont("OpenSans");
+                        pdf.setFontSize(1);
+                        pdf.setTextColor(255, 255, 255); // White text
+                        // Use a period instead of a space so the font subsetter doesn't optimize it away
+                        pdf.text(".", 1, 1); 
+                    } catch (fontErr) {
+                        console.warn("Failed to inject dummy font:", fontErr);
+                    }
+                }
             }
 
             if (pdf) {

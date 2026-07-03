@@ -18,20 +18,20 @@ export async function GET(req: NextRequest) {
 
     const userIdFromAuth = user?.id || user?.email || "anonymous-dev-user";
     const targetUserId = req.nextUrl.searchParams.get("userId");
-    
+
     // Check if the requester is an admin
     const isRequesterAdmin = !!user?.isAdmin || process.env.NODE_ENV === "development";
-    
+
     // Determine which userId's data to load
     const userId = (isRequesterAdmin && targetUserId) ? targetUserId : userIdFromAuth;
-    
+
     const db = await getDatabase();
 
     if (isAdmin) {
       if (isNew) {
         const { createBlankTemplate } = await import('@/lib/book-templates');
         const blank = createBlankTemplate();
-        return NextResponse.json({ 
+        return NextResponse.json({
           template: {
             templateName: "New Template",
             description: "Custom template created via editor",
@@ -43,23 +43,23 @@ export async function GET(req: NextRequest) {
 
       const templatesCollection = db.collection("global_templates");
       let template = null;
-      
+
       if (templateName) {
         template = await templatesCollection.findOne({ templateName });
       }
-      
+
       if (!template) {
         // Fallback to Bacchanal if no specific template requested or found
-        template = await templatesCollection.findOne({ 
-          templateName: { $in: ["Bacchanal 2026", "Bacchanal", "Dear Bacchanal"] } 
+        template = await templatesCollection.findOne({
+          templateName: { $in: ["Bacchanal 2026", "Bacchanal", "Dear Bacchanal"] }
         });
       }
-      
+
       return NextResponse.json({ template }, { status: 200 });
     } else {
       const userBooksCollection = db.collection("user_books");
       const templatesCollection = db.collection("global_templates");
-      
+
       if (isNew) {
         const { createBlankTemplate } = await import('@/lib/book-templates');
         const blank = createBlankTemplate();
@@ -73,20 +73,45 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ book }, { status: 200 });
       }
 
-      let query: any = { userId };
-      if (templateName) {
+      const bookId = req.nextUrl.searchParams.get("bookId");
+      const fresh = req.nextUrl.searchParams.get("fresh") === "true";
+
+      let query: any = { 
+        $or: [
+          { userId },
+          ...(user?.email ? [{ email: user.email }] : [])
+        ]
+      };
+
+      if (bookId) {
+        try {
+          const { ObjectId } = require('mongodb');
+          query = { ...query, _id: new ObjectId(bookId) };
+        } catch (e) {
+          query.activeTemplateName = templateName;
+        }
+      } else if (templateName && !fresh) {
         query.activeTemplateName = templateName;
+      } else if (fresh) {
+        query = null;
       }
-      
-      let book = await userBooksCollection.findOne(query);
-      
+
+      let book = query ? await userBooksCollection.findOne(query) : null;
+
       // MASTER SMART-SYNC LOGIC: Deeply merge Admin design updates while protecting User personal content
       const templateToSync = book ? book.activeTemplateName : templateName;
-      const dbTemplate = await templatesCollection.findOne({ 
-          templateName: templateToSync || { $in: ["Bacchanal 2026", "Bacchanal", "Dear Bacchanal"] }
+      const dbTemplate = await templatesCollection.findOne({
+        templateName: templateToSync || { $in: ["Bacchanal 2026", "Bacchanal", "Dear Bacchanal"] }
       });
 
       if (dbTemplate && dbTemplate.spreads) {
+        // Ensure all checkboxes in the global template are unchecked by default
+        dbTemplate.spreads = dbTemplate.spreads.map((s: any) => ({
+          ...s,
+          leftPage: { ...s.leftPage, elements: s.leftPage?.elements?.map((e: any) => e.type === 'checkbox' ? { ...e, isChecked: false } : e) },
+          rightPage: { ...s.rightPage, elements: s.rightPage?.elements?.map((e: any) => e.type === 'checkbox' ? { ...e, isChecked: false } : e) }
+        }));
+
         if (book) {
           // If the book matches the template series, perform the smart merge
           const currentBook = book;
@@ -94,7 +119,7 @@ export async function GET(req: NextRequest) {
             const mergedSpreads = currentBook.spreads.map((userSpread: any) => {
               // Find matching admin spread by ID. If not found, it's a custom user spread.
               const adminSpread = dbTemplate.spreads.find((as: any) => as.id === userSpread.id);
-              
+
               if (!adminSpread) {
                 return userSpread;
               }
@@ -103,17 +128,14 @@ export async function GET(req: NextRequest) {
                 if (!userPage) return adminPage;
                 const adminElements = adminPage.elements || [];
                 const userElements = userPage.elements || [];
-                
+
                 const mergedElements = adminElements.map((ae: any) => {
                   const ue = userElements.find((e: any) => e.id === ae.id);
-                  // Preserve user content in admin placeholders
-                  if (ue && (ae.type === "image" || ae.type === "photo-card") && ue.src) {
-                     return { ...ae, src: ue.src };
-                  }
-                  if (ue && ae.type === "text" && ue.text && ue.text !== ae.text) {
-                     return { ...ae, text: ue.text };
-                  }
-                  return ae;
+                  if (!ue) return ae;
+                  
+                  // Preserve the user's exact element (x, y, width, height, text, image, rotation)
+                  // Spread admin element first just in case a new schema property was added globally
+                  return { ...ae, ...ue };
                 });
 
                 // Add user's custom added elements (extra stickers, text, etc. not in template)
@@ -124,8 +146,9 @@ export async function GET(req: NextRequest) {
 
                 return {
                   ...adminPage,
+                  ...userPage, // Ensure user's page-level properties are kept
                   elements: mergedElements,
-                  background: adminPage.background || userPage.background
+                  background: userPage.background || adminPage.background // User background wins
                 };
               };
 
@@ -140,9 +163,11 @@ export async function GET(req: NextRequest) {
             book.templateDescription = dbTemplate.description;
           }
         } else {
-          // New user: load template directly
+          // New user or fresh template: load template directly and generate a new ID
+          // to ensure it saves as a new book rather than overwriting an existing one
+          const { ObjectId } = require('mongodb');
           book = {
-            _id: "preview-id" as any,
+            _id: new ObjectId().toString() as any,
             userId,
             spreads: dbTemplate.spreads,
             activeTemplateName: dbTemplate.templateName,
@@ -163,7 +188,7 @@ export async function GET(req: NextRequest) {
           templateDescription: defaultTemplate?.description
         } as any;
       }
-      
+
       return NextResponse.json({ book }, { status: 200 });
     }
   } catch (error) {
