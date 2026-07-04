@@ -52,16 +52,8 @@ export async function POST(req: NextRequest) {
       pdfUploadedAt: new Date()
     };
 
-    // ─── 2. Save URLs to user record ───────────────────────────────────────────
-    try {
-      const userQuery = ObjectId.isValid(userId) && userId.length === 24
-        ? { _id: new ObjectId(userId) }
-        : { email: user.email };
-
-      await db.collection("users").updateOne(userQuery, { $set: updateFields });
-    } catch (userErr) {
-      console.error("[upload-pdf] Failed to save to user record:", userErr);
-    }
+    // We intentionally DO NOT save PDF URLs to the `users` collection anymore,
+    // because that caused the system to mistakenly serve old PDFs for new orders.
 
     // ─── 3. Save URLs to user_book record ──────────────────────────────────────
     try {

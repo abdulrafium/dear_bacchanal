@@ -954,12 +954,15 @@ export const useEditorStore = create<EditorState>((set, get) => ({
               console.log("[editor] PDFs uploaded for SiteFlow!");
             } else {
               console.warn("[editor] PDF upload for SiteFlow failed:", data.error);
+              toast.error("Failed to save PDF securely to the server.");
             }
           } else {
             console.warn("[editor] Failed to upload files to UploadThing");
+            toast.error("Server upload failed. Check your UploadThing environment variables.");
           }
-        } catch (uploadSetupErr) {
+        } catch (uploadSetupErr: any) {
           console.warn("[editor] Could not start PDF upload:", uploadSetupErr);
+          toast.error("Upload process crashed. Please check your internet connection.");
         }
       }
 

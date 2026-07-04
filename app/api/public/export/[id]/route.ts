@@ -89,29 +89,7 @@ export async function GET(
     }
 
     if (!pdfUrl && book.userId) {
-      const usersCollection = db.collection("users");
-      let user: any = null;
-
-      // Try ObjectId first
-      if (ObjectId.isValid(book.userId) && book.userId.length === 24) {
-        user = await usersCollection.findOne({ _id: new ObjectId(book.userId) });
-      }
-
-      // Fallback: match by email or userId string
-      if (!user) {
-        user = await usersCollection.findOne({
-          $or: [
-            { email: book.email },
-            { userId: book.userId },
-          ].filter(Boolean),
-        });
-      }
-
-      if (user) {
-        if (type === "cover" && user.savedCoverPdfUrl) pdfUrl = user.savedCoverPdfUrl;
-        else if (type === "text" && user.savedTextPdfUrl) pdfUrl = user.savedTextPdfUrl;
-        else if (user.savedPdfUrl) pdfUrl = user.savedPdfUrl;
-      }
+      console.warn(`[export] Book ${id} has no PDF URL directly attached. Waiting for customer to complete PDF upload.`);
     }
 
     // ─── 3. Also check the orders collection for a stored PDF URL ─────────────

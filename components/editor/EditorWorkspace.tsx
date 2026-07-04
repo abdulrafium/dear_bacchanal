@@ -24,6 +24,7 @@ export default function EditorWorkspace() {
   const loadTemplate = useEditorStore((s) => s.loadTemplate);
   const setCurrentSpread = useEditorStore((s) => s.setCurrentSpread);
   const isAdmin = useEditorStore((s) => s.isAdmin);
+  const isGeneratingPdf = useEditorStore((s) => s.isGeneratingPdf);
   const { refreshUser } = useAuth();
 
   const searchParams = useSearchParams();
@@ -44,6 +45,20 @@ export default function EditorWorkspace() {
       useEditorStore.getState().setIsAdmin(true);
     }
   }, []);
+
+  // Prevent closing the browser while PDF is generating and uploading
+  useEffect(() => {
+    if (!isGeneratingPdf) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "Your PDF is still generating and uploading in the background. If you close now, your book will not be sent to the printer!";
+      return e.returnValue;
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isGeneratingPdf]);
 
   const handleSidebarResize = (e: MouseEvent) => {
     if (isResizingSidebar) {
@@ -251,7 +266,9 @@ export default function EditorWorkspace() {
         const { generatePdfBook } = useEditorStore.getState();
         const { toast } = await import("sonner");
 
-        if (!isPaymentSuccessHard) {
+        if (isPaymentSuccessHard) {
+          toast.success("Payment successful! Generating your high-quality PDFs for printing...", { duration: 8000 });
+        } else {
           toast.info("Payment verified! Starting your automatic book download...", { duration: 5000 });
         }
 
