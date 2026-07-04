@@ -6,7 +6,7 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
 // Import all pages
-import FirstPage from "@/components/book/FirstPage";
+
 import SecondPage from "@/components/book/SecondPage";
 import ThirdPage from "@/components/book/ThirdPage";
 import ForthPage from "@/components/book/ForthPage";
@@ -115,7 +115,7 @@ export default function SharedBookPage({ params }: SharedBookPageProps) {
     <SecondPage key="page-14" />,
     <EigthteenPage key="page-15" />,
     <ThirdPage key="page-16" />,
-    <FirstPage key="page-17" />,
+
   ];
 
   // Display pages with download button on last page
@@ -136,7 +136,7 @@ export default function SharedBookPage({ params }: SharedBookPageProps) {
     <SecondPage key="page-14" />,
     <EigthteenPage key="page-15" />,
     <ThirdPage key="page-16" />,
-    <FirstPage key="page-17" pages={pagesForPDF} />,
+
   ];
 
   const boxData: Record<string, any> = {};
