@@ -178,6 +178,7 @@ export default function AdminSettingsPage() {
             description="Shipping & availability"
             color="text-blue-400"
           />
+          {/* 
           <NavItem 
             active={activeTab === "print"} 
             onClick={() => setActiveTab("print")}
@@ -186,6 +187,7 @@ export default function AdminSettingsPage() {
             description="PurePrint API config"
             color="text-purple-400"
           />
+          */}
           <NavItem 
             active={activeTab === "general"} 
             onClick={() => setActiveTab("general")}
@@ -365,7 +367,7 @@ export default function AdminSettingsPage() {
             </div>
           )}
 
-          {activeTab === "print" && (
+          {/* activeTab === "print" && (
             <div className="space-y-6 animate-in fade-in duration-500">
               <SectionHeader title="PurePrint API" description="Configure your printing partner integration." />
               <div className="space-y-4">
@@ -415,7 +417,7 @@ export default function AdminSettingsPage() {
                 </div>
               </div>
             </div>
-          )}
+          ) */}
 
           {activeTab === "general" && (
             <div className="space-y-6 animate-in fade-in duration-500">
@@ -466,7 +468,7 @@ export default function AdminSettingsPage() {
                 <div className="flex items-center justify-between p-4 rounded-2xl bg-black/30 border border-white/5">
                   <div>
                     <p className="text-white font-semibold text-sm">Clear Revenue Stats</p>
-                    <p className="text-white/30 text-xs mt-0.5">Zeros out all order amounts. Resets Revenue, EST Profit &amp; Avg Ticket on the dashboard.</p>
+                    <p className="text-white/30 text-xs mt-0.5">Zeros out all order amounts. Resets Revenue &amp; EST Profit on the dashboard.</p>
                   </div>
                   <button
                     onClick={() => setRevenueModal(true)}

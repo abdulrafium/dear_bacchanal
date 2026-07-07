@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";
 import { getServerAuth } from "@/lib/server-auth";
  
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 60; // Cache for 60 seconds to scale for high traffic
 
 export async function GET(req: NextRequest) {
   const user = await getServerAuth();
@@ -37,7 +36,6 @@ export async function GET(req: NextRequest) {
     
     // Profit calculation: Revenue * (Markup / (100 + Markup))
     const totalProfit = totalOrders > 0 ? (totalRevenue * (markup / (100 + markup))) : 0;
-    const averageOrderValue = totalOrders > 0 ? (totalRevenue / totalOrders) : 0;
     
     const recentPayments = await ordersCollection
       .find({})
@@ -81,7 +79,6 @@ export async function GET(req: NextRequest) {
       totalRevenue,
       totalProfit,
       totalOrders,
-      averageOrderValue,
       markup,
       salesChart: salesOverTime.map(s => ({
         date: s._id,

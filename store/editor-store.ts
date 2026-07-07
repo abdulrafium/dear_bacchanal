@@ -149,7 +149,7 @@ interface EditorState {
   resetEditor: () => void;
   save: (isAdmin?: boolean) => Promise<boolean>;
   isGeneratingPdf: boolean;
-  pdfGenerationProgress: { current: number; total: number; status: string } | null;
+  pdfGenerationProgress: { current: number; total: number; status: string; isSoftCopy?: boolean } | null;
   generatePdfBook: (isHardCopy?: boolean, keepOverlayOpen?: boolean, pdfType?: 'cover' | 'inner' | 'both') => Promise<void>;
 }
 
@@ -552,36 +552,53 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const TEXT_PAGE_WIDTH = 260 * 2.83465; // 737.009
       const TEXT_PAGE_HEIGHT = 260 * 2.83465; // 737.009
 
-      const coverPdf = new jsPDF({
-        orientation: "landscape",
-        unit: "pt",
-        format: [COVER_WIDTH, COVER_HEIGHT],
-        compress: true
-      });
-      
-      // Determine the cover's background color to paint the bleed and spine
+      let coverPdf: InstanceType<typeof jsPDF> | null = null;
+      let textPdf: InstanceType<typeof jsPDF> | null = null;
+      let softPdf: InstanceType<typeof jsPDF> | null = null;
+
+      if (isHardCopy) {
+        coverPdf = new jsPDF({
+          orientation: "landscape",
+          unit: "pt",
+          format: [COVER_WIDTH, COVER_HEIGHT],
+          compress: true
+        });
+
+        textPdf = new jsPDF({
+          orientation: "portrait",
+          unit: "pt",
+          format: [TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT],
+          compress: true
+        });
+      } else {
+        softPdf = new jsPDF({
+          orientation: "landscape",
+          unit: "pt",
+          format: [1000, 500],
+          compress: true
+        });
+      }
+
+      // ── Embed a real TTF font so printer pre-flight checks pass ──
+      // Determine the cover's background color to paint the bleed and spine (Hard Copy only)
       let coverBg = '#ffffff';
       if (spreads.length > 0 && spreads[0].rightPage?.background) {
         coverBg = spreads[0].rightPage.background;
       }
-      const hexToRgb = (hex: string) => {
-        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-        return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : { r: 255, g: 255, b: 255 };
-      };
-      const bgRgb = hexToRgb(coverBg.startsWith('#') ? coverBg : '#ffffff');
       
-      coverPdf.setFillColor(bgRgb.r, bgRgb.g, bgRgb.b);
-      coverPdf.rect(0, 0, COVER_WIDTH, COVER_HEIGHT, 'F');
+      if (isHardCopy && coverPdf && textPdf) {
+        const hexToRgb = (hex: string) => {
+          const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+          return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : { r: 255, g: 255, b: 255 };
+        };
+        const bgRgb = hexToRgb(coverBg.startsWith('#') ? coverBg : '#ffffff');
+        
+        coverPdf.setFillColor(bgRgb.r, bgRgb.g, bgRgb.b);
+        coverPdf.rect(0, 0, COVER_WIDTH, COVER_HEIGHT, 'F');
+      }
 
-      const textPdf = new jsPDF({
-        orientation: "portrait",
-        unit: "pt",
-        format: [TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT],
-        compress: true
-      });
-
-      // ── Embed a real TTF font so printer pre-flight checks pass ──
-      const embedFontIntoPdf = async (doc: InstanceType<typeof jsPDF>) => {
+      const embedFontIntoPdf = async (doc: InstanceType<typeof jsPDF> | null) => {
+        if (!doc) return;
         try {
           // Use API route — server reads the file and returns clean base64 (no browser binary conversion)
           const fontRes = await fetch('/api/font-embed');
@@ -600,14 +617,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         }
       };
 
-      await embedFontIntoPdf(coverPdf);
-      await embedFontIntoPdf(textPdf);
+      if (isHardCopy) {
+        await embedFontIntoPdf(coverPdf);
+        await embedFontIntoPdf(textPdf);
+      } else {
+        await embedFontIntoPdf(softPdf);
+      }
 
       // Generate the automated Title Page on PDF Page 1 (Right-hand side of the spread)
-      if (pdfType === 'inner' || pdfType === 'both') {
+      // Generate the automated Title Page on PDF Page 1 (Right-hand side of the spread) - HARD COPY ONLY
+      if (isHardCopy && textPdf && (pdfType === 'inner' || pdfType === 'both')) {
         try {
           const titleCanvas = document.createElement('canvas');
-          const PIXEL_RATIO = 4; // High resolution for print
+          const PIXEL_RATIO = 5; // High resolution for print
           titleCanvas.width = TEXT_PAGE_WIDTH * PIXEL_RATIO; 
           titleCanvas.height = TEXT_PAGE_HEIGHT * PIXEL_RATIO;
           const ctx = titleCanvas.getContext('2d');
@@ -629,7 +651,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ctx.font = 'italic 35px "Caveat", cursive';
             ctx.fillText('Trinidad Carnival 2026', TEXT_PAGE_WIDTH / 2, TEXT_PAGE_HEIGHT / 2 + 60);
             
-            const titleDataUrl = titleCanvas.toDataURL('image/jpeg', 0.85);
+            const titleDataUrl = titleCanvas.toDataURL('image/jpeg', 0.92);
             textPdf.addImage(titleDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
           }
         } catch (e) {
@@ -639,13 +661,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
       toast.info(`Generating PDFs — ${spreads.length} spreads to process...`, { duration: 3000 });
 
-      set({ pdfGenerationProgress: { current: 0, total: spreads.length, status: "Preparing pages..." } });
+      set({ pdfGenerationProgress: { current: 0, total: spreads.length, status: "Preparing pages...", isSoftCopy: !isHardCopy } });
 
       for (let i = 0; i < spreads.length; i++) {
         if (pdfType === 'inner' && i === 0) continue;
         if (pdfType === 'cover' && i > 0) break;
 
-        set({ pdfGenerationProgress: { current: i + 1, total: spreads.length, status: `Rendering page ${i + 1} of ${spreads.length}...` } });
+        set({ pdfGenerationProgress: { current: i + 1, total: spreads.length, status: `Rendering page ${i + 1} of ${spreads.length}...`, isSoftCopy: !isHardCopy } });
         toast.info(`Rendering spread ${i + 1} of ${spreads.length}...`, { duration: 2000, id: 'pdf-progress' });
 
         setCurrentSpread(i, true);
@@ -761,63 +783,88 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           await new Promise(r => setTimeout(r, 300)); // Let the draw flush
 
           // 7. Capture high-quality snapshot for the ENTIRE continuous spread (Left + Right, gap is removed in UI)
-          set({ pdfGenerationProgress: { current: i + 1, total: spreads.length, status: `Finalizing page ${i + 1}...` } });
+          set({ pdfGenerationProgress: { current: i + 1, total: spreads.length, status: `Finalizing page ${i + 1}...`, isSoftCopy: !isHardCopy } });
 
           // Clean up the white background
           exportBg.destroy();
           currentStageRef.batchDraw();
 
-          if (i === 0) {
-            // Spread 0 is the Cover.
+          if (!isHardCopy && softPdf) {
+            // SOFT COPY - Unified Document, exact canvas size without bleed
+            let cropX = 0, cropY = 0, cropW = PAGE_WIDTH * 2, cropH = PAGE_HEIGHT;
+            
+            if (i === 0) {
+              // Cover: crop out 20mm bleed (35.08px x, 33.33px y)
+              cropX = 35.08;
+              cropY = 33.33;
+              cropW = (PAGE_WIDTH * 2) - 35.08 - 35.08;
+              cropH = PAGE_HEIGHT - 33.33 - 33.33;
+            } else {
+              // Inner pages: crop out 3mm bleed (5.77px)
+              cropX = 5.77;
+              cropY = 5.77;
+              cropW = (PAGE_WIDTH * 2) - 5.77 - 5.77;
+              cropH = PAGE_HEIGHT - 5.77 - 5.77;
+            }
+
             const spreadDataUrl = currentStageRef.toDataURL({
-              x: 0, y: 0, width: PAGE_WIDTH * 2, height: PAGE_HEIGHT,
-              pixelRatio: 4, mimeType: "image/jpeg", quality: 0.85
+              x: cropX, y: cropY, width: cropW, height: cropH,
+              pixelRatio: 5, mimeType: "image/jpeg", quality: 0.92
             });
-            // To ensure the safe zones exactly match the UI and nothing is cropped off the edges:
-            // We scale the 1000x500 canvas to exactly fit the 1615.75 x 850.39 PDF page.
-            // This introduces a tiny ~5% vertical stretch, but prevents any unexpected edge cropping.
-            coverPdf.addImage(spreadDataUrl, 'JPEG', 0, 0, COVER_WIDTH, COVER_HEIGHT);
-          } else {
-            // INNER PAGES (Spreads 1..N) - Output as single 260x260mm pages
-            // To ensure a perfectly continuous design across the spread after the printer cuts the 3mm bleed,
-            // we must "borrow" 3mm (5.77px) of the opposite page to serve as the inside bleed!
-            const bleedPx = 5.77;
+            if (i > 0) {
+              softPdf.addPage([1000, 500], "landscape");
+            }
+            softPdf.addImage(spreadDataUrl, 'JPEG', 0, 0, 1000, 500);
+          } else if (isHardCopy && coverPdf && textPdf) {
+            // HARD COPY - Strict layout for Pureprint factory requirements
+            if (i === 0) {
+              // Spread 0 is the Cover.
+              const spreadDataUrl = currentStageRef.toDataURL({
+                x: 0, y: 0, width: PAGE_WIDTH * 2, height: PAGE_HEIGHT,
+                pixelRatio: 5, mimeType: "image/jpeg", quality: 0.92
+              });
+              coverPdf.addImage(spreadDataUrl, 'JPEG', 0, 0, COVER_WIDTH, COVER_HEIGHT);
+            } else {
+              // INNER PAGES (Spreads 1..N) - Output as single 260x260mm pages with 3mm bleed borrowing
+              const bleedPx = 5.77;
 
-            // Left Page: captures from x=0 to x=500+5.77
-            const leftDataUrl = currentStageRef.toDataURL({
-              x: 0,
-              y: 0,
-              width: PAGE_WIDTH + bleedPx,
-              height: PAGE_HEIGHT,
-              pixelRatio: 4,
-              mimeType: "image/jpeg",
-              quality: 0.85
-            });
-            textPdf.addPage([TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT], "portrait");
-            textPdf.addImage(leftDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
+              // Left Page
+              const leftDataUrl = currentStageRef.toDataURL({
+                x: 0,
+                y: 0,
+                width: PAGE_WIDTH + bleedPx,
+                height: PAGE_HEIGHT,
+                pixelRatio: 5,
+                mimeType: "image/jpeg",
+                quality: 0.92
+              });
+              textPdf.addPage([TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT], "portrait");
+              textPdf.addImage(leftDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
 
-            // Right Page: captures from x=500-5.77 to x=1000
-            const rightDataUrl = currentStageRef.toDataURL({
-              x: PAGE_WIDTH - bleedPx,
-              y: 0,
-              width: PAGE_WIDTH + bleedPx,
-              height: PAGE_HEIGHT,
-              pixelRatio: 4,
-              mimeType: "image/jpeg",
-              quality: 0.85
-            });
-            textPdf.addPage([TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT], "portrait");
-            textPdf.addImage(rightDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
+              // Right Page
+              const rightDataUrl = currentStageRef.toDataURL({
+                x: PAGE_WIDTH - bleedPx,
+                y: 0,
+                width: PAGE_WIDTH + bleedPx,
+                height: PAGE_HEIGHT,
+                pixelRatio: 5,
+                mimeType: "image/jpeg",
+                quality: 0.92
+              });
+              textPdf.addPage([TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT], "portrait");
+              textPdf.addImage(rightDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
+            }
           }
         }
       }
 
       // Add a final beautiful "The End" spread to ensure the back page of the book is clean
-      if (pdfType === 'inner' || pdfType === 'both') {
+      // Add a final beautiful "The End" spread to ensure the back page of the book is clean (HARD COPY ONLY)
+      if (isHardCopy && textPdf && (pdfType === 'inner' || pdfType === 'both')) {
         try {
           textPdf.addPage([TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT], "portrait");
           const endCanvas = document.createElement('canvas');
-          const PIXEL_RATIO = 4;
+          const PIXEL_RATIO = 5;
           endCanvas.width = TEXT_PAGE_WIDTH * PIXEL_RATIO; 
           endCanvas.height = TEXT_PAGE_HEIGHT * PIXEL_RATIO;
           const ctx = endCanvas.getContext('2d');
@@ -833,7 +880,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ctx.textBaseline = 'middle';
             ctx.fillText('Created with Dear Bacchanal', TEXT_PAGE_WIDTH / 2, TEXT_PAGE_HEIGHT - 100);
             
-            const endDataUrl = endCanvas.toDataURL('image/jpeg', 0.85);
+            const endDataUrl = endCanvas.toDataURL('image/jpeg', 0.92);
             textPdf.addImage(endDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
           }
         } catch(e) {}
@@ -882,45 +929,35 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         }
       };
 
-      const rawCoverBlob = coverPdf.output('blob');
-      const rawTextBlob = textPdf.output('blob');
+      let coverBlob: Blob | null = null;
+      let textBlob: Blob | null = null;
+      let softBlob: Blob | null = null;
 
-      const coverBlob = await embedFontWithPdfLib(rawCoverBlob);
-      const textBlob = await embedFontWithPdfLib(rawTextBlob);
-
-      if (!isHardCopy) {
-        if (pdfType === 'cover' || pdfType === 'both') {
-          // Download Cover PDF
-          const coverBlobUrl = URL.createObjectURL(coverBlob);
-          const coverLink = document.createElement('a');
-          coverLink.href = coverBlobUrl;
-          coverLink.download = `${baseFileName}_Cover.pdf`;
-          document.body.appendChild(coverLink);
-          coverLink.click();
-          document.body.removeChild(coverLink);
-          setTimeout(() => URL.revokeObjectURL(coverBlobUrl), 5000);
-        }
-
-        if (pdfType === 'inner' || pdfType === 'both') {
-          // Download Text PDF with a tiny delay so the browser doesn't block the second download
-          setTimeout(() => {
-            const textBlobUrl = URL.createObjectURL(textBlob);
-            const textLink = document.createElement('a');
-            textLink.href = textBlobUrl;
-            textLink.download = `${baseFileName}_Text.pdf`;
-            document.body.appendChild(textLink);
-            textLink.click();
-            document.body.removeChild(textLink);
-            setTimeout(() => URL.revokeObjectURL(textBlobUrl), 5000);
-          }, pdfType === 'both' ? 500 : 0);
-        }
+      if (isHardCopy && coverPdf && textPdf) {
+        const rawCoverBlob = coverPdf.output('blob');
+        const rawTextBlob = textPdf.output('blob');
+        coverBlob = await embedFontWithPdfLib(rawCoverBlob);
+        textBlob = await embedFontWithPdfLib(rawTextBlob);
+      } else if (!isHardCopy && softPdf) {
+        const rawSoftBlob = softPdf.output('blob');
+        softBlob = await embedFontWithPdfLib(rawSoftBlob);
         
-        toast.success("PDFs downloaded successfully!", { duration: 5000 });
+        // Trigger Single Unified Download for Soft Copy
+        const softBlobUrl = URL.createObjectURL(softBlob);
+        const softLink = document.createElement('a');
+        softLink.href = softBlobUrl;
+        softLink.download = `${baseFileName}_Digital_Book.pdf`;
+        document.body.appendChild(softLink);
+        softLink.click();
+        document.body.removeChild(softLink);
+        setTimeout(() => URL.revokeObjectURL(softBlobUrl), 5000);
+        
+        toast.success("PDF downloaded successfully!", { duration: 5000 });
       }
 
-      // ─── Background upload to UploadThing so SiteFlow can fetch it ──────────
+      // ─── Background upload to UploadThing so SiteFlow can fetch it (HARD COPY ONLY) ──────────
       // This runs silently after the download — any failure is non-blocking.
-      if (pdfType === 'both') {
+      if (isHardCopy && pdfType === 'both' && coverBlob && textBlob) {
         try {
           const { activeTemplateId: bookId, activeTemplateName: tmplName } = get();
           

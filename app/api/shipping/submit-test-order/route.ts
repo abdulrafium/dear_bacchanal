@@ -9,6 +9,11 @@ export async function POST(req: NextRequest) {
         if (!shippingInfo) {
             return NextResponse.json({ error: "Missing shipping info" }, { status: 400 });
         }
+        
+        const sku = process.env.HP_BOOK_SKU;
+        if (!sku) {
+            return NextResponse.json({ error: "Missing HP_BOOK_SKU in environment variables" }, { status: 500 });
+        }
 
         const client = new HPSiteFlowClient();
 
@@ -23,7 +28,7 @@ export async function POST(req: NextRequest) {
             items: [
                 {
                     sourceItemId: sourceItemId,
-                    sku: "saffatrinidad_hardback_10x10_staging",
+                    sku: sku,
                     quantity: 1,
                     components: [
                         {

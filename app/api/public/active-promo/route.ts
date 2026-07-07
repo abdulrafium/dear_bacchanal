@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 60; // Cache for 60 seconds to scale for high traffic
 
 export async function GET() {
   try {

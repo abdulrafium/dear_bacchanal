@@ -41,10 +41,11 @@ export class HPSiteFlowClient {
 
     constructor() {
         if (!HP_API_KEY || !HP_API_SECRET) {
-            console.error("HP_SITE_FLOW_API_KEY or HP_SITE_FLOW_API_SECRET is not defined");
+            console.error("CRITICAL: HP_SITE_FLOW_API_KEY or HP_SITE_FLOW_API_SECRET is not defined in .env");
+            throw new Error("Missing HP Site Flow API credentials in environment variables");
         }
-        this.apiKey = HP_API_KEY || "602992397545";
-        this.apiSecret = HP_API_SECRET || "df0a55737c3fc3d50d7c2c50cd2b4f913ff587847a477e13";
+        this.apiKey = HP_API_KEY;
+        this.apiSecret = HP_API_SECRET;
     }
 
     private generateSignature(method: string, path: string, timestamp: string) {
@@ -116,6 +117,15 @@ export class HPSiteFlowClient {
                 }]
             }
         };
+
+        if (process.env.NODE_ENV === "development") {
+            console.log("🛠️ DEVELOPMENT MODE: Bypassing actual Pureprint Site Flow API call.");
+            return {
+                _id: "mock_local_order_id_12345",
+                status: "success",
+                message: "Mock order created on localhost"
+            };
+        }
 
         try {
             const response = await fetch(`${HP_API_BASE_URL}/order`, {

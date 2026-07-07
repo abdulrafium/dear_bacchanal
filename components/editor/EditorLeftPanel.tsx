@@ -1,5 +1,6 @@
 import { useEditorStore } from "@/store/editor-store";
 import { getAvailableTemplates } from "@/lib/book-templates";
+import NextImage from "next/image";
 import { ChevronDown, Star, Grid3X3, Image, Paintbrush, Sticker, LayoutGrid, BookOpen, CheckCircle2, Plus, Loader2, Trash2, Upload, Sparkles, Filter, MoreHorizontal, History, Calendar } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 
@@ -279,10 +280,13 @@ function ImagesPanel() {
                 className="group relative aspect-square bg-gray-50 rounded-xl overflow-hidden cursor-pointer border border-gray-100 hover:border-[#2d2d2d] hover:shadow-lg transition-all"
                 onClick={() => handleImageClick(image.url)}
               >
-                <img
+                <NextImage
                   src={image.url}
                   alt="Uploaded"
-                  className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                  fill
+                  sizes="(max-width: 768px) 100vw, 300px"
+                  style={{ objectFit: "cover" }}
+                  className="group-hover:scale-110 transition-transform duration-500"
                 />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                   <Plus className="w-6 h-6 text-white" />
@@ -383,10 +387,7 @@ function TemplatesPanel() {
   useEffect(() => {
     const fetchTemplates = async () => {
       try {
-        const res = await fetch(`/api/admin/templates?t=${Date.now()}`, {
-           cache: 'no-store',
-           headers: { 'Pragma': 'no-cache' }
-        });
+        const res = await fetch(`/api/admin/templates`);
         if (res.ok) {
           const data = await res.json();
           const dbTemplates = data.templates || [];
@@ -523,10 +524,13 @@ function TemplatesPanel() {
               <div
                 className="h-36 relative overflow-hidden bg-[#9f2e2b]"
               >
-                <img
+                <NextImage
                   src={template.thumbnail}
                   alt={template.templateName}
-                  className="w-full h-full object-cover opacity-60"
+                  fill
+                  sizes="(max-width: 768px) 100vw, 300px"
+                  style={{ objectFit: "cover" }}
+                  className="opacity-60"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                 <div className="absolute bottom-3 left-3 right-3">
@@ -804,7 +808,7 @@ function StickersPanel() {
 
   const fetchStickers = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/stickers?t=" + Date.now());
+      const res = await fetch("/api/admin/stickers");
       if (res.ok) {
         const data = await res.json();
         setStickers(data.stickers || []);
@@ -911,7 +915,14 @@ function StickersPanel() {
                 }
               }}
             >
-              <img src={sticker.url} alt={sticker.name} className="w-full h-full object-contain filter drop-shadow-md group-hover:scale-110 transition-transform duration-300" />
+              <NextImage 
+                  src={sticker.url} 
+                  alt={sticker.name} 
+                  fill
+                  sizes="(max-width: 768px) 100vw, 300px"
+                  style={{ objectFit: "contain" }}
+                  className="filter drop-shadow-md group-hover:scale-110 transition-transform duration-300" 
+              />
               <div className="absolute top-1 right-1 flex flex-col gap-0.5 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                  <span className="bg-coral text-[6px] text-white font-black px-1 rounded-sm shadow-sm leading-none py-0.5">ADDON</span>
                  <span className="bg-black text-[6px] text-white font-black px-1 rounded-sm shadow-sm leading-none py-0.5">$5.00</span>

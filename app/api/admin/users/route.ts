@@ -1,5 +1,4 @@
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 300; // Cache for 5 minutes to scale for high traffic
 
 import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";

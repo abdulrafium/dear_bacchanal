@@ -113,8 +113,9 @@ const CustomizeRitual = () => {
     }
   };
 
-  const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { openModal } = useAuthModal();
+  const isAdmin = user?.isAdmin;
   const router = useRouter();
 
   useEffect(() => {
@@ -508,18 +509,22 @@ const CustomizeRitual = () => {
                 >
                   Global Store
                 </button>
-                <button
-                  onClick={() => setActiveTab("saved")}
-                  className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeTab === "saved" ? "bg-primary text-white shadow-lg" : "text-white/60 hover:text-white"}`}
-                >
-                  My Designs
-                </button>
-                <button
-                  onClick={() => setActiveTab("orders")}
-                  className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeTab === "orders" ? "bg-primary text-white shadow-lg" : "text-white/60 hover:text-white"}`}
-                >
-                  My Orders
-                </button>
+                {!isAdmin && (
+                  <>
+                    <button
+                      onClick={() => setActiveTab("saved")}
+                      className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeTab === "saved" ? "bg-primary text-white shadow-lg" : "text-white/60 hover:text-white"}`}
+                    >
+                      My Designs
+                    </button>
+                    <button
+                      onClick={() => setActiveTab("orders")}
+                      className={`px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${activeTab === "orders" ? "bg-primary text-white shadow-lg" : "text-white/60 hover:text-white"}`}
+                    >
+                      My Orders
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 

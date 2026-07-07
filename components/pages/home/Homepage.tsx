@@ -87,14 +87,14 @@ const Homepage = () => {
               drops
             </p>
 
-            <button onClick={handleAction} className="mt-4 bg-[#ffde59] text-[#bf0000] px-10 sm:px-16 lg:px-20 py-4 rounded-full shadow-xl hover:scale-105 transition-transform">
-              <span className="block text-lg lg:text-2xl font-bold">
+            <button onClick={handleAction} className="mt-4 bg-[#ffde59] text-[#bf0000] w-full max-w-[90%] sm:max-w-md lg:max-w-lg py-4 rounded-full shadow-xl hover:scale-105 transition-transform">
+              <span className="block text-2xl lg:text-4xl font-display font-normal tracking-wide">
                 START THE BACCHANAL
               </span>
-              <span className="block text-sm font-black uppercase">CLICK HERE TO ADD YOUR EMAIL</span>
+              <span className="block text-sm font-black uppercase mt-1">CLICK HERE TO ADD YOUR EMAIL</span>
             </button>
 
-            <p className="text-lg sm:text-xl  lg:text-2xl text-white font-black mt-6 lg:mt-10 uppercase">
+            <p className="text-xl sm:text-2xl lg:text-3xl text-white font-display font-normal tracking-wide mt-6 lg:mt-10 uppercase">
               NO SPAM. JUST CARNIVAL THINGS
             </p>
           </div>
@@ -115,17 +115,7 @@ const Homepage = () => {
             />
           </div>
         </div>
-        {/* Sponsor Banner */}
-        <div className="absolute bottom-0 w-full lg:max-w-2xl lg:left-40 flex justify-center">
-          <Image
-            src="/assets/full-banner.jpeg"
-            alt="Sponsored by Crix & Carnival - The Perfect Pair"
-            width={640}
-            height={93}
-            className="w-full lg:max-w-2xl h-auto rounded-lg shadow-2xl"
-            priority
-          />
-        </div>
+
       </section>
 
       {/* section 2 */}
@@ -150,10 +140,10 @@ const Homepage = () => {
               PHOTOS.
             </p>
           </div>
-          <p className="text-white text-2xl sm:text-3xl lg:text-6xl font-bold mt-16 leading-relaxed">
-            Not a template. Not a scrapbook. <br />
-            <span className="font-handwritten text-[#ffde59] text-4xl sm:text-5xl lg:text-8xl">A keepsake</span>
-          </p>
+          <div className="text-white text-xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mt-16 leading-relaxed flex flex-row flex-wrap items-center justify-center gap-x-3 gap-y-2">
+            <span>Not a template. Not a scrapbook.</span>
+            <span className="font-handwritten text-white text-4xl sm:text-5xl lg:text-6xl xl:text-7xl -mt-1 lg:-mt-2">A keepsake</span>
+          </div>
         </div>
       </section>
 
@@ -169,7 +159,7 @@ const Homepage = () => {
         <div className="relative z-10 flex h-full items-end justify-center px-6 pb-20">
           <button
             onClick={handleAction}
-            className="w-full sm:w-auto font-bold bg-[#bb310a] text-[#face07] rounded-full px-8 sm:px-12 lg:px-20 py-5 text-xl sm:text-3xl lg:text-5xl shadow-2xl hover:scale-105 transition-transform leading-none uppercase"
+            className="w-full sm:w-auto font-display font-normal tracking-wide bg-[#bb310a] text-[#face07] rounded-full px-8 sm:px-12 lg:px-20 py-5 text-xl sm:text-3xl lg:text-5xl shadow-2xl hover:scale-105 transition-transform leading-none uppercase"
           >
             CUSTOMIZE YOUR BACCHANAL NOW
           </button>
@@ -220,16 +210,19 @@ const Homepage = () => {
       </section>
 
       {/* section 5 */}
-      <section className="bg-[#c1bc38] min-h-screen w-full px-6 py-20 lg:py-0 overflow-hidden">
-        <div className="flex max-w-7xl mx-auto">
-          <div className="hidden lg:block w-1/3">
-            <Image src="/assets/section4.png" alt="inspiration" width={500} height={700} className="object-contain" />
-          </div>
-          <div className="w-full lg:w-2/3 lg:pt-32 lg:ps-12">
-            <h1 className="text-white text-center lg:text-left text-4xl sm:text-6xl lg:text-[100px] font-black leading-none uppercase tracking-tighter" style={{ WebkitTextStroke: "2px #077786" }}>
-              WHAT INSPIRED DEAR BACCHANAL?
+      <section className="bg-[#c1bc38] relative min-h-screen w-full py-20 lg:py-0 overflow-hidden">
+        {/* Steelpan sticker positioned to bleed off the left edge */}
+        <div className="hidden lg:block absolute -left-16 xl:-left-12 top-16 z-0">
+          <Image src="/assets/section4.png" alt="inspiration" width={500} height={700} className="object-contain pointer-events-none" />
+        </div>
+
+        <div className="flex max-w-7xl mx-auto px-6 relative z-10">
+          <div className="hidden lg:block w-[25%] flex-shrink-0" />
+          <div className="w-full lg:w-[75%] lg:pt-32">
+            <h1 className="text-white text-center lg:text-left text-3xl sm:text-5xl lg:text-6xl xl:text-[70px] font-display tracking-wide leading-[1.1] uppercase" style={{ WebkitTextStroke: "2px #077786" }}>
+              WHAT INSPIRED DEAR <br className="hidden lg:block" /> BACCHANAL?
             </h1>
-            
+
             <div className="mt-16 space-y-12">
               <div className="flex items-center gap-6">
                 <div className="w-12 sm:w-20 h-12 sm:h-20 rounded-full bg-[#fe5c2b] flex-shrink-0" />
@@ -246,9 +239,9 @@ const Homepage = () => {
             </div>
           </div>
         </div>
-        <div className="flex justify-center items-center px-4 mt-20">
-          <button onClick={handleAction} className="w-full max-w-4xl py-6 bg-[#077786] text-white rounded-3xl shadow-2xl hover:bg-[#066471] transition-transform hover:scale-[1.02]">
-            <span className="text-xl sm:text-3xl lg:text-5xl font-black uppercase leading-tight px-4 block">SOME MEMORIES DESERVE MORE THAN A SCROLL</span>
+        <div className="flex justify-center items-center px-4 mt-2 w-full max-w-5xl mx-auto">
+          <button onClick={handleAction} className="w-full py-5 lg:py-6 bg-[#077786] text-white rounded-[2rem] shadow-2xl hover:bg-[#066471] transition-transform hover:scale-[1.02]">
+            <span className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-display font-normal tracking-wide uppercase leading-tight px-4 block">SOME MEMORIES DESERVE MORE THAN A SCROLL</span>
           </button>
         </div>
       </section>
@@ -297,26 +290,39 @@ const Homepage = () => {
               </div>
             ))}
           </div>
-          <h1 className="text-white text-center text-2xl sm:text-4xl lg:text-6xl font-black mt-24 uppercase tracking-tighter shadow-sm">WHATEVER IS YOUR BACCHANAL - THE BOOK HOLDS IT</h1>
+          <h1 className="text-white text-center text-lg sm:text-2xl md:text-3xl lg:text-4xl xl:text-[44px] 2xl:text-5xl font-display font-normal tracking-wide mt-24 uppercase shadow-sm">WHATEVER IS YOUR BACCHANAL - THE BOOK HOLDS IT</h1>
         </div>
       </section>
 
       {/* section 8 */}
       <section className="relative min-h-screen w-full">
         <Image src="/assets/bacch.jpg" alt="footer hero" fill className="object-cover" />
-        <div className="relative z-20 min-h-screen flex flex-col justify-center items-center px-6 text-center">
-          <h1 className="text-5xl sm:text-8xl lg:text-[180px] font-black text-[#be2826] leading-none uppercase">LET'S CREATE</h1>
-          <button onClick={handleAction} className="my-10 bg-[#be2826] text-[#ecb52b] px-8 sm:px-16 py-6 sm:py-10 rounded-full shadow-2xl hover:scale-110 transition-transform">
-            <span className="text-2xl sm:text-4xl lg:text-6xl font-black uppercase">CUSTOMIZE YOUR BOOK NOW</span>
-          </button>
-          <h1 className="text-5xl sm:text-8xl lg:text-[180px] font-black text-[#be2826] leading-none uppercase">BACCHANAL</h1>
+        <div className="relative z-20 min-h-screen flex flex-col justify-center items-center px-6">
+          <div className="flex flex-col items-start w-full max-w-min">
+            <h1 className="text-5xl sm:text-8xl lg:text-[160px] xl:text-[180px] font-display text-[#be2826] leading-[0.9] uppercase whitespace-nowrap">LET'S CREATE</h1>
+            
+            <div className="flex flex-col lg:flex-row items-center justify-start gap-6 lg:gap-12 my-6 lg:my-0 w-full">
+              <h1 className="text-5xl sm:text-8xl lg:text-[160px] xl:text-[180px] font-display text-[#be2826] leading-[0.9] uppercase">SOME</h1>
+              <button onClick={handleAction} className="bg-[#be2826] text-[#ecb52b] px-10 sm:px-12 py-5 sm:py-8 rounded-[3rem] shadow-2xl hover:scale-105 transition-transform flex flex-col items-center justify-center whitespace-nowrap">
+                <span className="text-2xl sm:text-3xl lg:text-4xl font-black uppercase leading-tight">CUSTOMISE</span>
+                <span className="text-2xl sm:text-3xl lg:text-4xl font-black uppercase leading-tight">YOUR BOOK NOW</span>
+              </button>
+            </div>
+
+            <h1 className="text-5xl sm:text-8xl lg:text-[160px] xl:text-[180px] font-display text-[#be2826] leading-[0.9] uppercase">BACCHANAL</h1>
+          </div>
         </div>
       </section>
 
       {/* section 9 */}
-      <footer className="bg-[#be2826] py-12 text-center px-6">
-        <h1 className="text-[#ecb52b] text-xl sm:text-3xl lg:text-5xl font-black uppercase tracking-widest leading-none">PRE-ORDER DEAR BACCHANAL 2026</h1>
-      </footer>
+      <section className="bg-[#be2826] py-4 sm:py-6 text-center px-6">
+        <h1 className="text-[#ecb52b] text-xl sm:text-3xl lg:text-4xl font-display font-normal uppercase tracking-wider leading-none">PRE-ORDER DEAR BACCHANAL 2026</h1>
+      </section>
+
+      {/* section 10: Banner Image */}
+      <section className="w-full bg-[#111111]">
+        <Image src="/assets/banner.PNG" alt="Dear Bacchanal Banner" width={1920} height={600} className="w-full h-auto object-cover" />
+      </section>
     </>
   );
 };

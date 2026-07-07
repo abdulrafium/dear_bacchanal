@@ -263,16 +263,7 @@ export default function AdminDashboard() {
                             <span className="text-white text-xl font-black">{stats.purchasedUsers}</span>
                         </div>
                     </div>
-                    <div className="bg-white/5 p-4 rounded-2xl border border-white/5 group hover:bg-white/[0.08] transition-all">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <ShoppingCart className="w-4 h-4 text-orange-400" />
-                                <span className="text-white/60 text-xs font-black uppercase">Avg Ticket</span>
-                            </div>
-                            <span className="text-white text-xl font-black">${Math.round(financials.averageOrderValue)}</span>
-                        </div>
                     </div>
-                </div>
             </div>
           </div>
         </div>

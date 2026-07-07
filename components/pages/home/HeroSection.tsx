@@ -248,17 +248,7 @@ const HeroSection = () => {
             </Button>
           </div>
 
-          {/* Sponsor Banner */}
-          <div className="mt-16 flex justify-center">
-            <Image
-              src="/assets/full-banner.jpeg"
-              alt="Sponsored by Crix & Carnival - The Perfect Pair"
-              width={640}
-              height={93}
-              className="w-full max-w-2xl h-auto rounded-lg shadow-2xl"
-              priority
-            />
-          </div>
+
 
           {/* Scroll Indicator */}
           <div className="mt-16 animate-bounce-subtle">

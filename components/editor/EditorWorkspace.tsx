@@ -25,12 +25,12 @@ export default function EditorWorkspace() {
   const setCurrentSpread = useEditorStore((s) => s.setCurrentSpread);
   const isAdmin = useEditorStore((s) => s.isAdmin);
   const isGeneratingPdf = useEditorStore((s) => s.isGeneratingPdf);
-  const { refreshUser } = useAuth();
+  const { user, refreshUser } = useAuth();
 
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const templateName = searchParams.get("templateName");
-  const isAdminParam = searchParams.get("isAdmin") === "true" || pathname?.includes("/admin");
+  const isUserActuallyAdmin = user?.isAdmin || searchParams.get("isAdmin") === "true" || pathname?.includes("/admin");
 
   const [loading, setLoading] = useState(true);
   const lastLoadedRef = useRef<string | null>(null);
@@ -39,12 +39,12 @@ export default function EditorWorkspace() {
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [isResizingBottom, setIsResizingBottom] = useState(false);
 
-  // Sync isAdmin once from URL on mount
+  // Sync isAdmin securely from Auth/URL
   useEffect(() => {
-    if (isAdminParam && !isAdmin) {
+    if (isUserActuallyAdmin && !isAdmin) {
       useEditorStore.getState().setIsAdmin(true);
     }
-  }, []);
+  }, [isUserActuallyAdmin, isAdmin]);
 
   // Prevent closing the browser while PDF is generating and uploading
   useEffect(() => {
@@ -109,7 +109,7 @@ export default function EditorWorkspace() {
 
       try {
         const query = new URLSearchParams();
-        if (isAdminParam || isAdmin) query.set("isAdmin", "true");
+        if (isUserActuallyAdmin || isAdmin) query.set("isAdmin", "true");
         if (templateName) query.set("templateName", templateName);
         if (isNewParam) query.set("new", "true");
 
@@ -126,12 +126,7 @@ export default function EditorWorkspace() {
         const freshParam = searchParams.get("fresh");
         if (freshParam) query.set("fresh", freshParam);
 
-        const res = await fetch(`/api/editor/load?${query.toString()}&t=${Date.now()}`, {
-          cache: "no-store",
-          headers: {
-            "Pragma": "no-cache",
-          }
-        });
+        const res = await fetch(`/api/editor/load?${query.toString()}`);
 
         const spreadFromUrl = searchParams.get("spread");
 
@@ -139,7 +134,7 @@ export default function EditorWorkspace() {
           const data = await res.json();
           lastLoadedRef.current = currentKey;
 
-          if (isAdminParam || isAdmin) {
+          if (isUserActuallyAdmin || isAdmin) {
             if (data.template?.spreads?.length) {
               const cleanSpreads = data.template.spreads.map((s: any) => ({
                 ...s,
@@ -278,7 +273,7 @@ export default function EditorWorkspace() {
 
           // Force overlay to stay visible with completion message until redirect
           useEditorStore.setState({
-            pdfGenerationProgress: { current: 100, total: 100, status: "Complete! Redirecting..." }
+            pdfGenerationProgress: { current: 100, total: 100, status: "Complete! Redirecting...", isSoftCopy: !isPaymentSuccessHard }
           });
 
           await refreshUser(); // refreshUser from component scope
@@ -303,7 +298,7 @@ export default function EditorWorkspace() {
 
       // Set initial overlay immediately so user doesn't see the editor flashing
       useEditorStore.setState({
-        pdfGenerationProgress: { current: 0, total: 100, status: "Initializing print job..." }
+        pdfGenerationProgress: { current: 0, total: 100, status: "Initializing print job...", isSoftCopy: !isPaymentSuccessHard }
       });
 
       // Slight delay to ensure fonts/images are fully rendered
@@ -389,33 +384,48 @@ export default function EditorWorkspace() {
           </p>
 
           <div className="w-full max-w-md px-6 flex flex-col gap-6">
-            {/* Inner Pages Progress Bar */}
-            <div>
-              <div className="flex justify-between text-sm mb-1.5 font-bold tracking-wide text-white/90">
-                <span>Inner Pages</span>
-                <span>{pdfProgress.current > 1 ? Math.round(((pdfProgress.current - 1) / Math.max(1, pdfProgress.total - 1)) * 100) + "%" : "0%"}</span>
+            {pdfProgress.isSoftCopy ? (
+              <div>
+                <div className="flex justify-between text-sm mb-1.5 font-bold tracking-wide text-white/90">
+                  <span>Generating Digital PDF</span>
+                  <span>{pdfProgress.current > 0 ? Math.round((pdfProgress.current / pdfProgress.total) * 100) + "%" : "0%"}</span>
+                </div>
+                <div className="w-full bg-white/20 h-2.5 rounded-full overflow-hidden shadow-inner">
+                  <div
+                    className="h-full bg-[#9f2e2b] transition-all duration-500 rounded-full"
+                    style={{ width: pdfProgress.current > 0 ? Math.round((pdfProgress.current / pdfProgress.total) * 100) + "%" : "0%" }}
+                  ></div>
+                </div>
               </div>
-              <div className="w-full bg-white/20 h-2.5 rounded-full overflow-hidden shadow-inner">
-                <div
-                  className="h-full bg-[#9f2e2b] transition-all duration-500 rounded-full"
-                  style={{ width: pdfProgress.current > 1 ? Math.round(((pdfProgress.current - 1) / Math.max(1, pdfProgress.total - 1)) * 100) + "%" : "0%" }}
-                ></div>
-              </div>
-            </div>
+            ) : (
+              <>
+                <div>
+                  <div className="flex justify-between text-sm mb-1.5 font-bold tracking-wide text-white/90">
+                    <span>Inner Pages</span>
+                    <span>{pdfProgress.current > 1 ? Math.round(((pdfProgress.current - 1) / Math.max(1, pdfProgress.total - 1)) * 100) + "%" : "0%"}</span>
+                  </div>
+                  <div className="w-full bg-white/20 h-2.5 rounded-full overflow-hidden shadow-inner">
+                    <div
+                      className="h-full bg-[#9f2e2b] transition-all duration-500 rounded-full"
+                      style={{ width: pdfProgress.current > 1 ? Math.round(((pdfProgress.current - 1) / Math.max(1, pdfProgress.total - 1)) * 100) + "%" : "0%" }}
+                    ></div>
+                  </div>
+                </div>
 
-            {/* Cover Progress Bar */}
-            <div>
-              <div className="flex justify-between text-sm mb-1.5 font-bold tracking-wide text-white/90">
-                <span>Hardback Cover</span>
-                <span>{pdfProgress.current > 1 ? "100%" : (pdfProgress.current === 1 ? "Processing..." : "Waiting...")}</span>
-              </div>
-              <div className="w-full bg-white/20 h-2.5 rounded-full overflow-hidden shadow-inner">
-                <div
-                  className="h-full bg-[#9f2e2b] transition-all duration-500 rounded-full"
-                  style={{ width: pdfProgress.current > 1 ? "100%" : (pdfProgress.current === 1 ? "50%" : "0%") }}
-                ></div>
-              </div>
-            </div>
+                <div>
+                  <div className="flex justify-between text-sm mb-1.5 font-bold tracking-wide text-white/90">
+                    <span>Hardback Cover</span>
+                    <span>{pdfProgress.current > 1 ? "100%" : (pdfProgress.current === 1 ? "Processing..." : "Waiting...")}</span>
+                  </div>
+                  <div className="w-full bg-white/20 h-2.5 rounded-full overflow-hidden shadow-inner">
+                    <div
+                      className="h-full bg-[#9f2e2b] transition-all duration-500 rounded-full"
+                      style={{ width: pdfProgress.current > 1 ? "100%" : (pdfProgress.current === 1 ? "50%" : "0%") }}
+                    ></div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="bg-white/10 px-6 py-2.5 rounded-full mt-10 flex items-center gap-3">

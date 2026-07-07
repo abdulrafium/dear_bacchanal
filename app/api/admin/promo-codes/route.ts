@@ -3,8 +3,7 @@ import { stripe } from "@/lib/stripe";
 import { auth } from "@/lib/auth";
 import { getDatabase } from "@/lib/db";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export const revalidate = 60; // Cache for 60 seconds to scale for high traffic
 
 export async function GET() {
   try {

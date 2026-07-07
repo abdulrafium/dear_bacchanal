@@ -297,23 +297,6 @@ export default function AdminOrdersPage() {
     }
   };
 
-  const syncFromStripe = async () => {
-    setSyncing(true);
-    try {
-      const res = await fetch('/api/admin/orders/sync-stripe', { method: 'POST' });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(data.message);
-        fetchOrders();
-      } else {
-        toast.error(data.error || 'Sync failed');
-      }
-    } catch (error) {
-      toast.error('Failed to sync from Stripe');
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -333,14 +316,7 @@ export default function AdminOrdersPage() {
         
         <div className="flex items-center gap-2">
 
-            <button
-              onClick={syncFromStripe}
-              disabled={syncing}
-              className="flex items-center gap-1.5 px-3 py-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-400 hover:bg-emerald-500/20 transition-all text-[10px] font-bold uppercase tracking-wider disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? 'Syncing...' : 'Sync Stripe'}
-            </button>
+
             <button
               onClick={deleteAllOrders}
               disabled={deletingAll || orders.length === 0}
@@ -614,16 +590,18 @@ export default function AdminOrdersPage() {
                                         {selectedOrder.bookId || 'N/A'}
                                     </p>
                                 </div>
-                                <div>
-                                    <p className="text-[10px] font-semibold text-white/40 mb-1">Source Order ID (18 chars for SiteFlow)</p>
-                                    <p className="text-white/90 text-xs font-mono bg-black/20 p-2 rounded border border-white/5 truncate">
-                                        {selectedOrder.id 
-                                            ? (selectedOrder.id.length > 18 
-                                                ? selectedOrder.id.substring(selectedOrder.id.length - 18) 
-                                                : selectedOrder.id) 
-                                            : 'N/A'}
-                                    </p>
-                                </div>
+                                {selectedOrder.type !== 'soft' && (
+                                    <div>
+                                        <p className="text-[10px] font-semibold text-white/40 mb-1">Source Order ID (18 chars for SiteFlow)</p>
+                                        <p className="text-white/90 text-xs font-mono bg-black/20 p-2 rounded border border-white/5 truncate">
+                                            {selectedOrder.id 
+                                                ? (selectedOrder.id.length > 18 
+                                                    ? selectedOrder.id.substring(selectedOrder.id.length - 18) 
+                                                    : selectedOrder.id) 
+                                                : 'N/A'}
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </div>
 

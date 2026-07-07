@@ -17,12 +17,14 @@ import {
   FileBox,
   Ticket,
   Undo2,
+  Home,
 } from "lucide-react";
 import { UserAvatar } from "@/components/auth/UserAvatar";
 import { useSession, signOut } from "next-auth/react";
 
 const navItems = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/", label: "Home", icon: Home },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart },
   { href: "/admin/refunds", label: "Refunds", icon: Undo2 },
   { href: "/admin/users", label: "Users", icon: Users },
@@ -94,13 +96,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Navigation */}
         <nav className="flex-1 p-4 space-y-1">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
-            const Icon = item.icon;
+          {navItems.map((item, index) => {
+            if (item.isSeparator) {
+              return <div key={`sep-${index}`} className="h-px bg-white/10 my-4 mx-4" />;
+            }
+
+            const isActive = item.href !== "/" && (pathname === item.href || pathname?.startsWith(item.href + "/"));
+            const Icon = item.icon!;
             return (
               <Link
                 key={item.href}
-                href={item.href}
+                href={item.href!}
                 onClick={() => setSidebarOpen(false)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200 group ${
                   isActive

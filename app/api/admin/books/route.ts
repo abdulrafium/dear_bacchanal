@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";
 import { getServerAuth } from "@/lib/server-auth";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 export async function GET(req: NextRequest) {
   try {
