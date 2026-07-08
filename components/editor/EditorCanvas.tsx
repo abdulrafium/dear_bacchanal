@@ -128,9 +128,9 @@ function PageElement({
           if (canInteract && onSelect) onSelect();
         };
         return (
-          <Group 
-            {...commonProps} 
-            onClick={handleToggle} 
+          <Group
+            {...commonProps}
+            onClick={handleToggle}
             onTap={handleToggle}
           >
             <Rect
@@ -243,14 +243,23 @@ function PageElement({
   );
 }
 
+const globalImageCache: Record<string, HTMLImageElement> = {};
+
 function ImageElement(props: any) {
-  const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const [image, setImage] = useState<HTMLImageElement | null>(props.src ? globalImageCache[props.src] || null : null);
   useEffect(() => {
     if (props.src) {
+      if (globalImageCache[props.src]) {
+        setImage(globalImageCache[props.src]);
+        return;
+      }
       const img = new window.Image();
       img.crossOrigin = "anonymous";
       img.src = props.src;
-      img.onload = () => setImage(img);
+      img.onload = () => {
+        globalImageCache[props.src] = img;
+        setImage(img);
+      };
     }
   }, [props.src]);
   if (!image) return <Rect {...props} fill="#e5e7eb" stroke="#d1d5db" strokeWidth={1} />;
@@ -258,14 +267,21 @@ function ImageElement(props: any) {
 }
 
 function PhotoCardElement({ el, pageId, canInteract, ...props }: any) {
-  const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const [image, setImage] = useState<HTMLImageElement | null>(el.src ? globalImageCache[el.src] || null : null);
 
   useEffect(() => {
     if (el.src) {
+      if (globalImageCache[el.src]) {
+        setImage(globalImageCache[el.src]);
+        return;
+      }
       const img = new window.Image();
       img.crossOrigin = "anonymous";
       img.src = el.src;
-      img.onload = () => setImage(img);
+      img.onload = () => {
+        globalImageCache[el.src] = img;
+        setImage(img);
+      };
     } else {
       setImage(null);
     }
@@ -514,6 +530,7 @@ function PageCanvas({
   return (
     <Group x={offsetX} y={0}>
       <Rect
+        x={0}
         width={PAGE_WIDTH}
         height={PAGE_HEIGHT}
         fill={bgImage ? undefined : page.background}
@@ -522,6 +539,7 @@ function PageCanvas({
           x: bgImage ? PAGE_WIDTH / bgImage.width : 1,
           y: bgImage ? PAGE_HEIGHT / bgImage.height : 1
         }}
+        perfectDrawEnabled={false}
         shadowBlur={(isGeneratingPdf || !hasShadow) ? 0 : 8}
         shadowColor={(isGeneratingPdf || !hasShadow) ? "transparent" : "rgba(0,0,0,0.15)"}
         shadowOffsetY={(isGeneratingPdf || !hasShadow) ? 0 : 2}
@@ -617,7 +635,10 @@ export function EditorCanvas() {
   const isPreviewMode = useEditorStore((s) => s.isPreviewMode);
   const templateLoaded = useEditorStore((s) => s.templateLoaded);
   const isGeneratingPdf = useEditorStore((s) => s.isGeneratingPdf);
+  const isAdmin = useEditorStore((s) => s.isAdmin);
   const currentSpread = spreads[currentSpreadIndex];
+
+  const isCoverSpread = currentSpreadIndex === 0 && !isAdmin;
 
   const [editingCalendarNote, setEditingCalendarNote] = useState<{
     elementId: string;
@@ -659,7 +680,7 @@ export function EditorCanvas() {
   const [mobilePage, setMobilePage] = useState<"left" | "right">("left");
 
   const isSingle = viewMode === "single";
-  const gap = 0; // Set gap to 0 so left and right pages merge continuously
+  const gap = -1; // -1px overlap so page backgrounds cover the center seam artifact
   const totalWidth = isSingle ? PAGE_WIDTH : (PAGE_WIDTH * 2 + gap);
   const totalHeight = PAGE_HEIGHT;
   const [fitScale, setFitScale] = useState(1);
@@ -785,10 +806,18 @@ export function EditorCanvas() {
             </Layer>
           </Stage>
 
+          {/* Cover Locked Overlay — invisible click blocker, no badge */}
+          {isCoverSpread && !isPreviewMode && (
+            <div
+              className="absolute top-0 left-0 w-full z-[50]"
+              style={{ height: stageHeight, pointerEvents: "all", cursor: "not-allowed" }}
+            />
+          )}
+
           {!isPreviewMode && (
             <div className="absolute top-0 w-full pointer-events-none" style={{ height: stageHeight }}>
-              {(viewMode === "spread" || mobilePage === "left") && <EditorPageTools pageId={currentSpread.leftPage.id} align={isSingle ? "center" : "left"} />}
-              {(viewMode === "spread" || mobilePage === "right") && <EditorPageTools pageId={currentSpread.rightPage.id} align={isSingle ? "center" : "right"} />}
+              {(viewMode === "spread" || mobilePage === "left") && !isCoverSpread && <EditorPageTools pageId={currentSpread.leftPage.id} align={isSingle ? "center" : "left"} />}
+              {(viewMode === "spread" || mobilePage === "right") && !isCoverSpread && <EditorPageTools pageId={currentSpread.rightPage.id} align={isSingle ? "center" : "right"} />}
             </div>
           )}
 

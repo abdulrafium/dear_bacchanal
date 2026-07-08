@@ -62,6 +62,13 @@ export function EditorElementToolbar() {
 
   const { element, pageId } = selectedElementInfo;
 
+  // Block toolbar for non-admin users on the cover spread (index 0)
+  const currentSpreadIndex = useEditorStore.getState().currentSpreadIndex;
+  const coverSpread = spreads[0];
+  const isOnCoverPage = coverSpread && (coverSpread.leftPage.id === pageId || coverSpread.rightPage.id === pageId);
+  if (isOnCoverPage && !isAdmin) return null;
+
+
   const fonts = [
     "Arial",
     "Boogaloo",

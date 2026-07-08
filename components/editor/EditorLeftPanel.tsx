@@ -915,13 +915,11 @@ function StickersPanel() {
                 }
               }}
             >
-              <NextImage 
+              <img 
                   src={sticker.url} 
-                  alt={sticker.name} 
-                  fill
-                  sizes="(max-width: 768px) 100vw, 300px"
-                  style={{ objectFit: "contain" }}
-                  className="filter drop-shadow-md group-hover:scale-110 transition-transform duration-300" 
+                  alt={sticker.name}
+                  loading="eager"
+                  className="w-full h-full object-contain filter drop-shadow-md group-hover:scale-110 transition-transform duration-300" 
               />
               <div className="absolute top-1 right-1 flex flex-col gap-0.5 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                  <span className="bg-coral text-[6px] text-white font-black px-1 rounded-sm shadow-sm leading-none py-0.5">ADDON</span>
@@ -1059,6 +1057,28 @@ function CalendarPanel() {
 
 export function EditorLeftPanel() {
   const activeSidebarPanel = useEditorStore((s) => s.activeSidebarPanel);
+  const currentSpreadIndex = useEditorStore((s) => s.currentSpreadIndex);
+  const isAdmin = useEditorStore((s) => s.isAdmin);
+
+  const isCoverLocked = currentSpreadIndex === 0 && !isAdmin;
+
+  if (isCoverLocked) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-6 text-center gap-4">
+        <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-3xl">🔒</div>
+        <div>
+          <p className="text-sm font-black text-gray-800 leading-tight">Cover Page Locked</p>
+          <p className="text-[11px] text-gray-400 font-medium mt-2 leading-relaxed">
+            The cover design is fixed and cannot be edited. Navigate to any other page to start adding elements.
+          </p>
+        </div>
+        <div className="w-full border border-dashed border-gray-200 rounded-xl p-3 bg-gray-50">
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tip</p>
+          <p className="text-[11px] text-gray-500 mt-1">Use the page thumbnails at the bottom to navigate away from the cover.</p>
+        </div>
+      </div>
+    );
+  }
 
   switch (activeSidebarPanel) {
     case "templates":

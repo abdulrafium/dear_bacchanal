@@ -96,12 +96,23 @@ export default function EditorWorkspace() {
       const isNewParam = searchParams.get("new") === "true";
       const freshParamStr = searchParams.get("fresh") || "false";
       const bookIdParam = searchParams.get("bookId") || "none";
-      const currentKey = `${isAdmin}_${templateName}_${isNewParam}_${freshParamStr}_${bookIdParam}_${Date.now().toString().slice(0, -4)}`;
+      const state = useEditorStore.getState();
+      const currentKey = `${isAdmin}_${templateName}_${isNewParam}_${freshParamStr}_${bookIdParam}`;
 
       const isPaymentReturn = searchParams.get("payment") === "success";
 
-      // Only skip if we literally just loaded this exact configuration (within ~10s)
-      // This prevents re-loading on minor re-renders but always loads fresh on new navigation
+      // INSTANT LOAD: If the store already has the data loaded in memory, skip the network entirely!
+      if (!isPaymentReturn && freshParamStr !== "true" && state.templateLoaded) {
+        if (templateName && state.activeTemplateName === templateName) {
+          setLoading(false);
+          return;
+        } else if (!templateName && !isNewParam && state.spreads.length > 0) {
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Fallback for strict rapid re-mounts
       if (!isPaymentReturn && lastLoadedRef.current === currentKey) {
         setLoading(false);
         return;

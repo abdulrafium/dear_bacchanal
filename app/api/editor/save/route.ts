@@ -37,49 +37,52 @@ export async function POST(req: NextRequest) {
     if (isAdmin) {
       // Save to global templates
       const templatesCollection = db.collection("global_templates");
-      
-      let query: any = { templateName: finalName };
-      
-      // Use ID if available for precision and to allow renaming. Only use 24-char ObjectIds.
-      if (activeTemplateId && typeof activeTemplateId === 'string' && activeTemplateId !== "undefined" && activeTemplateId !== "preview-id") {
+
+      const updatePayload = {
+        templateName: finalName,
+        description: finalDesc,
+        country: templateCountry || "Trinidad",
+        year: templateYear || "2026",
+        spreads: spreads || [],
+        currentSpreadIndex: currentSpreadIndex || 0,
+        updatedAt: new Date(),
+        updatedBy: userId,
+      };
+
+      let templateId: string | null = null;
+
+      // Step 1: Try to find the existing document by _id (most precise)
+      let existingDoc: any = null;
+      if (activeTemplateId && typeof activeTemplateId === 'string' && activeTemplateId !== "undefined" && activeTemplateId !== "preview-id" && activeTemplateId.length === 24) {
         try {
-          if (activeTemplateId.length === 24) {
-            query = { _id: new ObjectId(activeTemplateId) };
-          }
-          // Intentionally do NOT use hardcoded string IDs like "bacchanal-2026" as they cause E11000 dup key errors
+          existingDoc = await templatesCollection.findOne({ _id: new ObjectId(activeTemplateId) });
         } catch (idError) {
-          console.error("Invalid template ID format:", activeTemplateId);
-          // Fallback to name-based query if ID is invalid
+          console.warn("Could not parse activeTemplateId as ObjectId:", activeTemplateId);
         }
       }
 
-      const result = await templatesCollection.updateOne(
-        query,
-        {
-          $set: {
-            templateName: finalName,
-            description: finalDesc,
-            country: templateCountry || "Trinidad",
-            year: templateYear || "2026",
-            spreads: spreads || [],
-            currentSpreadIndex: currentSpreadIndex || 0,
-            updatedAt: new Date(),
-            updatedBy: userId,
-          },
-          $setOnInsert: {
-            createdAt: new Date(),
-            thumbnail: "/img/templates/bacchanal-classic.jpg",
-          },
-        },
-        { upsert: true }
-      );
+      // Step 2: Fall back to looking up by name if not found by ID
+      if (!existingDoc) {
+        existingDoc = await templatesCollection.findOne({ templateName: finalName });
+      }
 
-      // CRITICAL: Ensure we return the ID after an update OR an insert
-      let templateId = result.upsertedId ? result.upsertedId.toString() : null;
-      if (!templateId) {
-        // If it was an update, we need to find the ID of the document we updated
-        const existing = await templatesCollection.findOne(query, { projection: { _id: 1 } });
-        if (existing) templateId = existing._id.toString();
+      if (existingDoc) {
+        // UPDATE the existing document by its real _id — no upsert, no duplicate key risk
+        await templatesCollection.updateOne(
+          { _id: existingDoc._id },
+          { $set: updatePayload }
+        );
+        templateId = existingDoc._id.toString();
+        console.log("Admin: updated existing global template:", templateId);
+      } else {
+        // INSERT a brand new template — only when truly doesn't exist
+        const insertResult = await templatesCollection.insertOne({
+          ...updatePayload,
+          createdAt: new Date(),
+          thumbnail: "/img/templates/bacchanal-classic.jpg",
+        });
+        templateId = insertResult.insertedId.toString();
+        console.log("Admin: inserted new global template:", templateId);
       }
 
       return NextResponse.json({ 

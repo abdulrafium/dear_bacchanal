@@ -30,6 +30,7 @@ export function EditorBottomBar() {
   const toggleThumbnails = useEditorStore((s) => s.toggleThumbnails);
   const viewMode = useEditorStore((s) => s.viewMode);
   const setViewMode = useEditorStore((s) => s.setViewMode);
+  const isAdmin = useEditorStore((s) => s.isAdmin);
 
   const [showPageMenu, setShowPageMenu] = useState(false);
 
@@ -132,27 +133,44 @@ export function EditorBottomBar() {
 
             {showPageMenu && (
               <div className="flex items-center gap-1 px-1 animate-in slide-in-from-right-4 fade-in duration-300">
+                {/* Add New Page: Admins only */}
+                {isAdmin && (
+                  <button 
+                    onClick={() => { 
+                      if (spreads.length >= 10) {
+                        const { toast } = require("sonner");
+                        toast.info("Adding Extra Spread (+$5.00 Add-on)");
+                      }
+                      addSpread(); 
+                      setShowPageMenu(false); 
+                    }} 
+                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors relative group/btn" 
+                    title="Add New Pages"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-blue-500" />
+                    {spreads.length >= 10 && (
+                      <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black text-white text-[7px] font-black px-1 py-0.5 rounded opacity-0 group-hover/btn:opacity-100 transition-opacity whitespace-nowrap">+$5.00</span>
+                    )}
+                  </button>
+                )}
+
+                {/* Duplicate: Disabled on cover for non-admin users */}
                 <button 
-                  onClick={() => { 
-                    if (spreads.length >= 10) {
-                      const { toast } = require("sonner");
-                      toast.info("Adding Extra Spread (+$5.00 Add-on)");
-                    }
-                    addSpread(); 
-                    setShowPageMenu(false); 
-                  }} 
-                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors relative group/btn" 
-                  title="Add New Pages"
+                  onClick={() => { duplicateSpread(currentSpreadIndex); setShowPageMenu(false); }} 
+                  disabled={currentSpreadIndex === 0 && !isAdmin}
+                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" 
+                  title={currentSpreadIndex === 0 && !isAdmin ? "Cover cannot be duplicated" : "Duplicate Current Page"}
                 >
-                  <Plus className="w-3.5 h-3.5 text-blue-500" />
-                  {spreads.length >= 10 && (
-                    <span className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black text-white text-[7px] font-black px-1 py-0.5 rounded opacity-0 group-hover/btn:opacity-100 transition-opacity whitespace-nowrap">+$5.00</span>
-                  )}
-                </button>
-                <button onClick={() => { duplicateSpread(currentSpreadIndex); setShowPageMenu(false); }} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors" title="Duplicate Current">
                   <Copy className="w-3.5 h-3.5 text-violet-500" />
                 </button>
-                <button onClick={() => { removeSpread(currentSpreadIndex); setShowPageMenu(false); }} disabled={spreads.length <= 1} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 disabled:opacity-30 transition-colors" title="Delete Spread">
+
+                {/* Delete: Disabled on cover for non-admin users */}
+                <button 
+                  onClick={() => { removeSpread(currentSpreadIndex); setShowPageMenu(false); }} 
+                  disabled={spreads.length <= 1 || (currentSpreadIndex === 0 && !isAdmin)} 
+                  className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors" 
+                  title={currentSpreadIndex === 0 && !isAdmin ? "Cover cannot be deleted" : "Delete Spread"}
+                >
                   <Trash2 className="w-3.5 h-3.5 text-red-600" />
                 </button>
               </div>
@@ -169,19 +187,19 @@ export function EditorBottomBar() {
               key={spread.id}
               onClick={() => setCurrentSpread(index)}
               className={`flex-shrink-0 group transition-all duration-300 ${
-                index === currentSpreadIndex ? "scale-105" : "opacity-40 hover:opacity-100"
+                index === currentSpreadIndex ? "scale-105" : "opacity-50 hover:opacity-100"
               }`}
             >
               <div className={`flex rounded-lg overflow-hidden shadow-xl transition-all ${
                   index === currentSpreadIndex
                     ? "ring-2 ring-[#2d2d2d] ring-offset-2"
-                    : "ring-1 ring-gray-100 group-hover:ring-gray-300"
+                    : "ring-1 ring-gray-200 group-hover:ring-gray-300"
                 }`}
               >
-                <div className="w-12 h-16 bg-white" style={{ backgroundColor: spread.leftPage.background }} />
-                <div className="w-12 h-16 bg-white border-l border-gray-50" style={{ backgroundColor: spread.rightPage.background }} />
+                <MiniPage page={spread.leftPage} isLeft={true} />
+                <MiniPage page={spread.rightPage} isLeft={false} />
               </div>
-              <p className="text-[9px] font-bold text-gray-400 text-center mt-2 uppercase tracking-widest">
+              <p className="text-[9px] font-bold text-gray-500 text-center mt-2 uppercase tracking-widest group-hover:text-[#2d2d2d] transition-colors">
                 {index === 0 ? "Cover" : `P. ${index * 2 - 1}-${index * 2}`}
               </p>
             </button>
@@ -191,3 +209,134 @@ export function EditorBottomBar() {
     </div>
   );
 }
+
+const MiniPage = ({ page, isLeft }: { page: any; isLeft?: boolean }) => {
+  return (
+    <div 
+      className={`w-14 h-14 relative overflow-hidden bg-white shrink-0 ${!isLeft ? 'border-l border-gray-100' : ''}`}
+      style={{ backgroundColor: page.background }}
+    >
+      <svg viewBox="0 0 500 500" className="w-full h-full pointer-events-none">
+        {page.elements?.map((el: any) => {
+          const cx = el.x + el.width / 2;
+          const cy = el.y + el.height / 2;
+          const transform = `rotate(${el.rotation || 0} ${cx} ${cy})`;
+
+          if (el.type === "image" || el.type === "sticker" || el.type === "photo-card") {
+             if (el.src) {
+                const isCircle = el.shapeType === "ellipse";
+                const clipId = `clip-${el.id}`;
+                return (
+                  <g key={el.id} transform={transform}>
+                    {isCircle && (
+                      <clipPath id={clipId}>
+                        <circle cx={cx} cy={cy} r={Math.min(el.width, el.height)/2} />
+                      </clipPath>
+                    )}
+                    <image 
+                      href={el.src} 
+                      x={el.x} 
+                      y={el.y} 
+                      width={el.width} 
+                      height={el.height} 
+                      preserveAspectRatio="xMidYMid slice"
+                      clipPath={isCircle ? `url(#${clipId})` : undefined}
+                    />
+                    {el.type === "photo-card" && (
+                      <rect x={el.x} y={el.y} width={el.width} height={el.height} fill="none" stroke="white" strokeWidth={12} />
+                    )}
+                  </g>
+                );
+             } else {
+                return (
+                  <rect 
+                    key={el.id} 
+                    x={el.x} y={el.y} width={el.width} height={el.height} 
+                    fill="rgba(0,0,0,0.1)" stroke="white" strokeWidth={el.type === 'photo-card' ? 12 : 2} 
+                    transform={transform} 
+                  />
+                );
+             }
+          }
+          
+          if (el.type === "text") {
+             return (
+               <text 
+                 key={el.id} 
+                 x={el.x} 
+                 y={el.y + (el.fontSize || 24)} 
+                 fill={el.fill || "#000"} 
+                 fontSize={el.fontSize || 24} 
+                 fontFamily={el.fontFamily || "Arial"}
+                 transform={transform}
+                 style={{ fontWeight: el.fontStyle?.includes('bold') ? 'bold' : 'normal', fontStyle: el.fontStyle?.includes('italic') ? 'italic' : 'normal' }}
+               >
+                 {el.text}
+               </text>
+             );
+          }
+          
+          if (el.type === "shape" || el.type === "checkbox") {
+             if (el.shapeType === "ellipse") {
+               return (
+                 <ellipse 
+                   key={el.id} 
+                   cx={cx} cy={cy} rx={el.width/2} ry={el.height/2} 
+                   fill={el.shapeFill || "transparent"} 
+                   stroke={el.stroke || el.fill || "#000"} 
+                   strokeWidth={el.strokeWidth || 2} 
+                   transform={transform} 
+                 />
+               );
+             } else {
+               return (
+                 <rect 
+                   key={el.id} 
+                   x={el.x} y={el.y} width={el.width} height={el.height} 
+                   fill={el.shapeFill || "transparent"} 
+                   stroke={el.stroke || el.fill || "#000"} 
+                   strokeWidth={el.strokeWidth || 2} 
+                   transform={transform} 
+                 />
+               );
+             }
+          }
+
+          if (el.type === "calendar") {
+             const headerH = 70;
+             const cellW = el.width / 7;
+             const gridH = el.height - headerH;
+             const cellH = gridH / 6;
+
+             return (
+                <g key={el.id} transform={transform}>
+                  <rect 
+                    x={el.x} y={el.y} width={el.width} height={el.height} 
+                    fill="transparent" stroke="rgba(0,0,0,0.5)" strokeWidth={2} 
+                  />
+                  {/* Simulate text title */}
+                  <rect 
+                    x={el.x + el.width * 0.2} y={el.y + 15} 
+                    width={el.width * 0.6} height={25} 
+                    fill="rgba(0,0,0,0.4)" rx={4} 
+                  />
+                  {/* Simulate grid lines (vertical) */}
+                  {Array.from({length: 6}).map((_, i) => (
+                     <line key={`v-${i}`} x1={el.x + cellW * (i+1)} y1={el.y + headerH} x2={el.x + cellW * (i+1)} y2={el.y + el.height} stroke="rgba(0,0,0,0.3)" strokeWidth={2} />
+                  ))}
+                  {/* Simulate grid lines (horizontal) */}
+                  {Array.from({length: 5}).map((_, i) => (
+                     <line key={`h-${i}`} x1={el.x} y1={el.y + headerH + cellH * (i+1)} x2={el.x + el.width} y2={el.y + headerH + cellH * (i+1)} stroke="rgba(0,0,0,0.3)" strokeWidth={2} />
+                  ))}
+                  {/* Header separator */}
+                  <line x1={el.x} y1={el.y + headerH} x2={el.x + el.width} y2={el.y + headerH} stroke="rgba(0,0,0,0.5)" strokeWidth={3} />
+                </g>
+             );
+          }
+
+          return null;
+        })}
+      </svg>
+    </div>
+  );
+};

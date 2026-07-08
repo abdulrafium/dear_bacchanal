@@ -376,9 +376,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   loadTemplate: (spreads: BookSpread[], name: string, description?: string | null, country?: string | null, year?: string | null, id?: string | null) => {
+    // Deep clone and force-lock the cover spread (index 0) for all non-admin users.
+    // The isAdmin flag is checked at render time to allow admins to bypass this.
+    const loadedSpreads: BookSpread[] = JSON.parse(JSON.stringify(spreads));
+    if (loadedSpreads.length > 0) {
+      loadedSpreads[0] = {
+        ...loadedSpreads[0],
+        leftPage: { ...loadedSpreads[0].leftPage, isLocked: true },
+        rightPage: { ...loadedSpreads[0].rightPage, isLocked: true },
+      };
+    }
 
     set({
-      spreads: JSON.parse(JSON.stringify(spreads)),
+      spreads: loadedSpreads,
       currentSpreadIndex: 0,
       templateLoaded: true,
       activeTemplateId: id || null,
@@ -394,6 +404,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       activeSidebarPanel: "layouts",
     });
   },
+
 
   setTemplateMetadata: (name: string | null, description: string | null, country?: string | null, year?: string | null) => set((s) => ({
     activeTemplateName: name !== null ? name : s.activeTemplateName,

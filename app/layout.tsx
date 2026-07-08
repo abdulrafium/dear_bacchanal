@@ -6,6 +6,7 @@ import { AuthProvider } from "@/components/auth/AuthProvider";
 import { SettingsProvider } from "@/providers/SettingsProvider";
 import { Toaster } from "sonner";
 import { SessionProvider } from "next-auth/react";
+import { GlobalPrefetcher } from "@/components/layout/GlobalPrefetcher";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -53,6 +54,7 @@ export default function RootLayout({
         <SessionProvider>
           <AuthProvider>
             <SettingsProvider>
+              <GlobalPrefetcher />
               <ConditionalLayout>{children}</ConditionalLayout>
               <Toaster
                 theme="dark"
