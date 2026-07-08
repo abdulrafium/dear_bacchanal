@@ -22,7 +22,7 @@ import {
 import { UserAvatar } from "@/components/auth/UserAvatar";
 import { useSession, signOut } from "next-auth/react";
 
-const navItems = [
+const navItems: Array<{ href?: string; label?: string; icon?: any; isSeparator?: boolean }> = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/", label: "Home", icon: Home },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart },
