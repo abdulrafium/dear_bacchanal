@@ -734,7 +734,8 @@ export function EditorCanvas() {
     }
   }, [containerSize, totalWidth, totalHeight, isSingle]);
 
-  const scale = (typeof window !== 'undefined' && window.innerWidth < 768 || isSingle) ? fitScale : (zoom / 100);
+  // Always fit to container — zoom adjusts within fit, never causes scroll
+  const scale = fitScale * Math.min(1, zoom / 100);
   const stageWidth = totalWidth * scale;
   const stageHeight = totalHeight * scale;
   const stageX = Math.max(0, (containerSize.width - stageWidth) / 2);
@@ -769,7 +770,7 @@ export function EditorCanvas() {
   if (!templateLoaded || !currentSpread) return <div ref={containerRef} className="w-full h-full bg-[#e8e8e8]" />;
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-[#f1f1f1] overflow-auto relative flex flex-col custom-scrollbar" onDragOver={(e) => e.preventDefault()} onDrop={handleDrop}>
+    <div ref={containerRef} className="w-full h-full bg-[#f1f1f1] overflow-hidden relative flex flex-col custom-scrollbar" onDragOver={(e) => e.preventDefault()} onDrop={handleDrop}>
       <style dangerouslySetInnerHTML={{
         __html: `
         @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Kalam:wght@300;400;700&family=Poppins:wght@300;400;500;600;700;800;900&family=Luckiest+Guy&family=Caveat:wght@400;700&family=Pacifico&family=Anton&family=Bangers&family=Lobster&family=Montserrat:wght@400;700&family=Oswald:wght@400;700&family=Playfair+Display:wght@400;700&family=Inter:wght@400;700&family=Boogaloo&family=Fredoka+One&family=Baloo+2:wght@400;700&family=Titan+ One&family=Architects+Daughter&family=Patrick+Hand&display=swap');
@@ -796,8 +797,7 @@ export function EditorCanvas() {
           </button>
         </div>
       )}
-
-      <div className="flex-1 relative">
+      <div className="flex-1 relative overflow-hidden">
         {isPreviewMode && (
           <>
             <button onClick={prevSpread} disabled={currentSpreadIndex === 0} className="absolute left-5 top-1/2 -translate-y-1/2 z-20 text-gray-300 hover:text-gray-600 disabled:opacity-0"><ChevronLeft className="w-20 h-20" /></button>
@@ -835,7 +835,6 @@ export function EditorCanvas() {
                     onEditCalendarNote={handleEditCalendarNote}
                     hasShadow={false}
                   />
-                  {/* Spine shadow removed for seamless viewing */}
                   <PageCanvas
                     page={currentSpread.rightPage}
                     offsetX={PAGE_WIDTH + gap}
@@ -847,7 +846,7 @@ export function EditorCanvas() {
             </Layer>
           </Stage>
 
-          {/* Cover Locked Overlay — invisible click blocker, no badge */}
+          {/* Cover Locked Overlay */}
           {isCoverSpread && !isPreviewMode && (
             <div
               className="absolute top-0 left-0 w-full z-[50]"
