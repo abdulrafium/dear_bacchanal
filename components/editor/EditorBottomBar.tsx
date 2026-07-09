@@ -1,6 +1,6 @@
 "use client";
 
-import { useEditorStore } from "@/store/editor-store";
+import { useEditorStore, BookPage, EditorElement } from "@/store/editor-store";
 import {
   ChevronLeft,
   ChevronRight,
@@ -13,7 +13,8 @@ import {
   Columns2,
   Grid2X2,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, memo } from "react";
+import { toast } from "sonner";
 
 export function EditorBottomBar() {
   const spreads = useEditorStore((s) => s.spreads);
@@ -138,7 +139,6 @@ export function EditorBottomBar() {
                   <button 
                     onClick={() => { 
                       if (spreads.length >= 10) {
-                        const { toast } = require("sonner");
                         toast.info("Adding Extra Spread (+$5.00 Add-on)");
                       }
                       addSpread(); 
@@ -210,14 +210,14 @@ export function EditorBottomBar() {
   );
 }
 
-const MiniPage = ({ page, isLeft }: { page: any; isLeft?: boolean }) => {
+const MiniPage = memo(({ page, isLeft }: { page: BookPage; isLeft?: boolean }) => {
   return (
     <div 
       className={`w-14 h-14 relative overflow-hidden bg-white shrink-0 ${!isLeft ? 'border-l border-gray-100' : ''}`}
       style={{ backgroundColor: page.background }}
     >
       <svg viewBox="0 0 500 500" className="w-full h-full pointer-events-none">
-        {page.elements?.map((el: any) => {
+        {page.elements?.map((el: EditorElement) => {
           const cx = el.x + el.width / 2;
           const cy = el.y + el.height / 2;
           const transform = `rotate(${el.rotation || 0} ${cx} ${cy})`;
@@ -339,4 +339,6 @@ const MiniPage = ({ page, isLeft }: { page: any; isLeft?: boolean }) => {
       </svg>
     </div>
   );
-};
+});
+
+MiniPage.displayName = "MiniPage";
