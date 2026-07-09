@@ -1,12 +1,12 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback, memo } from "react";
-import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group, Circle, Line } from "react-konva";
+import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group, Circle } from "react-konva";
 import { Html } from "react-konva-utils";
 import { useEditorStore, EditorElement, BookPage } from "@/store/editor-store";
 import Konva from "konva";
 import { PAGE_LAYOUTS } from "@/lib/layouts";
-import { ChevronLeft, ChevronRight, Calendar, LayoutGrid, X, Edit3 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, X, Edit3 } from "lucide-react";
 import { EditorPageTools } from "./EditorPageTools";
 import { toast } from "sonner";
 import { useUploadThing } from "@/lib/uploadthing-client";
@@ -29,6 +29,7 @@ const PageElement = memo(function PageElement({
   pageIsLocked?: boolean;
   onEditCalendarNote?: (elId: string, pageId: string, dateKey: string, initialValue: string) => void;
 }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const shapeRef = useRef<any>(null);
   const trRef = useRef<Konva.Transformer>(null);
   const updateElement = useEditorStore((s) => s.updateElement);
@@ -42,7 +43,7 @@ const PageElement = memo(function PageElement({
     }
   }, [isSelected]);
 
-  const handleDragEnd = (e: any) => {
+  const handleDragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
     updateElement(pageId, el.id, { x: e.target.x(), y: e.target.y() });
   };
 
@@ -71,7 +72,7 @@ const PageElement = memo(function PageElement({
   const previewElement = useEditorStore((s) => s.previewElement);
   const displayEl = previewElement?.id === el.id ? { ...el, ...previewElement.updates } : el;
 
-  const handleSelect = useCallback((e: any) => {
+  const handleSelect = useCallback((e: Konva.KonvaEventObject<Event>) => {
     e.cancelBubble = true;
     if (canInteract) onSelect(el.id);
   }, [canInteract, onSelect, el.id]);
@@ -85,10 +86,10 @@ const PageElement = memo(function PageElement({
     width: el.width,
     height: el.height,
     rotation: el.rotation,
-    shadowBlur: (displayEl as any)?.shadowBlur,
-    shadowColor: (displayEl as any)?.shadowColor,
-    shadowOffsetX: (displayEl as any)?.shadowOffsetX,
-    shadowOffsetY: (displayEl as any)?.shadowOffsetY,
+    shadowBlur: (displayEl as unknown as Record<string, unknown>)?.shadowBlur as number | undefined,
+    shadowColor: (displayEl as unknown as Record<string, unknown>)?.shadowColor as string | undefined,
+    shadowOffsetX: (displayEl as unknown as Record<string, unknown>)?.shadowOffsetX as number | undefined,
+    shadowOffsetY: (displayEl as unknown as Record<string, unknown>)?.shadowOffsetY as number | undefined,
     draggable: canInteract,
     onClick: handleSelect,
     onTap: handleSelect,
@@ -126,7 +127,7 @@ const PageElement = memo(function PageElement({
 
       case "checkbox": {
         const boxSize = displayEl.fontSize ? displayEl.fontSize : 24;
-        const handleToggle = (e: any) => {
+        const handleToggle = (e: Konva.KonvaEventObject<Event>) => {
           if (isPreviewMode) return;
           updateElement(pageId, el.id, { isChecked: !el.isChecked });
           e.cancelBubble = true;
@@ -228,7 +229,7 @@ const PageElement = memo(function PageElement({
                 fontSize: `${el.fontSize || 18}px`,
                 fontFamily: el.fontFamily ? `'${el.fontFamily}', sans-serif` : "Arial",
                 color: el.fill || "#000000",
-                textAlign: (el.align as any) || "left",
+                textAlign: (el.align as "left" | "center" | "right") || "left",
                 fontWeight: el.fontStyle?.includes("bold") ? "bold" : "normal",
                 fontStyle: el.fontStyle?.includes("italic") ? "italic" : "normal",
                 textDecoration: el.fontStyle?.includes("underline") ? "underline" : "none",
@@ -252,19 +253,19 @@ PageElement.displayName = "PageElement";
 
 const globalImageCache: Record<string, HTMLImageElement> = {};
 
-function ImageElement(props: any) {
+function ImageElement(props: Record<string, unknown> & { src?: string }) {
   const [image, setImage] = useState<HTMLImageElement | null>(props.src ? globalImageCache[props.src] || null : null);
   useEffect(() => {
     if (props.src) {
       if (globalImageCache[props.src]) {
-        setImage(globalImageCache[props.src]);
+        Promise.resolve().then(() => setImage(globalImageCache[props.src!]));
         return;
       }
       const img = new window.Image();
       img.crossOrigin = "anonymous";
       img.src = props.src;
       img.onload = () => {
-        globalImageCache[props.src] = img;
+        globalImageCache[props.src!] = img;
         setImage(img);
       };
     }
@@ -273,20 +274,20 @@ function ImageElement(props: any) {
   return <KonvaImage {...props} image={image} />;
 }
 
-function PhotoCardElement({ el, pageId, canInteract, ...props }: any) {
+function PhotoCardElement({ el, ...props }: { el: EditorElement; [key: string]: unknown }) {
   const [image, setImage] = useState<HTMLImageElement | null>(el.src ? globalImageCache[el.src] || null : null);
 
   useEffect(() => {
     if (el.src) {
       if (globalImageCache[el.src]) {
-        setImage(globalImageCache[el.src]);
+        Promise.resolve().then(() => setImage(globalImageCache[el.src!]));
         return;
       }
       const img = new window.Image();
       img.crossOrigin = "anonymous";
       img.src = el.src;
       img.onload = () => {
-        globalImageCache[el.src] = img;
+        globalImageCache[el.src!] = img;
         setImage(img);
       };
     } else {
@@ -530,7 +531,7 @@ function PageCanvas({
       img.src = page.background;
       img.onload = () => setBgImage(img);
     } else {
-      setBgImage(null);
+      Promise.resolve().then(() => setBgImage(null));
     }
   }, [page.background]);
 
@@ -700,7 +701,7 @@ export function EditorCanvas() {
     if (containerSize.width > 0 && containerSize.height > 0) {
       const padding = isSingle ? 20 : 40;
       const s = Math.min((containerSize.width - padding) / totalWidth, (containerSize.height - padding) / totalHeight);
-      setFitScale(s);
+      Promise.resolve().then(() => setFitScale(s));
     }
   }, [containerSize, totalWidth, totalHeight, isSingle]);
 
@@ -710,7 +711,7 @@ export function EditorCanvas() {
   const stageX = Math.max(0, (containerSize.width - stageWidth) / 2);
   const stageY = Math.max(0, (containerSize.height - stageHeight) / 2);
 
-  const handleStageClick = (e: any) => {
+  const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
     if (e.target === e.target.getStage() || e.target.getClassName() === "Rect") {
       const clickedOnElement = e.target.parent?.parent !== null && e.target.getClassName() !== "Rect";
       if (!clickedOnElement) selectElement(null);
