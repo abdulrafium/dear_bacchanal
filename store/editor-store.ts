@@ -200,21 +200,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setIsOrderModalOpen: (open) => set({ isOrderModalOpen: open }),
 
   // Navigation
-  setCurrentSpread: (index, skipDirty = false) => set((s) => ({
+  setCurrentSpread: (index) => set(() => ({
     currentSpreadIndex: index,
     selectedElementId: null,
-    isDirty: skipDirty ? s.isDirty : true
   })),
   nextSpread: () => {
     const { currentSpreadIndex, spreads } = get();
     if (currentSpreadIndex < spreads.length - 1) {
-      set({ currentSpreadIndex: currentSpreadIndex + 1, selectedElementId: null, isDirty: true });
+      set({ currentSpreadIndex: currentSpreadIndex + 1, selectedElementId: null });
     }
   },
   prevSpread: () => {
     const { currentSpreadIndex } = get();
     if (currentSpreadIndex > 0) {
-      set({ currentSpreadIndex: currentSpreadIndex - 1, selectedElementId: null, isDirty: true });
+      set({ currentSpreadIndex: currentSpreadIndex - 1, selectedElementId: null });
     }
   },
 

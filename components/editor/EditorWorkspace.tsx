@@ -155,7 +155,7 @@ export default function EditorWorkspace() {
               loadTemplate(cleanSpreads, data.template.templateName, data.template.description, data.template.country, data.template.year, data.template._id);
               const targetIndex = spreadFromUrl ? parseInt(spreadFromUrl) : data.template.currentSpreadIndex;
               if (targetIndex !== undefined) {
-                setCurrentSpread(targetIndex, true);
+                setCurrentSpread(targetIndex);
               }
             } else if (templateName) {
               const { getAvailableTemplates } = await import('@/lib/book-templates');
@@ -167,14 +167,14 @@ export default function EditorWorkspace() {
                   rightPage: { ...s.rightPage, elements: s.rightPage.elements?.map((e: any) => e.type === 'checkbox' ? { ...e, isChecked: false } : e) }
                 }));
                 loadTemplate(cleanSpreads, hardTemplate.name, hardTemplate.description, hardTemplate.country, hardTemplate.year.toString(), hardTemplate.id);
-                if (spreadFromUrl) setCurrentSpread(parseInt(spreadFromUrl), true);
+                if (spreadFromUrl) setCurrentSpread(parseInt(spreadFromUrl));
               }
             }
           } else if (data.book?.spreads?.length) {
             loadTemplate(data.book.spreads, data.book.activeTemplateName, data.book.templateDescription, data.book.templateCountry, data.book.templateYear, data.book._id);
             const targetIndex = spreadFromUrl ? parseInt(spreadFromUrl) : data.book.currentSpreadIndex;
             if (targetIndex !== undefined) {
-              setCurrentSpread(targetIndex, true);
+              setCurrentSpread(targetIndex);
             }
           }
         }

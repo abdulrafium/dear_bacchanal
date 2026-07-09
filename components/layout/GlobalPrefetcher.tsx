@@ -38,6 +38,7 @@ export function GlobalPrefetcher() {
               elements.forEach((el: any) => {
                 if (el.src) {
                   const img = new window.Image();
+                  img.crossOrigin = "anonymous";
                   img.src = el.src; // This completely downloads the image in the background
                 }
               });
@@ -63,6 +64,7 @@ export function GlobalPrefetcher() {
           ];
           premiumStickers.forEach((url) => {
             const img = new window.Image();
+            img.crossOrigin = "anonymous";
             img.src = url;
           });
 
@@ -73,6 +75,7 @@ export function GlobalPrefetcher() {
               if (data.stickers) {
                 data.stickers.forEach((s: any) => {
                   const img = new window.Image();
+                  img.crossOrigin = "anonymous";
                   img.src = s.url;
                 });
               }

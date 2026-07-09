@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, memo } from "react";
 import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group, Circle, Line } from "react-konva";
 import { Html } from "react-konva-utils";
 import { useEditorStore, EditorElement, BookPage } from "@/store/editor-store";
@@ -14,7 +14,7 @@ import { useUploadThing } from "@/lib/uploadthing-client";
 const PAGE_WIDTH = 500;
 const PAGE_HEIGHT = 500;
 
-function PageElement({
+const PageElement = memo(function PageElement({
   el,
   pageId,
   isSelected,
@@ -25,7 +25,7 @@ function PageElement({
   el: EditorElement;
   pageId: string;
   isSelected: boolean;
-  onSelect: () => void;
+  onSelect: (id: string) => void;
   pageIsLocked?: boolean;
   onEditCalendarNote?: (elId: string, pageId: string, dateKey: string, initialValue: string) => void;
 }) {
@@ -85,8 +85,8 @@ function PageElement({
     shadowOffsetX: (displayEl as any)?.shadowOffsetX,
     shadowOffsetY: (displayEl as any)?.shadowOffsetY,
     draggable: canInteract,
-    onClick: canInteract ? onSelect : undefined,
-    onTap: canInteract ? onSelect : undefined,
+    onClick: canInteract ? () => onSelect(el.id) : undefined,
+    onTap: canInteract ? () => onSelect(el.id) : undefined,
     onDragEnd: handleDragEnd,
     onTransformEnd: handleTransformEnd,
   };
@@ -125,7 +125,7 @@ function PageElement({
           if (isPreviewMode) return;
           updateElement(pageId, el.id, { isChecked: !el.isChecked });
           e.cancelBubble = true;
-          if (canInteract && onSelect) onSelect();
+          if (canInteract && onSelect) onSelect(el.id);
         };
         return (
           <Group
@@ -241,9 +241,36 @@ function PageElement({
       )}
     </>
   );
-}
+});
 
 const globalImageCache: Record<string, HTMLImageElement> = {};
+
+/** Pre-load ALL image URLs from a spread into the global cache immediately */
+export function preloadSpreadImages(spreads: any[]) {
+  if (typeof window === 'undefined') return;
+  spreads.forEach((spread) => {
+    [spread.leftPage, spread.rightPage].forEach((page) => {
+      if (!page) return;
+      // Page background image
+      if (page.background && (page.background.startsWith("http") || page.background.startsWith("data:") || page.background.startsWith("/")) && !globalImageCache[page.background]) {
+        const img = new window.Image();
+        img.crossOrigin = "anonymous";
+        img.src = page.background;
+        img.onload = () => { globalImageCache[page.background] = img; };
+      }
+      // Element images
+      (page.elements || []).forEach((el: any) => {
+        const src = el.src;
+        if (src && !globalImageCache[src]) {
+          const img = new window.Image();
+          img.crossOrigin = "anonymous";
+          img.src = src;
+          img.onload = () => { globalImageCache[src] = img; };
+        }
+      });
+    });
+  });
+}
 
 function ImageElement(props: any) {
   const [image, setImage] = useState<HTMLImageElement | null>(props.src ? globalImageCache[props.src] || null : null);
@@ -514,14 +541,23 @@ function PageCanvas({
   const selectElement = useEditorStore((s) => s.selectElement);
   const isGeneratingPdf = useEditorStore((s) => s.isGeneratingPdf);
 
-  const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
+  const [bgImage, setBgImage] = useState<HTMLImageElement | null>(
+    page.background ? globalImageCache[page.background] || null : null
+  );
 
   useEffect(() => {
     if (page.background && (page.background.startsWith("http") || page.background.startsWith("data:") || page.background.startsWith("/"))) {
+      if (globalImageCache[page.background]) {
+        setBgImage(globalImageCache[page.background]);
+        return;
+      }
       const img = new window.Image();
       img.crossOrigin = "anonymous";
       img.src = page.background;
-      img.onload = () => setBgImage(img);
+      img.onload = () => {
+        globalImageCache[page.background] = img;
+        setBgImage(img);
+      };
     } else {
       setBgImage(null);
     }
@@ -551,7 +587,7 @@ function PageCanvas({
             el={el}
             pageId={page.id}
             isSelected={selectedElementId === el.id}
-            onSelect={() => selectElement(el.id)}
+            onSelect={selectElement}
             pageIsLocked={page.isLocked}
             onEditCalendarNote={onEditCalendarNote}
           />
@@ -653,11 +689,16 @@ export function EditorCanvas() {
     if (editingCalendarNote) setCalendarEditValue(editingCalendarNote.initialValue);
   }, [editingCalendarNote]);
 
+  const handleEditCalendarNote = useCallback((elId: string, pgId: string, date: string, val: string) => {
+    setEditingCalendarNote({ elementId: elId, pageId: pgId, dateKey: date, initialValue: val, note: val });
+  }, []);
+
   const stageRef = useRef<Konva.Stage>(null);
   const setStageRefStore = useEditorStore((s) => s.setStageRef);
 
   useEffect(() => {
     if (stageRef.current) setStageRefStore(stageRef.current);
+    preloadSpreadImages(spreads); // Pre-load all images for fast rendering
   }, [setStageRefStore, spreads]);
 
   useEffect(() => {
@@ -771,7 +812,7 @@ export function EditorCanvas() {
                 <PageCanvas
                   page={mobilePage === "left" ? currentSpread.leftPage : currentSpread.rightPage}
                   offsetX={0}
-                  onEditCalendarNote={(elId, pgId, date, val) => setEditingCalendarNote({ elementId: elId, pageId: pgId, dateKey: date, initialValue: val, note: val })}
+                  onEditCalendarNote={handleEditCalendarNote}
                   hasShadow={true}
                 />
               ) : (
@@ -791,14 +832,14 @@ export function EditorCanvas() {
                   <PageCanvas
                     page={currentSpread.leftPage}
                     offsetX={0}
-                    onEditCalendarNote={(elId, pgId, date, val) => setEditingCalendarNote({ elementId: elId, pageId: pgId, dateKey: date, initialValue: val, note: val })}
+                    onEditCalendarNote={handleEditCalendarNote}
                     hasShadow={false}
                   />
                   {/* Spine shadow removed for seamless viewing */}
                   <PageCanvas
                     page={currentSpread.rightPage}
                     offsetX={PAGE_WIDTH + gap}
-                    onEditCalendarNote={(elId, pgId, date, val) => setEditingCalendarNote({ elementId: elId, pageId: pgId, dateKey: date, initialValue: val, note: val })}
+                    onEditCalendarNote={handleEditCalendarNote}
                     hasShadow={false}
                   />
                 </Group>

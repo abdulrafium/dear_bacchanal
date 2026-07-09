@@ -13,7 +13,7 @@ import {
   Columns2,
   Grid2X2,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, memo, useRef } from "react";
 
 export function EditorBottomBar() {
   const spreads = useEditorStore((s) => s.spreads);
@@ -33,6 +33,16 @@ export function EditorBottomBar() {
   const isAdmin = useEditorStore((s) => s.isAdmin);
 
   const [showPageMenu, setShowPageMenu] = useState(false);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const scrollLeft = () => {
+    if (scrollRef.current) scrollRef.current.scrollBy({ left: -300, behavior: "smooth" });
+  };
+
+  const scrollRight = () => {
+    if (scrollRef.current) scrollRef.current.scrollBy({ left: 300, behavior: "smooth" });
+  };
 
   return (
     <div className="flex-shrink-0 bg-white border-t border-gray-100 flex flex-col w-full relative z-[2000]">
@@ -180,43 +190,90 @@ export function EditorBottomBar() {
       </div>
 
       {/* Page Thumbnails */}
-      {showThumbnails && (
-        <div className="flex items-center gap-3 px-4 py-4 overflow-x-auto bg-gray-50/20 custom-scrollbar border-t border-gray-100">
-          {spreads.map((spread, index) => (
-            <button
-              key={spread.id}
-              onClick={() => setCurrentSpread(index)}
-              className={`flex-shrink-0 group transition-all duration-300 ${
-                index === currentSpreadIndex ? "scale-105" : "opacity-50 hover:opacity-100"
-              }`}
+      {showThumbnails && (() => {
+        const coverBg = spreads[0]?.leftPage?.background;
+        const isImageBg = coverBg?.startsWith("http") || coverBg?.startsWith("data:") || coverBg?.startsWith("/");
+        const btnColor = isImageBg ? "#2d2d2d" : (coverBg || "#2d2d2d");
+
+        return (
+          <div className="relative border-t border-gray-100 bg-gray-50/20">
+            {/* Left Arrow */}
+            <button 
+              onClick={scrollLeft} 
+              className="absolute left-0 top-0 bottom-0 w-12 z-10 flex items-center justify-center"
             >
-              <div className={`flex rounded-lg overflow-hidden shadow-xl transition-all ${
-                  index === currentSpreadIndex
-                    ? "ring-2 ring-[#2d2d2d] ring-offset-2"
-                    : "ring-1 ring-gray-200 group-hover:ring-gray-300"
-                }`}
+              <div 
+                className="w-7 h-7 rounded-full flex items-center justify-center shadow-md hover:opacity-80 transition-opacity"
+                style={{ backgroundColor: btnColor }}
               >
-                <MiniPage page={spread.leftPage} isLeft={true} />
-                <MiniPage page={spread.rightPage} isLeft={false} />
+                <ChevronLeft className="w-4 h-4 text-white" />
               </div>
-              <p className="text-[9px] font-bold text-gray-500 text-center mt-2 uppercase tracking-widest group-hover:text-[#2d2d2d] transition-colors">
-                {index === 0 ? "Cover" : `P. ${index * 2 - 1}-${index * 2}`}
-              </p>
             </button>
-          ))}
-        </div>
-      )}
+
+            {/* Scrollable Thumbnails */}
+            <div 
+              ref={scrollRef}
+              className="flex items-center gap-3 px-14 py-4 overflow-x-auto scroll-smooth"
+              style={{ scrollbarWidth: 'thin', scrollbarColor: '#d1d5db transparent' }}
+            >
+              {spreads.map((spread, index) => (
+                <button
+                  key={spread.id}
+                  onClick={() => setCurrentSpread(index)}
+                  className={`flex-shrink-0 group transition-all duration-300 ${
+                    index === currentSpreadIndex ? "scale-105" : "opacity-50 hover:opacity-100"
+                  }`}
+                >
+                  <div className={`flex rounded-lg overflow-hidden shadow-xl transition-all ${
+                      index === currentSpreadIndex
+                        ? "ring-2 ring-[#2d2d2d] ring-offset-2"
+                        : "ring-1 ring-gray-200 group-hover:ring-gray-300"
+                    }`}
+                  >
+                    <MiniPage page={spread.leftPage} isLeft={true} />
+                    <MiniPage page={spread.rightPage} isLeft={false} />
+                  </div>
+                  <p className="text-[9px] font-bold text-gray-500 text-center mt-2 uppercase tracking-widest group-hover:text-[#2d2d2d] transition-colors">
+                    {index === 0 ? "Cover" : `P. ${index * 2 - 1}-${index * 2}`}
+                  </p>
+                </button>
+              ))}
+            </div>
+
+            {/* Right Arrow */}
+            <button 
+              onClick={scrollRight} 
+              className="absolute right-0 top-0 bottom-0 w-12 z-10 flex items-center justify-center"
+            >
+              <div 
+                className="w-7 h-7 rounded-full flex items-center justify-center shadow-md hover:opacity-80 transition-opacity"
+                style={{ backgroundColor: btnColor }}
+              >
+                <ChevronRight className="w-4 h-4 text-white" />
+              </div>
+            </button>
+          </div>
+        );
+      })()}
     </div>
   );
 }
 
-const MiniPage = ({ page, isLeft }: { page: any; isLeft?: boolean }) => {
+const MiniPage = memo(({ page, isLeft }: { page: any; isLeft?: boolean }) => {
+  const bgStyle = page.background?.startsWith("http") || page.background?.startsWith("data:") || page.background?.startsWith("/") 
+    ? { backgroundImage: `url(${page.background})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+    : { backgroundColor: page.background || "white" };
+
   return (
     <div 
-      className={`w-14 h-14 relative overflow-hidden bg-white shrink-0 ${!isLeft ? 'border-l border-gray-100' : ''}`}
-      style={{ backgroundColor: page.background }}
+      className={`w-14 h-14 relative overflow-hidden shrink-0 ${!isLeft ? 'border-l border-gray-100' : ''}`}
+      style={bgStyle}
     >
-      <svg viewBox="0 0 500 500" className="w-full h-full pointer-events-none">
+      <svg 
+        viewBox="0 0 500 500" 
+        className="w-full h-full pointer-events-none"
+        style={{ contain: 'strict', willChange: 'transform', transform: 'translateZ(0)' }}
+      >
         {page.elements?.map((el: any) => {
           const cx = el.x + el.width / 2;
           const cy = el.y + el.height / 2;
@@ -301,7 +358,7 @@ const MiniPage = ({ page, isLeft }: { page: any; isLeft?: boolean }) => {
                );
              }
           }
-
+          
           if (el.type === "calendar") {
              const headerH = 70;
              const cellW = el.width / 7;
@@ -339,4 +396,4 @@ const MiniPage = ({ page, isLeft }: { page: any; isLeft?: boolean }) => {
       </svg>
     </div>
   );
-};
+});
