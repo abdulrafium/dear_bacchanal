@@ -69,3 +69,7 @@ bacchanal\ doc.zip
 *.zip
 *.rar
 config.bat
+
+.env.backup
+.env.local
+.env*
