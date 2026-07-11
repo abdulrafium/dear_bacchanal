@@ -66,7 +66,7 @@ export function EditorTopToolbar() {
   };
 
   return (
-    <div className="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-2 sm:px-4 z-50 flex-shrink-0">
+    <div className="h-12 md:h-14 bg-white border-b border-gray-200 flex items-center justify-between px-2 sm:px-4 z-50 flex-shrink-0">
       <div className="flex items-center gap-0.5 sm:gap-1">
         <button
           onClick={() => router.push("/customize")}
@@ -189,22 +189,22 @@ export function EditorTopToolbar() {
                     onClick={async () => {
                       setShowPdfDropdown(false);
                       const { generatePdfBook } = useEditorStore.getState();
-                      toast.info("Generating HardCover PDF...");
+                      toast.info("Generating Cover PDF (No Bleed)...", { id: 'pdf-start' });
                       try {
                         await generatePdfBook(false, false, 'cover');
                       } catch (err) {
-                        toast.error("Failed to generate HardCover PDF");
+                        toast.error("Failed to generate Cover PDF");
                       }
                     }}
                     className="w-full text-left px-4 py-2 text-xs font-bold hover:bg-red-50 text-gray-700 hover:text-red-600 transition-colors"
                   >
-                    HardCover PDF
+                    Cover PDF (No Bleed)
                   </button>
                   <button 
                     onClick={async () => {
                       setShowPdfDropdown(false);
                       const { generatePdfBook } = useEditorStore.getState();
-                      toast.info("Generating Inner Pages PDF...");
+                      toast.info("Generating Inner Pages PDF (No Bleed)...", { id: 'pdf-start' });
                       try {
                         await generatePdfBook(false, false, 'inner');
                       } catch (err) {
@@ -213,13 +213,13 @@ export function EditorTopToolbar() {
                     }}
                     className="w-full text-left px-4 py-2 text-xs font-bold hover:bg-red-50 text-gray-700 hover:text-red-600 transition-colors border-t border-gray-50"
                   >
-                    Inner Pages PDF
+                    Inner Pages PDF (No Bleed)
                   </button>
                   <button 
                     onClick={async () => {
                       setShowPdfDropdown(false);
                       const { generatePdfBook } = useEditorStore.getState();
-                      toast.info("Generating Both PDFs...");
+                      toast.info("Generating Both PDFs...", { id: 'pdf-start' });
                       try {
                         await generatePdfBook(false, false, 'both');
                       } catch (err) {
@@ -228,7 +228,7 @@ export function EditorTopToolbar() {
                     }}
                     className="w-full text-left px-4 py-2 text-xs font-bold hover:bg-red-50 text-gray-700 hover:text-red-600 transition-colors border-t border-gray-50"
                   >
-                    Generate Both
+                    Generate Both (No Bleed)
                   </button>
                 </div>
               </>

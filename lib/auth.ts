@@ -60,6 +60,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const isPasswordValid = await compare(password!, user.password);
           if (!isPasswordValid) return null;
 
+          if (user.isDisabled) {
+            throw new Error("ACCOUNT_DISABLED");
+          }
+
           return {
             id: user._id.toString(),
             email: user.email,
@@ -108,6 +112,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               updatedAt: new Date(),
             });
           } else {
+            if (existingUser.isDisabled) {
+              console.log(`Blocked disabled Google user: ${user.email}`);
+              return "/?error=account_disabled";
+            }
             console.log(`Synching existing Google user: ${user.email}`);
             await usersCollection.updateOne(
               { _id: existingUser._id },

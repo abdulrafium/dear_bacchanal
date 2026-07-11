@@ -57,7 +57,7 @@ const Homepage = () => {
   return (
     <>
       {/* section 1 */}
-      <section className="bg-[#e09b2c] pt-32 lg:pt-0 min-h-screen w-full overflow-hidden relative">
+      <section className="bg-[#e09b2c] min-h-screen w-full overflow-hidden relative pt-20 lg:pt-24">
         <div className="flex flex-col lg:flex-row w-full min-h-screen relative">
           {/* LEFT CONTENT */}
           <div
@@ -65,7 +65,8 @@ const Homepage = () => {
                         w-full lg:max-w-3xl 
                         z-10 
                         px-6 lg:pl-60
-                        text-center lg:text-center"
+                        text-center lg:text-center
+                        mt-24 lg:-mt-36"
           >
             <h1 className="font-bold leading-tight text-[#bf0000]">
               <span className="block text-3xl sm:text-4xl lg:text-5xl font-handwritten">
@@ -102,8 +103,8 @@ const Homepage = () => {
           {/* RIGHT IMAGE */}
           <div
             className="
-            relative w-full h-[280px] sm:h-[380px]
-            lg:absolute lg:right-0 bottom-20 sm:bottom-0 lg:w-[50%] lg:min-h-[100%]
+            relative w-full aspect-square sm:aspect-[4/3]
+            lg:absolute lg:inset-y-0 lg:right-0 lg:w-[50%] lg:h-full lg:min-h-screen
           "
           >
             <Image
@@ -111,7 +112,7 @@ const Homepage = () => {
               alt="hero image"
               fill
               priority
-              className="object-contain lg:object-cover"
+              className="object-contain lg:object-cover object-right-bottom lg:object-center"
             />
           </div>
         </div>
@@ -119,7 +120,7 @@ const Homepage = () => {
       </section>
 
       {/* section 2 */}
-      <section className="relative min-h-screen w-full bg-[#521612]">
+      <section className="relative h-auto lg:min-h-screen w-full bg-[#521612] overflow-hidden">
         <Image
           src="/assets/layer-12.png"
           alt="Overlay"
@@ -129,7 +130,7 @@ const Homepage = () => {
         />
         <div className="absolute inset-0 bg-[#521612]/70 z-10" />
 
-        <div className="relative z-20 max-w-7xl mx-auto px-6 py-20 text-center">
+        <div className="relative z-20 max-w-7xl mx-auto px-6 py-12 lg:py-20 text-center">
           <h1 className="text-white text-3xl sm:text-5xl lg:text-7xl font-extrabold underline underline-offset-8 mb-16 uppercase">
             WHAT IS DEAR BACCHANAL?
           </h1>
@@ -148,7 +149,7 @@ const Homepage = () => {
       </section>
 
       {/* section 3 */}
-      <section className="relative w-full h-screen">
+      <section className="relative w-full h-[70vh] lg:h-screen overflow-hidden">
         <Image
           src="/assets/image.jpg"
           alt="Background"
@@ -167,7 +168,7 @@ const Homepage = () => {
       </section>
 
       {/* section 4 */}
-      <section className="bg-[#ecb52b] w-full min-h-screen py-20">
+      <section className="relative bg-[#ecb52b] w-full h-auto lg:min-h-screen py-12 lg:py-20 overflow-hidden">
         <div className="flex flex-col items-center mb-16">
           <h1
             className="text-4xl sm:text-6xl lg:text-[140px] text-white font-black text-center px-4 uppercase leading-none"
@@ -210,7 +211,7 @@ const Homepage = () => {
       </section>
 
       {/* section 5 */}
-      <section className="bg-[#c1bc38] relative min-h-screen w-full py-20 lg:py-0 overflow-hidden">
+      <section className="bg-[#c1bc38] relative h-auto lg:min-h-screen w-full py-12 lg:py-0 overflow-hidden">
         {/* Steelpan sticker positioned to bleed off the left edge */}
         <div className="hidden lg:block absolute -left-16 xl:-left-12 top-16 z-0">
           <Image src="/assets/section4.png" alt="inspiration" width={500} height={700} className="object-contain pointer-events-none" />
@@ -247,10 +248,10 @@ const Homepage = () => {
       </section>
 
       {/* section 6 */}
-      <section className="relative min-h-screen w-full overflow-hidden">
+      <section className="relative h-auto lg:min-h-screen w-full overflow-hidden">
         <Image src="/assets/section5.jpg" alt="inside" fill className="object-cover" />
-        <div className="relative z-20 max-w-7xl mx-auto px-6 py-24">
-          <h1 className="text-white text-center text-4xl sm:text-6xl lg:text-8xl font-black underline underline-offset-[16px] mb-24 uppercase">WHAT’S INSIDE?</h1>
+        <div className="relative z-20 max-w-7xl mx-auto px-6 py-12 lg:py-24">
+          <h1 className="text-white text-center text-4xl sm:text-6xl lg:text-8xl font-black underline underline-offset-[16px] mb-12 lg:mb-24 uppercase">WHAT’S INSIDE?</h1>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-20 gap-y-12">
             <div className="space-y-10">
               {["Trini-to-d-bone moments", "Fete-keeping memories", "Jouvert madness", "Road March Monday & Tuesday"].map((t) => (
@@ -273,11 +274,11 @@ const Homepage = () => {
       </section>
 
       {/* section 7 */}
-      <section className="relative min-h-screen w-full bg-[#521612]">
+      <section className="relative h-auto lg:min-h-screen w-full bg-[#521612] overflow-hidden">
         <Image src="/assets/layer-12.png" alt="overlay" fill className="object-cover opacity-20" />
         <div className="absolute inset-0 bg-[#521612]/70 z-10" />
-        <div className="relative z-20 max-w-7xl mx-auto px-6 py-24">
-          <h1 className="text-white text-center lg:text-left text-4xl sm:text-6xl lg:text-8xl font-black mb-24 uppercase">THIS BOOK IS FOR YOU IF...</h1>
+        <div className="relative z-20 max-w-7xl mx-auto px-6 py-12 lg:py-24">
+          <h1 className="text-white text-center lg:text-left text-4xl sm:text-6xl lg:text-8xl font-black mb-12 lg:mb-24 uppercase">THIS BOOK IS FOR YOU IF...</h1>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-16">
             {[
               { src: "/assets/dum.png", text: "This is your 1st carnival or your 15th" },
@@ -295,33 +296,33 @@ const Homepage = () => {
       </section>
 
       {/* section 8 */}
-      <section className="relative min-h-screen w-full">
+      <section className="relative h-auto lg:min-h-screen w-full overflow-hidden">
         <Image src="/assets/bacch.jpg" alt="footer hero" fill className="object-cover" />
-        <div className="relative z-20 min-h-screen flex flex-col justify-center items-center px-6">
-          <div className="flex flex-col items-start w-full max-w-min">
-            <h1 className="text-5xl sm:text-8xl lg:text-[160px] xl:text-[180px] font-display text-[#be2826] leading-[0.9] uppercase whitespace-nowrap">LET'S CREATE</h1>
+        <div className="relative z-20 h-auto lg:min-h-screen py-16 lg:py-0 flex flex-col justify-center items-center px-6 w-full">
+          <div className="flex flex-col items-center lg:items-start w-full max-w-5xl">
+            <h1 className="text-5xl sm:text-7xl md:text-8xl lg:text-[140px] xl:text-[180px] font-display text-[#be2826] leading-[0.9] uppercase text-center lg:text-left w-full break-words mt-4 lg:mt-0">LET'S CREATE</h1>
             
-            <div className="flex flex-col lg:flex-row items-center justify-start gap-6 lg:gap-12 my-6 lg:my-0 w-full">
-              <h1 className="text-5xl sm:text-8xl lg:text-[160px] xl:text-[180px] font-display text-[#be2826] leading-[0.9] uppercase">SOME</h1>
-              <button onClick={handleAction} className="bg-[#be2826] text-[#ecb52b] px-10 sm:px-12 py-5 sm:py-8 rounded-[3rem] shadow-2xl hover:scale-105 transition-transform flex flex-col items-center justify-center whitespace-nowrap">
-                <span className="text-2xl sm:text-3xl lg:text-4xl font-black uppercase leading-tight">CUSTOMISE</span>
-                <span className="text-2xl sm:text-3xl lg:text-4xl font-black uppercase leading-tight">YOUR BOOK NOW</span>
+            <div className="flex flex-col lg:flex-row items-center justify-center lg:justify-start gap-6 lg:gap-12 my-6 lg:my-0 w-full">
+              <h1 className="text-5xl sm:text-7xl md:text-8xl lg:text-[140px] xl:text-[180px] font-display text-[#be2826] leading-[0.9] uppercase text-center lg:text-left">SOME</h1>
+              <button onClick={handleAction} className="bg-[#be2826] text-[#ecb52b] px-6 sm:px-12 py-5 sm:py-8 rounded-[3rem] shadow-2xl hover:scale-105 transition-transform flex flex-col items-center justify-center text-center w-full sm:w-auto">
+                <span className="text-xl sm:text-2xl lg:text-4xl font-black uppercase leading-tight">CUSTOMISE</span>
+                <span className="text-xl sm:text-2xl lg:text-4xl font-black uppercase leading-tight">YOUR BOOK NOW</span>
               </button>
             </div>
 
-            <h1 className="text-5xl sm:text-8xl lg:text-[160px] xl:text-[180px] font-display text-[#be2826] leading-[0.9] uppercase">BACCHANAL</h1>
+            <h1 className="text-5xl sm:text-7xl md:text-8xl lg:text-[140px] xl:text-[180px] font-display text-[#be2826] leading-[0.9] uppercase text-center lg:text-left w-full break-words">BACCHANAL</h1>
           </div>
         </div>
       </section>
 
       {/* section 9 */}
-      <section className="bg-[#be2826] py-4 sm:py-6 text-center px-6">
+      <section className="relative bg-[#be2826] py-4 sm:py-6 text-center px-6 w-full overflow-hidden">
         <h1 className="text-[#ecb52b] text-xl sm:text-3xl lg:text-4xl font-display font-normal uppercase tracking-wider leading-none">PRE-ORDER DEAR BACCHANAL 2026</h1>
       </section>
 
       {/* section 10: Banner Image */}
-      <section className="w-full bg-[#111111]">
-        <Image src="/assets/banner.PNG" alt="Dear Bacchanal Banner" width={1920} height={600} className="w-full h-auto object-cover" />
+      <section className="relative w-full bg-[#111111] overflow-hidden">
+        <Image src="/assets/banner.png" alt="Dear Bacchanal Banner" width={1920} height={600} className="w-full h-auto object-cover" />
       </section>
     </>
   );

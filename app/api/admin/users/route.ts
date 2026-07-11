@@ -5,6 +5,7 @@ import { getDatabase } from "@/lib/db";
 import { adminAuthMiddleware } from "@/lib/admin-auth";
 import { ObjectId } from "mongodb";
 import { hash } from "bcryptjs";
+import { sendEmail } from "@/lib/mail-service";
 
 // GET - List all users
 export async function GET(req: NextRequest) {
@@ -73,13 +74,49 @@ export async function PATCH(req: NextRequest) {
 
     switch (action) {
       case "resetPassword": {
+        const user = await usersCollection.findOne({ _id: objectId });
+        if (!user) {
+          return NextResponse.json({ error: "User not found" }, { status: 404 });
+        }
+        
         const newPassword = value || "Temp@1234";
+        
+        if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
+          return NextResponse.json({ error: "Password must be at least 8 characters and contain at least one uppercase letter." }, { status: 400 });
+        }
+
         const hashedPassword = await hash(newPassword, 12);
+        
         await usersCollection.updateOne(
           { _id: objectId },
           { $set: { password: hashedPassword, updatedAt: new Date() } }
         );
-        return NextResponse.json({ message: `Password reset to: ${newPassword}` });
+
+        const emailContent = `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; color: #111; line-height: 1.6;">
+            <h1 style="color: #ff4757; text-transform: uppercase; font-weight: 900; letter-spacing: 1px;">Dear Bacchanal Carnival</h1>
+            <p>Dear <strong>${user.name || "User"}</strong>,</p>
+            <p>Your password has been reset by an admin.</p>
+            <div style="background-color: #f4f4f4; padding: 20px; border-radius: 12px; border-left: 4px solid #ff4757; margin: 25px 0;">
+              Our New Password below:
+              <div style="font-size: 24px; font-weight: bold; margin-top: 10px; color: #ff4757; letter-spacing: 2px;">
+                ${newPassword}
+              </div>
+            </div>
+            <p style="background-color: #fff3f3; padding: 10px; border-radius: 8px; font-size: 14px; color: #cc0000;">
+              <strong>Note:</strong> Please change your password from your dashboard after logging in.
+            </p>
+          </div>
+        `;
+
+        await sendEmail({
+          from: '"Dear Bacchanal" <admin@dearbacchanal.com>',
+          to: user.email, 
+          subject: "Password Reset - Dear Bacchanal Carnival",
+          html: emailContent
+        });
+
+        return NextResponse.json({ message: "Password reset successfully and email sent." });
       }
 
       case "toggleDisable": {
@@ -90,16 +127,6 @@ export async function PATCH(req: NextRequest) {
           { $set: { isDisabled: newState, updatedAt: new Date() } }
         );
         return NextResponse.json({ message: newState ? "User disabled" : "User enabled", isDisabled: newState });
-      }
-
-      case "togglePurchased": {
-        const user = await usersCollection.findOne({ _id: objectId });
-        const newState = !(user?.isPurchased);
-        await usersCollection.updateOne(
-          { _id: objectId },
-          { $set: { isPurchased: newState, updatedAt: new Date() } }
-        );
-        return NextResponse.json({ message: newState ? "Purchase enabled" : "Purchase revoked", isPurchased: newState });
       }
 
       default:

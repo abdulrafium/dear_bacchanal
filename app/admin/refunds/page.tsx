@@ -196,24 +196,26 @@ export default function AdminRefundsPage() {
         <p className="text-white/40 text-sm mt-2">Manage customer refund requests, apply 20% deductions, and process payments via Stripe.</p>
       </div>
 
-      <div className="flex items-center gap-4 border-b border-white/10 pb-4">
-        <button 
-            onClick={() => setActiveTab('pending')}
-            className={`font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-full transition-all ${activeTab === 'pending' ? 'bg-red-600 text-white shadow-xl shadow-red-600/20' : 'bg-white/5 text-white/40 hover:text-white hover:bg-white/10'}`}
-        >
-            Pending Requests
-        </button>
-        <button 
-            onClick={() => setActiveTab('history')}
-            className={`font-black text-xs uppercase tracking-widest px-6 py-2.5 rounded-full transition-all ${activeTab === 'history' ? 'bg-white text-black shadow-xl shadow-white/10' : 'bg-white/5 text-white/40 hover:text-white hover:bg-white/10'}`}
-        >
-            Refund History
-        </button>
-        <div className="flex-1" />
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 border-b border-white/10 pb-4">
+        <div className="flex flex-wrap items-center gap-2">
+            <button 
+                onClick={() => setActiveTab('pending')}
+                className={`font-black text-xs uppercase tracking-widest px-4 sm:px-6 py-2.5 rounded-full transition-all flex-1 sm:flex-none text-center ${activeTab === 'pending' ? 'bg-red-600 text-white shadow-xl shadow-red-600/20' : 'bg-white/5 text-white/40 hover:text-white hover:bg-white/10'}`}
+            >
+                Pending Requests
+            </button>
+            <button 
+                onClick={() => setActiveTab('history')}
+                className={`font-black text-xs uppercase tracking-widest px-4 sm:px-6 py-2.5 rounded-full transition-all flex-1 sm:flex-none text-center ${activeTab === 'history' ? 'bg-white text-black shadow-xl shadow-white/10' : 'bg-white/5 text-white/40 hover:text-white hover:bg-white/10'}`}
+            >
+                Refund History
+            </button>
+        </div>
+        <div className="hidden sm:block flex-1" />
         <button
             onClick={deleteAllRefunds}
             disabled={deletingAll || refunds.length === 0}
-            className="flex items-center gap-1.5 px-4 py-2.5 bg-red-500/10 border border-red-500/20 rounded-full text-red-400 hover:bg-red-500/20 transition-all text-[10px] font-bold uppercase tracking-wider disabled:opacity-50"
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-red-500/10 border border-red-500/20 rounded-full text-red-400 hover:bg-red-500/20 transition-all text-[10px] font-bold uppercase tracking-wider disabled:opacity-50 w-full sm:w-auto"
         >
             {deletingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
             {deletingAll ? 'Deleting All...' : 'Delete All'}

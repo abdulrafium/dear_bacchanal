@@ -269,13 +269,13 @@ export default function AdminDashboard() {
         </div>
 
         {/* Recent Activity */}
-        <div className="lg:col-span-12 bg-white/5 border border-white/10 rounded-3xl p-8">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-xl font-black text-white flex items-center gap-3 uppercase tracking-tight">
-                <Clock className="w-6 h-6 text-orange-400" />
-                Live User Activity
+        <div className="lg:col-span-12 bg-white/5 border border-white/10 rounded-3xl p-5 sm:p-8">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+            <h3 className="text-lg sm:text-xl font-black text-white flex items-center gap-3 uppercase tracking-tight">
+                <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-orange-400 flex-shrink-0" />
+                <span className="leading-none">Live User Activity</span>
             </h3>
-            <button className="text-[10px] font-black uppercase text-white/40 hover:text-white transition-colors tracking-widest">View All Users</button>
+            <button className="text-[10px] font-black uppercase text-white/40 hover:text-white transition-colors tracking-widest text-left sm:text-right self-start sm:self-auto">View All Users</button>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -285,7 +285,7 @@ export default function AdminDashboard() {
                 className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/5 hover:border-white/10 transition-all group"
                 style={{ animationDelay: `${idx * 50}ms` }}
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 pr-2">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-white/10 to-transparent flex items-center justify-center border border-white/10 group-hover:scale-110 transition-transform duration-300">
                     <span className="text-white font-black text-sm">
                         {user.name?.charAt(0)?.toUpperCase() || "?"}

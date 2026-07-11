@@ -37,6 +37,7 @@ export interface EditorElement {
   fill?: string;
   align?: "left" | "center" | "right";
   lineHeight?: number;
+  options?: string[]; // For dropdown text fields
   // Shape-specific
   shapeType?: ShapeType;
   stroke?: string;
@@ -66,7 +67,22 @@ export interface BookSpread {
   leftPage: BookPage;
   rightPage: BookPage;
   isV2?: boolean;
+  isOriginalTemplate?: boolean;
+  originalTemplateIndex?: number;
 }
+
+export const isFullyLockedSpread = (spread: BookSpread | undefined, isAdmin: boolean, currentIndex?: number) => {
+  if (!spread) return false;
+  const isOriginal = spread.isOriginalTemplate !== false; // Backwards compat: undefined means true
+  const indexToCheck = spread.originalTemplateIndex ?? currentIndex ?? 0;
+  return !isAdmin && isOriginal && [0, 2, 3, 15, 16].includes(indexToCheck);
+};
+
+export const isTemplateSpread = (spread: BookSpread | undefined, isAdmin: boolean, currentIndex?: number) => {
+  if (!spread) return false;
+  const isOriginal = spread.isOriginalTemplate !== false;
+  return !isAdmin && isOriginal && !isFullyLockedSpread(spread, isAdmin, currentIndex);
+};
 
 export type SidebarPanel = "images" | "templates" | "layouts" | "backgrounds" | "stickers" | "calendar" | "text" | null;
 export type RightTool = "text" | "photo" | "qrcode" | "layout" | "rectangle" | "ellipse" | "checkbox" | null;
@@ -80,6 +96,7 @@ interface EditorState {
   // Book data
   spreads: BookSpread[];
   currentSpreadIndex: number;
+  isPageTransitioning: boolean;
 
   // Template
   templateLoaded: boolean;
@@ -139,6 +156,7 @@ interface EditorState {
   setIsAdmin: (isAdmin: boolean) => void;
   setStageRef: (ref: Konva.Stage | null) => void;
   setIsOrderModalOpen: (open: boolean) => void;
+  setIsPageTransitioning: (isTransitioning: boolean) => void;
 
   // Actions - History
   undo: () => void;
@@ -149,7 +167,17 @@ interface EditorState {
   resetEditor: () => void;
   save: (isAdmin?: boolean) => Promise<boolean>;
   isGeneratingPdf: boolean;
-  pdfGenerationProgress: { current: number; total: number; status: string; isSoftCopy?: boolean } | null;
+  pdfGenerationProgress: {
+    current: number;
+    total: number;
+    status: string;
+    isSoftCopy?: boolean;
+    pdfType?: 'cover' | 'inner' | 'both';
+    coverCurrent?: number;
+    coverTotal?: number;
+    innerCurrent?: number;
+    innerTotal?: number;
+  } | null;
   generatePdfBook: (isHardCopy?: boolean, keepOverlayOpen?: boolean, pdfType?: 'cover' | 'inner' | 'both') => Promise<void>;
 }
 
@@ -174,6 +202,7 @@ function createDefaultSpread(): BookSpread {
 export const useEditorStore = create<EditorState>((set, get) => ({
   spreads: [],
   currentSpreadIndex: 0,
+  isPageTransitioning: false,
   templateLoaded: false,
   activeTemplateId: null,
   activeTemplateName: null,
@@ -198,6 +227,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setDirty: (dirty) => set({ isDirty: dirty }),
   setStageRef: (ref) => set({ stageRef: ref }),
   setIsOrderModalOpen: (open) => set({ isOrderModalOpen: open }),
+  setIsPageTransitioning: (isTransitioning) => set({ isPageTransitioning: isTransitioning }),
 
   // Navigation
   setCurrentSpread: (index) => set(() => ({
@@ -324,6 +354,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         ...state.spreads,
         {
           id: uuidv4(),
+          isOriginalTemplate: false,
           leftPage: createDefaultPage(`Page ${pageNum}`),
           rightPage: createDefaultPage(`Page ${pageNum + 1}`),
         },
@@ -340,6 +371,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
     const duped: BookSpread = {
       id: uuidv4(),
+      isOriginalTemplate: false,
       leftPage: { ...spreadToDupe.leftPage, id: uuidv4(), elements: spreadToDupe.leftPage.elements.map(el => ({ ...el, id: uuidv4() })) },
       rightPage: { ...spreadToDupe.rightPage, id: uuidv4(), elements: spreadToDupe.rightPage.elements.map(el => ({ ...el, id: uuidv4() })) },
     };
@@ -377,7 +409,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   loadTemplate: (spreads: BookSpread[], name: string, description?: string | null, country?: string | null, year?: string | null, id?: string | null) => {
     // Deep clone and force-lock the cover spread (index 0) for all non-admin users.
     // The isAdmin flag is checked at render time to allow admins to bypass this.
-    const loadedSpreads: BookSpread[] = JSON.parse(JSON.stringify(spreads));
+    const loadedSpreads: BookSpread[] = JSON.parse(JSON.stringify(spreads)).map((spread: BookSpread, i: number) => ({
+      ...spread,
+      isOriginalTemplate: true,
+      originalTemplateIndex: i,
+    }));
     if (loadedSpreads.length > 0) {
       loadedSpreads[0] = {
         ...loadedSpreads[0],
@@ -581,10 +617,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           compress: true
         });
       } else {
+        const firstPageFormat = (pdfType === 'cover' || pdfType === 'both') 
+          ? [929.84, 433.34] // Cover safe zone: 1000 - 70.16, 500 - 66.66
+          : [988.46, 488.46]; // Inner safe zone: 1000 - 11.54, 500 - 11.54
         softPdf = new jsPDF({
           orientation: "landscape",
           unit: "pt",
-          format: [1000, 500],
+          format: firstPageFormat,
           compress: true
         });
       }
@@ -634,51 +673,119 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         await embedFontIntoPdf(softPdf);
       }
 
-      // Generate the automated Title Page on PDF Page 1 (Right-hand side of the spread)
-      // Generate the automated Title Page on PDF Page 1 (Right-hand side of the spread) - HARD COPY ONLY
-      if (isHardCopy && textPdf && (pdfType === 'inner' || pdfType === 'both')) {
+      // Title page: Generated ONLY for USER hard copy purchases, NOT admin PDF downloads.
+      // Admin downloads must be clean print-ready files.
+      const isAdminDownload = get().isAdmin;
+      if (!isAdminDownload && isHardCopy && textPdf && (pdfType === 'inner' || pdfType === 'both')) {
         try {
           const titleCanvas = document.createElement('canvas');
-          const PIXEL_RATIO = 5; // High resolution for print
-          titleCanvas.width = TEXT_PAGE_WIDTH * PIXEL_RATIO; 
+          const PIXEL_RATIO = 5;
+          titleCanvas.width = TEXT_PAGE_WIDTH * PIXEL_RATIO;
           titleCanvas.height = TEXT_PAGE_HEIGHT * PIXEL_RATIO;
           const ctx = titleCanvas.getContext('2d');
           if (ctx) {
             ctx.scale(PIXEL_RATIO, PIXEL_RATIO);
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
-            
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            
-            // Draw Main Title
             ctx.fillStyle = coverBg.startsWith('#') ? coverBg : '#b5251a';
             ctx.font = '70px "Luckiest Guy", cursive';
             ctx.fillText('DEAR BACCHANAL', TEXT_PAGE_WIDTH / 2, TEXT_PAGE_HEIGHT / 2 - 40);
-            
-            // Draw Subtitle
             ctx.fillStyle = '#666666';
             ctx.font = 'italic 35px "Caveat", cursive';
             ctx.fillText('Trinidad Carnival 2026', TEXT_PAGE_WIDTH / 2, TEXT_PAGE_HEIGHT / 2 + 60);
-            
             const titleDataUrl = titleCanvas.toDataURL('image/jpeg', 0.92);
             textPdf.addImage(titleDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
           }
         } catch (e) {
-          console.error("Failed to generate title page", e);
+          console.error('Failed to generate title page', e);
         }
       }
 
-      toast.info(`Generating PDFs — ${spreads.length} spreads to process...`, { duration: 3000 });
+      // ── Compute per-mode totals for accurate progress display ──
+      // Cover = 1 page. Inner = all spreads minus cover spread.
+      const coverTotal = 1;
+      const innerTotal = Math.max(1, spreads.length - 1);
+      const softTotal  = spreads.length; // cover + all inner in one PDF
 
-      set({ pdfGenerationProgress: { current: 0, total: spreads.length, status: "Preparing pages...", isSoftCopy: !isHardCopy } });
+      // Which pages does this export include?
+      const exportingCover = pdfType === 'cover' || pdfType === 'both' || !isHardCopy;
+      const exportingInner = pdfType === 'inner' || pdfType === 'both' || !isHardCopy;
+
+      const totalForProgress =
+        pdfType === 'cover' ? coverTotal :
+        pdfType === 'inner' ? innerTotal :
+        !isHardCopy         ? softTotal  : // soft copy = all pages
+        /* both */            spreads.length;
+
+      toast.info(
+        pdfType === 'cover' ? `Generating Cover PDF (1 page)...` :
+        pdfType === 'inner' ? `Generating Inner Pages PDF (${innerTotal} pages)...` :
+        `Generating PDFs — ${spreads.length} spreads...`,
+        { duration: 3000 }
+      );
+
+      set({
+        pdfGenerationProgress: {
+          current: 0,
+          total: totalForProgress,
+          status: 'Preparing pages...',
+          isSoftCopy: !isHardCopy,
+          pdfType,
+          coverCurrent: 0,
+          coverTotal,
+          innerCurrent: 0,
+          innerTotal,
+        }
+      });
+
+      // Track relative (1-based) page numbers within each section
+      let coverPageNum = 0;
+      let innerPageNum = 0;
 
       for (let i = 0; i < spreads.length; i++) {
-        if (pdfType === 'inner' && i === 0) continue;
-        if (pdfType === 'cover' && i > 0) break;
+        if (pdfType === 'inner' && i === 0) continue; // skip cover for inner-only export
+        if (pdfType === 'cover' && i > 0) break;      // only cover spread
 
-        set({ pdfGenerationProgress: { current: i + 1, total: spreads.length, status: `Rendering page ${i + 1} of ${spreads.length}...`, isSoftCopy: !isHardCopy } });
-        toast.info(`Rendering spread ${i + 1} of ${spreads.length}...`, { duration: 2000, id: 'pdf-progress' });
+
+        // Compute relative page numbers for progress display
+        if (i === 0) {
+          coverPageNum = 1;
+        } else {
+          innerPageNum = i; // spread index 1..N → inner page 1..N-1
+        }
+
+        // What is the "current page" number in the context of this specific export?
+        const relCurrent = pdfType === 'cover' ? coverPageNum :
+                           pdfType === 'inner' ? innerPageNum :
+                           !isHardCopy         ? i + 1 :       // soft: all pages in order
+                           /* both */            i + 1;
+
+        const relTotal = pdfType === 'cover' ? coverTotal :
+                         pdfType === 'inner' ? innerTotal :
+                         !isHardCopy         ? softTotal  :
+                         /* both */            spreads.length;
+
+        const pageLabel = i === 0 ? 'Cover' : `Inner page ${innerPageNum} of ${innerTotal}`;
+        const toastLabel = pdfType === 'cover'
+          ? `Rendering cover (1 of 1)...`
+          : pdfType === 'inner'
+          ? `Rendering inner page ${innerPageNum} of ${innerTotal}...`
+          : i === 0
+          ? `Rendering cover (1 of 1)...`
+          : `Rendering inner page ${innerPageNum} of ${innerTotal}...`;
+
+        set({
+          pdfGenerationProgress: {
+            ...get().pdfGenerationProgress!,
+            current: relCurrent - 1,
+            status: `Preparing ${pageLabel}...`,
+            coverCurrent: i === 0 ? 0 : coverPageNum,
+            innerCurrent: i > 0 ? innerPageNum - 1 : 0,
+          }
+        });
+        toast.info(toastLabel, { duration: 2000, id: 'pdf-progress' });
 
         setCurrentSpread(i, true);
 
@@ -793,10 +900,36 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           await new Promise(r => setTimeout(r, 300)); // Let the draw flush
 
           // 7. Capture high-quality snapshot for the ENTIRE continuous spread (Left + Right, gap is removed in UI)
-          set({ pdfGenerationProgress: { current: i + 1, total: spreads.length, status: `Finalizing page ${i + 1}...`, isSoftCopy: !isHardCopy } });
+          set({
+            pdfGenerationProgress: {
+              ...get().pdfGenerationProgress!,
+              current: relCurrent,
+              status: `Finalizing ${pageLabel}...`,
+              coverCurrent: i === 0 ? 1 : coverPageNum,
+              innerCurrent: i > 0 ? innerPageNum : 0,
+            }
+          });
 
           // Clean up the white background
           exportBg.destroy();
+
+          // ─── FIX: Temporarily set stage to 1:1 scale for pixel-perfect capture ───
+          // When scale < 1 (canvas fits on screen), the stage canvas is physically
+          // smaller than PAGE_WIDTH*2 × PAGE_HEIGHT. toDataURL works in pixel coords,
+          // so anything beyond the canvas bounds renders as black.
+          // Setting to natural size ensures the full spread is captured with no black areas.
+          const originalScaleX = currentStageRef.scaleX();
+          const originalScaleY = currentStageRef.scaleY();
+          const originalWidth  = currentStageRef.width();
+          const originalHeight = currentStageRef.height();
+
+          currentStageRef.scaleX(1);
+          currentStageRef.scaleY(1);
+          currentStageRef.width(PAGE_WIDTH * 2);
+          currentStageRef.height(PAGE_HEIGHT);
+          currentStageRef.batchDraw();
+          await new Promise(r => setTimeout(r, 150)); // Allow redraw to flush
+
           currentStageRef.batchDraw();
 
           if (!isHardCopy && softPdf) {
@@ -821,10 +954,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
               x: cropX, y: cropY, width: cropW, height: cropH,
               pixelRatio: 5, mimeType: "image/jpeg", quality: 0.92
             });
-            if (i > 0) {
-              softPdf.addPage([1000, 500], "landscape");
+            const isFirstIteration = (pdfType === 'inner') ? (i === 1) : (i === 0);
+            if (!isFirstIteration) {
+              softPdf.addPage([cropW, cropH], "landscape");
             }
-            softPdf.addImage(spreadDataUrl, 'JPEG', 0, 0, 1000, 500);
+            softPdf.addImage(spreadDataUrl, 'JPEG', 0, 0, cropW, cropH);
           } else if (isHardCopy && coverPdf && textPdf) {
             // HARD COPY - Strict layout for Pureprint factory requirements
             if (i === 0) {
@@ -865,6 +999,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
               textPdf.addImage(rightDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
             }
           }
+
+          // ─── Restore stage to original display scale ───
+          currentStageRef.scaleX(originalScaleX);
+          currentStageRef.scaleY(originalScaleY);
+          currentStageRef.width(originalWidth);
+          currentStageRef.height(originalHeight);
+          currentStageRef.batchDraw();
         }
       }
 
@@ -948,15 +1089,48 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const rawTextBlob = textPdf.output('blob');
         coverBlob = await embedFontWithPdfLib(rawCoverBlob);
         textBlob = await embedFontWithPdfLib(rawTextBlob);
+
+        // Trigger local downloads for the generated print-ready PDFs
+        if (pdfType === 'cover' || pdfType === 'both') {
+          const coverBlobUrl = URL.createObjectURL(coverBlob);
+          const coverLink = document.createElement('a');
+          coverLink.href = coverBlobUrl;
+          coverLink.download = `${baseFileName}_Cover_PrintReady.pdf`;
+          document.body.appendChild(coverLink);
+          coverLink.click();
+          document.body.removeChild(coverLink);
+          setTimeout(() => URL.revokeObjectURL(coverBlobUrl), 5000);
+        }
+
+        if (pdfType === 'inner' || pdfType === 'both') {
+          const textBlobUrl = URL.createObjectURL(textBlob);
+          const textLink = document.createElement('a');
+          textLink.href = textBlobUrl;
+          textLink.download = `${baseFileName}_Inner_PrintReady.pdf`;
+          document.body.appendChild(textLink);
+          textLink.click();
+          document.body.removeChild(textLink);
+          setTimeout(() => URL.revokeObjectURL(textBlobUrl), 5000);
+        }
+        
+        toast.success("Print-ready PDFs downloaded successfully!", { duration: 5000 });
       } else if (!isHardCopy && softPdf) {
         const rawSoftBlob = softPdf.output('blob');
         softBlob = await embedFontWithPdfLib(rawSoftBlob);
         
-        // Trigger Single Unified Download for Soft Copy
+        // Trigger Single Unified Download for Soft Copy (or specific Admin no-bleed export)
         const softBlobUrl = URL.createObjectURL(softBlob);
         const softLink = document.createElement('a');
         softLink.href = softBlobUrl;
-        softLink.download = `${baseFileName}_Digital_Book.pdf`;
+        
+        if (pdfType === 'cover') {
+          softLink.download = `${baseFileName}_Cover_NoBleed.pdf`;
+        } else if (pdfType === 'inner') {
+          softLink.download = `${baseFileName}_Inner_NoBleed.pdf`;
+        } else {
+          softLink.download = `${baseFileName}_Digital_Book.pdf`;
+        }
+        
         document.body.appendChild(softLink);
         softLink.click();
         document.body.removeChild(softLink);
@@ -1034,6 +1208,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       } catch(e){}
       toast.error("PDF generation failed. Please try again.");
     } finally {
+      toast.dismiss('pdf-progress');
+      toast.dismiss('pdf-start');
       set({ isGeneratingPdf: false });
       if (!keepOverlayOpen) {
         set({ pdfGenerationProgress: null });

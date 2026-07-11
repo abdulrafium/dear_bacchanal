@@ -1,7 +1,7 @@
 "use client";
 
-import { useEditorStore } from "@/store/editor-store";
-import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Layers, Trash2, Bookmark, ChevronDown, Lock, Unlock, Image } from "lucide-react";
+import { useEditorStore, isTemplateSpread } from "@/store/editor-store";
+import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Layers, Trash2, Bookmark, ChevronDown, Lock, Unlock, Image, ImageOff, UserMinus } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
 
 export function EditorElementToolbar() {
@@ -21,10 +21,16 @@ export function EditorElementToolbar() {
   const [isFontOpen, setIsFontOpen] = useState(false);
   const fontDropdownRef = useRef<HTMLDivElement>(null);
 
+  const [isSizeOpen, setIsSizeOpen] = useState(false);
+  const sizeDropdownRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (fontDropdownRef.current && !fontDropdownRef.current.contains(event.target as Node)) {
         setIsFontOpen(false);
+      }
+      if (sizeDropdownRef.current && !sizeDropdownRef.current.contains(event.target as Node)) {
+        setIsSizeOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -62,12 +68,34 @@ export function EditorElementToolbar() {
 
   const { element, pageId } = selectedElementInfo;
 
-  // Block toolbar for non-admin users on the cover spread (index 0)
   const currentSpreadIndex = useEditorStore.getState().currentSpreadIndex;
+  const currentSpread = spreads[currentSpreadIndex];
   const coverSpread = spreads[0];
   const isOnCoverPage = coverSpread && (coverSpread.leftPage.id === pageId || coverSpread.rightPage.id === pageId);
   if (isOnCoverPage && !isAdmin) return null;
 
+  const isTemplatePage = isTemplateSpread(currentSpread, isAdmin, currentSpreadIndex);
+
+  // For Template Pages: Only show toolbar for Image Frames with a populated image (so they can clear it)
+  if (isTemplatePage) {
+    if ((element.type === "image" || element.type === "photo-card") && element.src) {
+      return (
+        <div 
+          className="fixed z-[1001] bg-white rounded-lg shadow-[0_10px_30px_rgba(0,0,0,0.1)] border border-gray-100 flex items-center p-1.5 gap-1.5 h-11 max-w-full overflow-visible transition-all duration-300 animate-in fade-in zoom-in-95"
+          style={toolbarPos || { top: 80, left: "50%", transform: "translateX(-50%)" }}
+        >
+          <button 
+            onClick={() => updateElement(pageId, element.id, { src: undefined })} 
+            className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-gray-600 hover:bg-gray-50 transition-colors hover:text-red-500 shrink-0" 
+            title="Remove Photo from Frame"
+          >
+            <ImageOff className="w-5 h-5" />
+          </button>
+        </div>
+      );
+    }
+    return null;
+  }
 
   const fonts = [
     "Arial",
@@ -166,24 +194,35 @@ export function EditorElementToolbar() {
             </div>
 
             {/* Font Size */}
-            <div className="relative group flex items-center h-10 px-3 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg cursor-pointer transition-colors w-20 md:w-24 justify-between shrink-0">
-              <select
-                value={element.fontSize || (element.type === "calendar" ? 16 : 18)}
-                onChange={(e) => {
-                  const size = parseInt(e.target.value);
-                  update({ fontSize: size });
-                  setPreviewElement(null, null);
-                }}
-                onMouseEnter={() => setPreviewElement(element.id, { fontSize: element.fontSize || (element.type === "calendar" ? 16 : 18) })}
-                onMouseLeave={() => setPreviewElement(null, null)}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            {/* Real-time Font Size Selector */}
+            <div ref={sizeDropdownRef} className="relative shrink-0">
+              <button
+                onClick={() => setIsSizeOpen(!isSizeOpen)}
+                className="flex items-center h-10 px-2 bg-gray-50 hover:bg-gray-100 border border-transparent hover:border-gray-200 rounded-lg cursor-pointer transition-colors w-16 justify-between shrink-0 gap-1"
               >
-                {sizes.map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-              <span className="text-xs md:text-sm text-gray-700">{element.fontSize || (element.type === "calendar" ? 16 : 18)}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+                <span className="text-xs md:text-sm text-gray-700">{element.fontSize || (element.type === "calendar" ? 16 : 18)}</span>
+                <ChevronDown className={`w-3.5 h-3.5 text-gray-500 transition-transform ${isSizeOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isSizeOpen && (
+                <div className="absolute top-full left-0 mt-2 w-20 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-[100] animate-in fade-in zoom-in-95 duration-200 max-h-[250px] overflow-y-auto custom-scrollbar">
+                  {sizes.map((s) => (
+                    <button
+                      key={s}
+                      className={`w-full text-left px-4 py-2 text-sm transition-colors block text-gray-800 ${element.fontSize === s ? 'bg-gray-50 font-bold text-[#9f2e2b]' : 'hover:bg-gray-50 hover:text-[#9f2e2b]'}`}
+                      onMouseEnter={() => setPreviewElement(element.id, { fontSize: s })}
+                      onMouseLeave={() => setPreviewElement(null, null)}
+                      onClick={() => {
+                        update({ fontSize: s });
+                        setPreviewElement(null, null);
+                        setIsSizeOpen(false);
+                      }}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="w-[1px] h-6 bg-gray-200 mx-1" />
@@ -315,16 +354,28 @@ export function EditorElementToolbar() {
         <div className="w-[px] h-6 bg-gray-100 mx-1" />
 
         {element.type === "photo-card" && (
-           <button 
-             className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-teal hover:bg-teal/5 transition-colors shrink-0" 
-             title="Change Photo"
-             onClick={() => {
-                // Trigger upload input if needed, or open sidebar
-                useEditorStore.getState().setSidebarPanel("images");
-             }}
-           >
-             <Image className="w-5 h-5" />
-           </button>
+           <>
+             <button 
+               className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-teal hover:bg-teal/5 transition-colors shrink-0" 
+               title="Change Photo"
+               onClick={() => {
+                  useEditorStore.getState().setSidebarPanel("images");
+               }}
+             >
+               <Image className="w-5 h-5" />
+             </button>
+             {element.src && (
+               <button 
+                 className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-orange-500 hover:bg-orange-50 transition-colors shrink-0" 
+                 title="Remove Photo"
+                 onClick={() => {
+                    update({ src: "" });
+                 }}
+               >
+                 <ImageOff className="w-5 h-5" />
+               </button>
+             )}
+           </>
         )}
 
         {element.type === "text" && (

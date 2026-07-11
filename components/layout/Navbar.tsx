@@ -34,9 +34,9 @@ const Navbar = () => {
 
   return (
     <nav
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${scrolled
-        ? "bg-black/60 backdrop-blur-md m-2 md:m-5 rounded-xl"
-        : "bg-black/40 backdrop-blur-sm lg:bg-transparent lg:backdrop-blur-none rounded-xl top-8"
+      className={`relative mx-auto transition-all duration-500 ${scrolled
+        ? "w-[calc(100%-1rem)] md:w-[calc(100%-2.5rem)] bg-black/60 backdrop-blur-md mt-2 md:mt-5 rounded-xl"
+        : "w-full bg-black/40 backdrop-blur-sm lg:bg-transparent lg:backdrop-blur-none mt-0"
         }`}
     >
       <div className="w-full px-4 md:px-8 lg:px-10">
@@ -114,7 +114,7 @@ const Navbar = () => {
                 </Link>
               ))}
               {mounted && isAuthenticated ? (
-                <UserAvatar />
+                <UserAvatar align="left" />
               ) : (
                 <button
                   onClick={() => {

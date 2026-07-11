@@ -8,14 +8,14 @@ import { useAuthModal } from "@/hooks/useAuthModal";
 import { signInSchema, SignInInput } from "@/lib/validators";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signIn, getSession } from "next-auth/react";
-
 export function SignInForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
-  const { toggleView, closeModal } = useAuthModal();
+  const [showPassword, setShowPassword] = useState(false);
+  const { toggleView, closeModal, setView } = useAuthModal();
   const router = useRouter();
 
   const {
@@ -36,7 +36,12 @@ export function SignInForm() {
       });
 
       if (result?.error) {
-        toast.error("Invalid email or password");
+        if (result.error === "ACCOUNT_DISABLED" || result.error.includes("ACCOUNT_DISABLED")) {
+          closeModal();
+          router.push("/?error=account_disabled");
+        } else {
+          toast.error("Invalid email or password");
+        }
       } else {
         const session = await getSession();
         toast.success("Signed in successfully!");
@@ -93,17 +98,41 @@ export function SignInForm() {
 
         <div className="space-y-1">
           <Label htmlFor="password" className="text-xs">Password</Label>
-          <Input
-            id="password"
-            type="password"
-            placeholder="••••••••"
-            {...register("password")}
-            disabled={isLoading}
-            className="h-9 text-sm"
-          />
-          {errors.password && (
-            <p className="text-[10px] text-red-400">{errors.password.message}</p>
-          )}
+          <div className="relative">
+            <Input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              placeholder="••••••••"
+              {...register("password")}
+              disabled={isLoading}
+              className="h-9 text-sm pr-10"
+            />
+            <button
+              type="button"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300 transition-colors focus:outline-none"
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? (
+                <EyeOff className="h-4 w-4" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+          <div className="flex justify-between items-center mt-1">
+            {errors.password ? (
+              <p className="text-[10px] text-red-400">{errors.password.message}</p>
+            ) : (
+              <div /> // Spacer
+            )}
+            <button
+              type="button"
+              onClick={() => setView("forgot-password")}
+              className="text-[10px] text-coral hover:text-white transition-colors"
+            >
+              Forgot Password?
+            </button>
+          </div>
         </div>
 
         <button

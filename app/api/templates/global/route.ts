@@ -11,16 +11,16 @@ export async function GET(req: NextRequest) {
     // Find all global templates, projecting only necessary fields
     // Find only active global templates
     const templates = await templatesCollection
-      .find({ 
+      .find({
         $or: [
           { active: { $ne: false } },
           { isActive: { $ne: false } }
         ]
       })
-      .project({ 
-        templateName: 1, 
-        description: 1, 
-        country: 1, 
+      .project({
+        templateName: 1,
+        description: 1,
+        country: 1,
         year: 1,
         thumbnail: 1,
         active: 1,

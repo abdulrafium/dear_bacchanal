@@ -144,9 +144,13 @@ export default function ConditionalLayout({
 
   return (
     <>
-      <PromoBanner />
-      <Navbar />
-      {children}
+      <header className="fixed top-0 left-0 right-0 z-50 flex flex-col">
+        <PromoBanner />
+        <Navbar />
+      </header>
+      <main>
+        {children}
+      </main>
       <Footer />
     </>
   );

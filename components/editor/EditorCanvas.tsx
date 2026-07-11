@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, useCallback, memo } from "react";
 import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group, Circle, Line } from "react-konva";
 import { Html } from "react-konva-utils";
-import { useEditorStore, EditorElement, BookPage } from "@/store/editor-store";
+import { useEditorStore, EditorElement, BookPage, isFullyLockedSpread, isTemplateSpread } from "@/store/editor-store";
 import Konva from "konva";
 import { PAGE_LAYOUTS } from "@/lib/layouts";
 import { ChevronLeft, ChevronRight, Calendar, LayoutGrid, X, Edit3 } from "lucide-react";
@@ -21,6 +21,7 @@ const PageElement = memo(function PageElement({
   onSelect,
   pageIsLocked,
   onEditCalendarNote,
+  safeZoneRight,
 }: {
   el: EditorElement;
   pageId: string;
@@ -28,6 +29,7 @@ const PageElement = memo(function PageElement({
   onSelect: (id: string) => void;
   pageIsLocked?: boolean;
   onEditCalendarNote?: (elId: string, pageId: string, dateKey: string, initialValue: string) => void;
+  safeZoneRight?: number; // right edge of the safe zone (px from page left) for capping textarea width
 }) {
   const shapeRef = useRef<any>(null);
   const trRef = useRef<Konva.Transformer>(null);
@@ -64,8 +66,17 @@ const PageElement = memo(function PageElement({
 
   const isPreviewMode = useEditorStore((s) => s.isPreviewMode);
   const isAdmin = useEditorStore((s) => s.isAdmin);
+  const currentSpreadIndex = useEditorStore((s) => s.currentSpreadIndex);
+  const currentSpread = useEditorStore((s) => s.spreads[currentSpreadIndex]);
+  const isTemplatePage = isTemplateSpread(currentSpread, isAdmin, currentSpreadIndex);
 
-  const canInteract = !isPreviewMode && (!pageIsLocked && !el.isLocked || isAdmin);
+  const isDropdown = el.type === "text" && el.options && el.options.length > 0;
+  const defaultPlaceholder = isDropdown ? "Select..." : "Enter Text";
+  const isPlaceholderText = el.type === "text" && (!el.text || el.text === "Enter Text" || el.text === "Your Name" || el.text === "( Your Name )" || el.text === "Insert Your Name" || el.text === "Select...");
+  const isFillableElement = isPlaceholderText || el.type === "image" || el.type === "photo-card" || el.type === "checkbox" || el.type === "calendar";
+
+  const canInteract = !isPreviewMode && (!pageIsLocked && !el.isLocked || isAdmin) && (!isTemplatePage || isFillableElement);
+  const canMove = !isPreviewMode && (!pageIsLocked && !el.isLocked || isAdmin) && !isTemplatePage;
   const isCircle = el.shapeType === "ellipse";
 
   const previewElement = useEditorStore((s) => s.previewElement);
@@ -84,36 +95,56 @@ const PageElement = memo(function PageElement({
     shadowColor: (displayEl as any)?.shadowColor,
     shadowOffsetX: (displayEl as any)?.shadowOffsetX,
     shadowOffsetY: (displayEl as any)?.shadowOffsetY,
-    draggable: canInteract,
+    draggable: canMove,
     onClick: canInteract ? () => onSelect(el.id) : undefined,
     onTap: canInteract ? () => onSelect(el.id) : undefined,
-    onDragEnd: handleDragEnd,
-    onTransformEnd: handleTransformEnd,
+    onDragEnd: canMove ? handleDragEnd : undefined,
+    onTransformEnd: canMove ? handleTransformEnd : undefined,
   };
 
   const renderElement = () => {
     switch (displayEl.type) {
-      case "text":
+      case "text": {
+        const isDropdown = displayEl.options && displayEl.options.length > 0;
+        const defaultPlaceholder = isDropdown ? "Select..." : "Enter Text";
+        const isPlaceholderText = !displayEl.text || displayEl.text === "Enter Text" || displayEl.text === "Your Name" || displayEl.text === "( Your Name )" || displayEl.text === "Insert Your Name" || displayEl.text === "Select...";
+        const displayFill = displayEl.fill || "#000000";
         return (
           <Text
             {...commonProps}
-            text={displayEl.text || "Enter text"}
-            fontSize={displayEl.fontSize || 18}
+            width={isDropdown && el.width > 220 ? 220 : el.width}
+            text={displayEl.text || defaultPlaceholder}
+            fontSize={isDropdown && (displayEl.fontSize || 18) > 20 ? 20 : (displayEl.fontSize || 18)}
             fontFamily={displayEl.fontFamily || "Arial"}
-            fill={displayEl.fill || "#000000"}
+            fill={displayFill}
+            opacity={isPlaceholderText ? 0.75 : 1}
             align={displayEl.align || "left"}
             fontStyle={`${displayEl.fontStyle || ""}`.includes("bold") && `${displayEl.fontStyle || ""}`.includes("italic") ? "bold italic" : (`${displayEl.fontStyle || ""}`.includes("bold") ? "bold" : (`${displayEl.fontStyle || ""}`.includes("italic") ? "italic" : "normal"))}
             textDecoration={displayEl.fontStyle?.includes("underline") ? "underline" : "none"}
             padding={8}
             lineHeight={displayEl.lineHeight || 1.2}
+            wrap="word"
+            height={undefined}
+            onClick={() => {
+              if (!canInteract) return;
+              if (isPlaceholderText || isDropdown) {
+                // Single click on placeholder OR dropdown immediately opens edit mode
+                setIsEditing(true);
+                setEditValue(isPlaceholderText ? "" : (displayEl.text || ""));
+              } else {
+                // Normal click just selects
+                if (commonProps.onClick) (commonProps.onClick as any)();
+              }
+            }}
             onDblClick={() => {
               if (!canInteract) return;
               setIsEditing(true);
-              setEditValue(displayEl.text || "");
+              setEditValue(isPlaceholderText ? "" : (displayEl.text || ""));
             }}
             visible={!isEditing}
           />
         );
+      }
 
       case "image":
       case "sticker":
@@ -187,18 +218,18 @@ const PageElement = memo(function PageElement({
     <>
       {renderElement()}
       <PhotoCardInput el={el} pageId={pageId} isSelected={isSelected} />
-      {isSelected && !isEditing && (
+      {isSelected && !isPreviewMode && canMove && (
         <Transformer
           ref={trRef}
+          flipEnabled={false}
           boundBoxFunc={(oldBox, newBox) => {
             if (newBox.width < 20 || newBox.height < 20) return oldBox;
             return newBox;
           }}
-          anchorSize={typeof window !== 'undefined' && window.innerWidth < 768 ? 16 : 12}
-          anchorCornerRadius={6}
-          borderStroke="white"
-          borderStrokeWidth={3}
-          anchorStroke="rgba(0,0,0,0.2)"
+          anchorSize={8}
+          anchorCornerRadius={4}
+          anchorStroke="#9f2e2b"
+          anchorStrokeWidth={2}
           anchorFill="#ffffff"
           shadowBlur={10}
           shadowColor="rgba(0,0,0,0.3)"
@@ -206,100 +237,288 @@ const PageElement = memo(function PageElement({
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right', 'top-center', 'bottom-center']}
         />
       )}
-      {isEditing && (
-        <Group x={el.x} y={el.y} width={el.width} height={el.height} rotation={el.rotation}>
-          <Html>
-            <textarea
-              value={editValue}
-              onChange={(e) => setEditValue(e.target.value)}
-              onBlur={() => {
-                setIsEditing(false);
-                updateElement(pageId, el.id, { text: editValue });
-              }}
-              autoFocus
-              style={{
-                width: `${el.width}px`,
-                height: `${el.height}px`,
-                fontSize: `${el.fontSize || 18}px`,
-                fontFamily: el.fontFamily ? `'${el.fontFamily}', sans-serif` : "Arial",
-                color: el.fill || "#000000",
-                textAlign: (el.align as any) || "left",
-                fontWeight: el.fontStyle?.includes("bold") ? "bold" : "normal",
-                fontStyle: el.fontStyle?.includes("italic") ? "italic" : "normal",
-                textDecoration: el.fontStyle?.includes("underline") ? "underline" : "none",
-                background: "transparent",
-                border: "2px solid #3b82f6",
-                borderRadius: "4px",
-                padding: "4px",
-                resize: "none",
-                outline: "none",
-                lineHeight: el.lineHeight ? String(el.lineHeight) : "1.2",
-              }}
-            />
-          </Html>
-        </Group>
-      )}
+      {isEditing && (() => {
+        const textareaId = `textarea-edit-${el.id}`;
+
+        // Max width = distance from el.x to the safe zone right edge (don't overflow the dashed boundary)
+        const maxWidth = safeZoneRight != null
+          ? Math.max(el.width, safeZoneRight - el.x - 8) // 8px inner padding buffer
+          : PAGE_WIDTH - el.x - 8;
+
+        // Auto-resize: grows width by measuring widest line via a hidden span,
+        // and grows height by reading scrollHeight.
+        const autoResize = (node: HTMLTextAreaElement | null) => {
+          if (!node) return;
+          // Height: shrink to 'auto' first so scrollHeight reflects true content height
+          node.style.height = "auto";
+          node.style.height = `${Math.max(el.height, node.scrollHeight)}px`;
+
+          // Width: use a hidden span to measure the widest line
+          const lines = (node.value || "").split("\n");
+          const widestLine = lines.reduce((a, b) => (a.length > b.length ? a : b), "") || (displayEl.text || defaultPlaceholder);
+          const span = document.createElement("span");
+          Object.assign(span.style, {
+            position: "fixed",
+            top: "-9999px",
+            left: "-9999px",
+            visibility: "hidden",
+            whiteSpace: "pre",
+            fontSize: `${el.fontSize || 18}px`,
+            fontFamily: el.fontFamily ? `'${el.fontFamily}', sans-serif` : "Arial",
+            fontWeight: el.fontStyle?.includes("bold") ? "bold" : "normal",
+            padding: "8px",
+          });
+          span.textContent = widestLine;
+          document.body.appendChild(span);
+          const measuredWidth = span.offsetWidth + 24;
+          document.body.removeChild(span);
+          // Grow up to maxWidth, then wrap (height will grow instead)
+          const finalWidth = Math.min(Math.max(el.width, measuredWidth, 220), maxWidth);
+          node.style.width = `${finalWidth}px`;
+          node.style.minWidth = `${finalWidth}px`;
+          // When capped at maxWidth, allow wrapping
+          node.style.whiteSpace = measuredWidth >= maxWidth ? "pre-wrap" : "pre";
+        };
+
+        return (
+          <Group x={el.x} y={el.y} width={el.width} height={el.height} rotation={el.rotation}>
+            <Html>
+              <style>{`
+                #${textareaId}::placeholder { color: ${el.fill || "#000000"}; opacity: 0.75; }
+              `}</style>
+              {el.options && el.options.length > 0 ? (
+                <select
+                  id={textareaId}
+                  value={editValue}
+                  onChange={(e) => {
+                    const finalValue = e.target.value;
+                    setEditValue(finalValue);
+                    setIsEditing(false);
+                    
+                    let newFontSize = 24; // Start from a good base size
+                    if (el.fontSize && el.fontSize > 24) newFontSize = el.fontSize;
+
+                    const span = document.createElement("span");
+                    Object.assign(span.style, {
+                      position: "fixed",
+                      visibility: "hidden",
+                      whiteSpace: "nowrap",
+                      fontFamily: el.fontFamily ? `'${el.fontFamily}', sans-serif` : "Arial",
+                      fontWeight: el.fontStyle?.includes("bold") ? "bold" : "normal",
+                      fontSize: `${newFontSize}px`
+                    });
+                    span.textContent = finalValue;
+                    document.body.appendChild(span);
+                    
+                    const targetWidth = el.width || 250;
+                    while (newFontSize > 12) {
+                      span.style.fontSize = `${newFontSize}px`;
+                      if (span.offsetWidth <= targetWidth) {
+                        break;
+                      }
+                      newFontSize -= 1;
+                    }
+                    document.body.removeChild(span);
+
+                    updateElement(pageId, el.id, {
+                      text: finalValue,
+                      fontSize: newFontSize,
+                    });
+                  }}
+                  onBlur={(e) => {
+                    setIsEditing(false);
+                    const finalValue = editValue.trim() === "" ? (displayEl.text || defaultPlaceholder) : editValue;
+                    updateElement(pageId, el.id, {
+                      text: finalValue,
+                    });
+                  }}
+                  ref={(node) => {
+                    if (node) {
+                      node.focus();
+                    }
+                  }}
+                  style={{
+                    width: "max-content",
+                    maxWidth: `${Math.max(el.width, 150)}px`,
+                    fontSize: "13px",
+                    fontFamily: el.fontFamily ? `'${el.fontFamily}', sans-serif` : "Arial",
+                    color: "#374151", // text-gray-700
+                    background: "#f9fafb", // bg-gray-50
+                    border: "1px solid #e5e7eb", // border-gray-200
+                    padding: "6px 10px",
+                    borderRadius: "8px",
+                    outline: "none",
+                    boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+                    cursor: "pointer",
+                    transition: "all 0.2s",
+                  }}
+                >
+                  <option value="" disabled={!editValue}>
+                    {editValue ? "✖ Clear Selection" : "Select an option..."}
+                  </option>
+                  {el.options.map((opt, i) => (
+                    <option key={i} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              ) : (
+                <textarea
+                  id={textareaId}
+                  value={editValue}
+                  onChange={(e) => {
+                    setEditValue(e.target.value);
+                    autoResize(e.target);
+                  }}
+                  placeholder={displayEl.text || defaultPlaceholder}
+                  onBlur={(e) => {
+                    const node = e.target as HTMLTextAreaElement;
+                    setIsEditing(false);
+                    const finalValue = editValue.trim() === "" ? (displayEl.text || defaultPlaceholder) : editValue;
+                    updateElement(pageId, el.id, {
+                      text: finalValue,
+                      width: parseInt(node.style.width) || el.width,
+                      height: parseInt(node.style.height) || el.height,
+                    });
+                  }}
+                  ref={(node) => {
+                    if (node) {
+                      node.focus();
+                      autoResize(node);
+                    }
+                  }}
+                  style={{
+                    width: `${Math.max(el.width, 220)}px`,
+                    minWidth: `${Math.max(el.width, 220)}px`,
+                    height: `${el.height}px`,
+                    fontSize: `${el.fontSize || 18}px`,
+                    fontFamily: el.fontFamily ? `'${el.fontFamily}', sans-serif` : "Arial",
+                    color: el.fill || "#000000",
+                    textAlign: (el.align as any) || "left",
+                    fontWeight: el.fontStyle?.includes("bold") ? "bold" : "normal",
+                    fontStyle: el.fontStyle?.includes("italic") ? "italic" : "normal",
+                    textDecoration: el.fontStyle?.includes("underline") ? "underline" : "none",
+                    background: "transparent",
+                    border: "none",
+                    padding: "8px",
+                    resize: "none",
+                    outline: "none",
+                    lineHeight: el.lineHeight ? String(el.lineHeight) : "1.2",
+                    overflow: "hidden",
+                    whiteSpace: "pre",
+                  }}
+                />
+              )}
+            </Html>
+          </Group>
+        );
+      })()}
     </>
   );
 });
 
 const globalImageCache: Record<string, HTMLImageElement> = {};
 
-/** Pre-load ALL image URLs from a spread into the global cache immediately */
-export function preloadSpreadImages(spreads: any[]) {
-  if (typeof window === 'undefined') return;
+function getCachedImage(src: string | undefined): HTMLImageElement | null {
+  if (!src) return null;
+  const img = globalImageCache[src];
+  if (img) {
+    if (img.complete && img.naturalWidth === 0) {
+      delete globalImageCache[src];
+      return null;
+    }
+    return img;
+  }
+  return null;
+}
+
+/** Pre-load ALL image URLs from a spread into the global cache immediately and return a Promise */
+export function preloadSpreadImages(spreads: any[]): Promise<void> {
+  if (typeof window === 'undefined') return Promise.resolve();
+  
+  const promises: Promise<void>[] = [];
+
   spreads.forEach((spread) => {
     [spread.leftPage, spread.rightPage].forEach((page) => {
       if (!page) return;
-      // Page background image
-      if (page.background && (page.background.startsWith("http") || page.background.startsWith("data:") || page.background.startsWith("/")) && !globalImageCache[page.background]) {
-        const img = new window.Image();
-        img.crossOrigin = "anonymous";
-        img.src = page.background;
-        img.onload = () => { globalImageCache[page.background] = img; };
-      }
-      // Element images
-      (page.elements || []).forEach((el: any) => {
-        const src = el.src;
-        if (src && !globalImageCache[src]) {
+      
+      const loadImg = (src: string) => {
+        if (!src || getCachedImage(src)) return;
+        promises.push(new Promise((resolve) => {
           const img = new window.Image();
           img.crossOrigin = "anonymous";
+          img.onload = () => {
+            globalImageCache[src] = img;
+            resolve();
+          };
+          img.onerror = () => {
+            console.warn("Failed to load image (broken state):", src);
+            resolve();
+          };
           img.src = src;
-          img.onload = () => { globalImageCache[src] = img; };
-        }
+          setTimeout(() => resolve(), 15000);
+        }));
+      };
+
+      if (page.background && (page.background.startsWith("http") || page.background.startsWith("data:") || page.background.startsWith("/"))) {
+        loadImg(page.background);
+      }
+      
+      (page.elements || []).forEach((el: any) => {
+        let src = el.src;
+        if (!src) return;
+        if (src === '/assets/layer-13.png') src = '/assets/crix2.png';
+        if (src.includes('crix2.PNG')) src = src.replace('crix2.PNG', 'crix2.png');
+        if (src.includes('historyLayer.PNG')) src = src.replace('historyLayer.PNG', 'historyLayer.png');
+        if (src.includes('banner.PNG')) src = src.replace('banner.PNG', 'banner.png');
+        loadImg(src);
       });
     });
   });
+
+  return Promise.all(promises).then(() => {});
 }
 
 function ImageElement(props: any) {
-  const [image, setImage] = useState<HTMLImageElement | null>(props.src ? globalImageCache[props.src] || null : null);
+  // PATCH: Fix massive/blank layer-13.png rendering issue for existing saves
+  // Maps uppercase .PNG extensions to lowercase .png to prevent Vercel 404s (Linux is case-sensitive)
+  const actualSrc = (() => {
+    const s = props.src;
+    if (!s) return s;
+    if (s === '/assets/layer-13.png') return '/assets/crix2.png';
+    if (s.includes('crix2.PNG')) return s.replace('crix2.PNG', 'crix2.png');
+    if (s.includes('historyLayer.PNG')) return s.replace('historyLayer.PNG', 'historyLayer.png');
+    if (s.includes('banner.PNG')) return s.replace('banner.PNG', 'banner.png');
+    return s;
+  })();
+  
+  const [image, setImage] = useState<HTMLImageElement | null>(getCachedImage(actualSrc));
   useEffect(() => {
-    if (props.src) {
-      if (globalImageCache[props.src]) {
-        setImage(globalImageCache[props.src]);
+    if (actualSrc) {
+      const cached = getCachedImage(actualSrc);
+      if (cached) {
+        setImage(cached);
         return;
       }
       const img = new window.Image();
       img.crossOrigin = "anonymous";
-      img.src = props.src;
+      img.src = actualSrc;
       img.onload = () => {
-        globalImageCache[props.src] = img;
+        globalImageCache[actualSrc] = img;
         setImage(img);
       };
     }
-  }, [props.src]);
+  }, [actualSrc]);
   if (!image) return <Rect {...props} fill="#e5e7eb" stroke="#d1d5db" strokeWidth={1} />;
   return <KonvaImage {...props} image={image} />;
 }
 
 function PhotoCardElement({ el, pageId, canInteract, ...props }: any) {
-  const [image, setImage] = useState<HTMLImageElement | null>(el.src ? globalImageCache[el.src] || null : null);
+  const [image, setImage] = useState<HTMLImageElement | null>(getCachedImage(el.src));
 
   useEffect(() => {
     if (el.src) {
-      if (globalImageCache[el.src]) {
-        setImage(globalImageCache[el.src]);
+      const cached = getCachedImage(el.src);
+      if (cached) {
+        setImage(cached);
         return;
       }
       const img = new window.Image();
@@ -542,20 +761,21 @@ function PageCanvas({
   const isGeneratingPdf = useEditorStore((s) => s.isGeneratingPdf);
 
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(
-    page.background ? globalImageCache[page.background] || null : null
+    getCachedImage(page.background)
   );
 
   useEffect(() => {
     if (page.background && (page.background.startsWith("http") || page.background.startsWith("data:") || page.background.startsWith("/"))) {
-      if (globalImageCache[page.background]) {
-        setBgImage(globalImageCache[page.background]);
+      const cached = getCachedImage(page.background);
+      if (cached) {
+        setBgImage(cached);
         return;
       }
       const img = new window.Image();
       img.crossOrigin = "anonymous";
       img.src = page.background;
       img.onload = () => {
-        globalImageCache[page.background] = img;
+        globalImageCache[page.background!] = img;
         setBgImage(img);
       };
     } else {
@@ -581,17 +801,30 @@ function PageCanvas({
         shadowOffsetY={(isGeneratingPdf || !hasShadow) ? 0 : 2}
       />
       <Group clipX={0} clipY={0} clipWidth={PAGE_WIDTH} clipHeight={PAGE_HEIGHT}>
-        {page.elements.map((el) => (
-          <PageElement
-            key={el.id}
-            el={el}
-            pageId={page.id}
-            isSelected={selectedElementId === el.id}
-            onSelect={selectElement}
-            pageIsLocked={page.isLocked}
-            onEditCalendarNote={onEditCalendarNote}
-          />
-        ))}
+        {page.elements.map((el) => {
+          // Compute safe zone right boundary so textarea doesn't overflow the dashed line
+          const _state = useEditorStore.getState();
+          const _isCover = _state.currentSpreadIndex === 0;
+          const _isLeft = page.id === _state.spreads[_state.currentSpreadIndex]?.leftPage.id;
+          let _safeRight: number;
+          if (_isCover) {
+            _safeRight = _isLeft ? (35.08 + 456.15) : (8.77 + 456.15);
+          } else {
+            _safeRight = _isLeft ? (PAGE_WIDTH - 5.77) : (PAGE_WIDTH - 5.77);
+          }
+          return (
+            <PageElement
+              key={el.id}
+              el={el}
+              pageId={page.id}
+              isSelected={selectedElementId === el.id}
+              onSelect={selectElement}
+              pageIsLocked={page.isLocked}
+              onEditCalendarNote={onEditCalendarNote}
+              safeZoneRight={_safeRight}
+            />
+          );
+        })}
         {/* SAFE ZONE OVERLAY */}
         {!isGeneratingPdf && (() => {
           const spreads = useEditorStore.getState().spreads;
@@ -674,7 +907,8 @@ export function EditorCanvas() {
   const isAdmin = useEditorStore((s) => s.isAdmin);
   const currentSpread = spreads[currentSpreadIndex];
 
-  const isCoverSpread = currentSpreadIndex === 0 && !isAdmin;
+  const isLockedSpread = isFullyLockedSpread(currentSpread, isAdmin, currentSpreadIndex);
+  const isTemplatePage = isTemplateSpread(currentSpread, isAdmin, currentSpreadIndex);
 
   const [editingCalendarNote, setEditingCalendarNote] = useState<{
     elementId: string;
@@ -728,7 +962,7 @@ export function EditorCanvas() {
 
   useEffect(() => {
     if (containerSize.width > 0 && containerSize.height > 0) {
-      const padding = isSingle ? 20 : 40;
+      const padding = isSingle ? 40 : 80;
       const s = Math.min((containerSize.width - padding) / totalWidth, (containerSize.height - padding) / totalHeight);
       setFitScale(s);
     }
@@ -758,7 +992,7 @@ export function EditorCanvas() {
     const sX = Math.max(0, (containerSize.width - sWidth) / 2);
     const dropPosInStage = dropX - sX;
     let targetPage = isSingle ? (mobilePage === "left" ? currentSpread.leftPage : currentSpread.rightPage) : (dropPosInStage <= (PAGE_WIDTH * scale) ? currentSpread.leftPage : currentSpread.rightPage);
-    if (!targetPage || targetPage.isLocked) return;
+    if (!targetPage || targetPage.isLocked || isLockedSpread || isTemplateSpread(currentSpread, isAdmin, currentSpreadIndex)) return;
 
     const stickerUrl = e.dataTransfer.getData("application/sticker-url");
     if (stickerUrl) {
@@ -846,8 +1080,8 @@ export function EditorCanvas() {
             </Layer>
           </Stage>
 
-          {/* Cover Locked Overlay */}
-          {isCoverSpread && !isPreviewMode && (
+          {/* Locked Spread Overlay */}
+          {isLockedSpread && !isPreviewMode && (
             <div
               className="absolute top-0 left-0 w-full z-[50]"
               style={{ height: stageHeight, pointerEvents: "all", cursor: "not-allowed" }}
@@ -856,8 +1090,8 @@ export function EditorCanvas() {
 
           {!isPreviewMode && (
             <div className="absolute top-0 w-full pointer-events-none" style={{ height: stageHeight }}>
-              {(viewMode === "spread" || mobilePage === "left") && !isCoverSpread && <EditorPageTools pageId={currentSpread.leftPage.id} align={isSingle ? "center" : "left"} />}
-              {(viewMode === "spread" || mobilePage === "right") && !isCoverSpread && <EditorPageTools pageId={currentSpread.rightPage.id} align={isSingle ? "center" : "right"} />}
+              {(viewMode === "spread" || mobilePage === "left") && !isLockedSpread && !isTemplatePage && <EditorPageTools pageId={currentSpread.leftPage.id} align={isSingle ? "center" : "left"} />}
+              {(viewMode === "spread" || mobilePage === "right") && !isLockedSpread && !isTemplatePage && <EditorPageTools pageId={currentSpread.rightPage.id} align={isSingle ? "center" : "right"} />}
             </div>
           )}
 

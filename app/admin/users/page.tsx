@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search, RotateCcw, Ban, CheckCircle, CreditCard, ChevronLeft, ChevronRight, User as UserIcon, Trash2, Loader2 } from "lucide-react";
+import { Search, RotateCcw, Ban, CheckCircle, CreditCard, ChevronLeft, ChevronRight, User as UserIcon, Trash2, Loader2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
@@ -25,11 +25,19 @@ export default function AdminUsersPage() {
   const [total, setTotal] = useState(0);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [deletingUsers, setDeletingUsers] = useState<Set<string>>(new Set());
+  const [showPassword, setShowPassword] = useState(false);
 
   // Confirm modal state
   const [confirmModal, setConfirmModal] = useState<{ open: boolean; title: string; description: string; onConfirm: () => Promise<void> }>({
     open: false, title: '', description: '', onConfirm: async () => {}
   });
+
+  // Reset Password Modal State
+  const [resetModal, setResetModal] = useState<{ open: boolean; user: User | null }>({
+    open: false, user: null
+  });
+  const [resetForm, setResetForm] = useState({ newPassword: '', confirmPassword: '' });
+  const [isResetting, setIsResetting] = useState(false);
 
   const openConfirm = (title: string, description: string, onConfirm: () => Promise<void>) => {
     setConfirmModal({ open: true, title, description, onConfirm });
@@ -62,6 +70,39 @@ export default function AdminUsersPage() {
       "This will permanently delete this user account. Their orders and books will remain in the database. This cannot be undone.",
       () => executeDeleteUser(userId)
     );
+  };
+
+  const executeResetPassword = async () => {
+    if (!resetModal.user) return;
+    
+    if (resetForm.newPassword.length < 8) {
+      return toast.error("Password must be at least 8 characters");
+    }
+    if (!/[A-Z]/.test(resetForm.newPassword)) {
+      return toast.error("Password must contain at least one uppercase letter");
+    }
+
+    setIsResetting(true);
+    try {
+      const res = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: resetModal.user.id, action: "resetPassword", value: resetForm.newPassword }),
+      });
+      
+      if (res.ok) {
+        toast.success("Password reset successfully and email sent!");
+        setResetModal({ open: false, user: null });
+        setResetForm({ newPassword: '', confirmPassword: '' });
+      } else {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Action failed");
+      }
+    } catch (error: any) {
+      toast.error(error.message || "Failed to reset password");
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   useEffect(() => {
@@ -147,7 +188,7 @@ export default function AdminUsersPage() {
 
       {/* Users Table */}
       <div className="bg-white/[0.03] border border-white/5 rounded-2xl overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto hidden md:block">
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/5">
@@ -192,19 +233,18 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1">
-                        {user.isPurchased && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20 w-fit">
-                            PURCHASED
-                          </span>
-                        )}
-                        {user.isDisabled && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 w-fit">
+                        {user.isDisabled ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 w-fit font-bold tracking-widest uppercase">
                             DISABLED
                           </span>
-                        )}
-                        {!user.isPurchased && !user.isDisabled && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-white/30 border border-white/10 w-fit">
+                        ) : (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-white/30 border border-white/10 w-fit font-bold tracking-widest uppercase">
                             ACTIVE
+                          </span>
+                        )}
+                        {(user as any).isAdmin && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 w-fit mt-1 font-bold tracking-widest uppercase">
+                            ADMIN
                           </span>
                         )}
                       </div>
@@ -216,7 +256,10 @@ export default function AdminUsersPage() {
                       <div className="flex items-center justify-end gap-2">
                         {user.provider === "credentials" && (
                           <button
-                            onClick={() => handleAction(user.id, "resetPassword")}
+                            onClick={() => {
+                              setResetModal({ open: true, user });
+                              setResetForm({ newPassword: '', confirmPassword: '' });
+                            }}
                             disabled={actionLoading === user.id}
                             className="p-2 rounded-lg bg-white/5 text-white/40 hover:text-white hover:bg-white/10 transition-all"
                             title="Reset Password"
@@ -224,18 +267,6 @@ export default function AdminUsersPage() {
                             <RotateCcw className="w-4 h-4" />
                           </button>
                         )}
-                        <button
-                          onClick={() => handleAction(user.id, "togglePurchased")}
-                          disabled={actionLoading === user.id}
-                          className={`p-2 rounded-lg transition-all ${
-                            user.isPurchased 
-                              ? "bg-green-500/10 text-green-400 hover:bg-green-500/20" 
-                              : "bg-white/5 text-white/40 hover:text-white hover:bg-white/10"
-                          }`}
-                          title={user.isPurchased ? "Revoke Purchase" : "Grant Purchase"}
-                        >
-                          <CreditCard className="w-4 h-4" />
-                        </button>
                         <button
                           onClick={() => handleAction(user.id, "toggleDisable")}
                           disabled={actionLoading === user.id}
@@ -265,6 +296,102 @@ export default function AdminUsersPage() {
           </table>
         </div>
 
+        {/* Mobile Cards View */}
+        <div className="md:hidden flex flex-col divide-y divide-white/5">
+          {loading ? (
+            <div className="text-center py-12 text-white/30">Loading...</div>
+          ) : users.length === 0 ? (
+            <div className="text-center py-12 text-white/30">No users found</div>
+          ) : (
+            users.map((user) => (
+              <div key={`mobile-${user.id}`} className="p-4 space-y-4 hover:bg-white/[0.02] transition-colors">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-600/30 to-orange-600/30 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                      {user.name?.charAt(0)?.toUpperCase() || "?"}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-white text-sm font-medium truncate">{user.name}</p>
+                      <p className="text-white/30 text-xs truncate">{user.email}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                      user.provider === "google"
+                        ? "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                        : "bg-white/5 text-white/50 border border-white/10"
+                    }`}>
+                      {user.provider}
+                    </span>
+                    {(user as any).isAdmin && (
+                      <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold tracking-widest uppercase">
+                        ADMIN
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-4 pt-2">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] text-white/40 uppercase tracking-widest">Status</span>
+                    {user.isDisabled ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 w-fit font-bold tracking-widest uppercase">
+                        DISABLED
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-white/30 border border-white/10 w-fit font-bold tracking-widest uppercase">
+                        ACTIVE
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-end gap-1 text-right">
+                    <span className="text-[10px] text-white/40 uppercase tracking-widest">Joined</span>
+                    <span className="text-xs text-white/70">
+                      {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "—"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/5">
+                  {user.provider === "credentials" && (
+                    <button
+                      onClick={() => {
+                        setResetModal({ open: true, user });
+                        setResetForm({ newPassword: '', confirmPassword: '' });
+                      }}
+                      disabled={actionLoading === user.id}
+                      className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-white/5 text-white/60 hover:text-white hover:bg-white/10 transition-all text-xs font-bold"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Reset Pwd
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleAction(user.id, "toggleDisable")}
+                    disabled={actionLoading === user.id}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl transition-all text-xs font-bold ${
+                      user.isDisabled
+                        ? "bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                        : "bg-white/5 text-white/60 hover:text-white hover:bg-white/10"
+                    }`}
+                  >
+                    {user.isDisabled ? <CheckCircle className="w-3.5 h-3.5" /> : <Ban className="w-3.5 h-3.5" />}
+                    {user.isDisabled ? "Enable" : "Disable"}
+                  </button>
+                  <button
+                    onClick={() => deleteUser(user.id)}
+                    disabled={deletingUsers.has(user.id)}
+                    className="flex-1 flex items-center justify-center gap-2 py-2 rounded-xl bg-red-500/5 text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-all text-xs font-bold disabled:opacity-50"
+                  >
+                    {deletingUsers.has(user.id) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="border-t border-white/5 px-6 py-4 flex justify-between items-center">
@@ -288,6 +415,62 @@ export default function AdminUsersPage() {
           </div>
         )}
       </div>
+      {/* Reset Password Modal */}
+      {resetModal.open && resetModal.user && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-[#111] border border-white/10 rounded-3xl p-8 w-full max-w-md animate-in zoom-in-95 duration-200 shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+              <RotateCcw className="w-5 h-5 text-coral" />
+              Reset Password
+            </h3>
+            
+            <div className="space-y-4 mb-8">
+              <div className="p-4 rounded-2xl bg-white/5 border border-white/5">
+                <p className="text-white font-medium">{resetModal.user.name}</p>
+                <p className="text-white/40 text-sm">{resetModal.user.email}</p>
+              </div>
+
+              <div>
+                <label className="text-xs text-white/50 mb-1 block uppercase tracking-wider font-bold">New Password</label>
+                <div className="relative">
+                  <input 
+                    type={showPassword ? "text" : "password"}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-coral transition-colors pr-12"
+                    value={resetForm.newPassword}
+                    onChange={e => setResetForm({...resetForm, newPassword: e.target.value})}
+                    placeholder="Minimum 8 characters"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300 transition-colors focus:outline-none"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setResetModal({ open: false, user: null })}
+                disabled={isResetting}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-white/60 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={executeResetPassword}
+                disabled={isResetting || resetForm.newPassword.length < 8}
+                className="flex-1 py-3 px-4 rounded-xl font-bold text-white bg-coral hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isResetting && <Loader2 className="w-4 h-4 animate-spin" />}
+                {isResetting ? 'Resetting...' : 'Reset'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

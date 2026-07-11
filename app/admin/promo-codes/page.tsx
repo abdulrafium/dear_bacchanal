@@ -528,9 +528,9 @@ export default function AdminPromoCodesPage() {
                     {promoCodes.map((promo) => (
                       <div
                         key={promo.id}
-                        className={`p-4 hover:bg-gray-50/60 transition-colors flex items-center justify-between gap-4`}
+                        className={`p-4 hover:bg-gray-50/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4`}
                       >
-                        <div className="flex items-center gap-4 min-w-0">
+                        <div className="flex items-center justify-between w-full sm:w-auto gap-4 min-w-0">
                           <div
                             className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
                               promo.active

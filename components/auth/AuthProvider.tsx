@@ -4,9 +4,10 @@ import { createContext, useState, ReactNode, useCallback } from "react";
 import { AuthModalState } from "@/types/auth";
 
 interface AuthModalContextType extends AuthModalState {
-  openModal: (view: "signin" | "signup") => void;
+  openModal: (view: "signin" | "signup" | "forgot-password") => void;
   closeModal: () => void;
   toggleView: () => void;
+  setView: (view: "signin" | "signup" | "forgot-password") => void;
 }
 
 export const AuthModalContext = createContext<AuthModalContextType | undefined>(
@@ -19,7 +20,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     view: "signin",
   });
 
-  const openModal = useCallback((view: "signin" | "signup") => {
+  const openModal = useCallback((view: "signin" | "signup" | "forgot-password") => {
     setModalState({ isOpen: true, view });
   }, []);
 
@@ -34,6 +35,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const setView = useCallback((view: "signin" | "signup" | "forgot-password") => {
+    setModalState((prev) => ({ ...prev, view }));
+  }, []);
+
   return (
     <AuthModalContext.Provider
       value={{
@@ -41,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         openModal,
         closeModal,
         toggleView,
+        setView,
       }}
     >
       {children}

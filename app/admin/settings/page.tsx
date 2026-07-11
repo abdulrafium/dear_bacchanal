@@ -14,7 +14,9 @@ import {
   AlertCircle,
   ToggleLeft,
   ToggleRight,
-  Lock
+  Lock,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { PlatformSettings, CountrySetting } from "@/types/settings";
 import { toast } from "sonner";
@@ -29,6 +31,7 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [passwordLoading, setPasswordLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [zoneFilter, setZoneFilter] = useState<string>("All");
   
   const [clearingRevenue, setClearingRevenue] = useState(false);
@@ -144,15 +147,15 @@ export default function AdminSettingsPage() {
           description="Are you absolutely sure you want to clear the revenue stats? This will set all order amounts to zero and cannot be undone."
           confirmLabel="Yes, Clear Revenue"
         />
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-black text-white tracking-tight">PLATFORM SETTINGS</h1>
+          <h1 className="text-2xl sm:text-3xl font-display font-black text-white tracking-tight">PLATFORM SETTINGS</h1>
           <p className="text-white/40 text-sm">Configure core business logic and integrations</p>
         </div>
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-900/50 text-white font-bold rounded-xl transition-all shadow-lg shadow-red-600/20 active:scale-95"
+          className="flex items-center justify-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-red-900/50 text-white font-bold rounded-xl transition-all shadow-lg shadow-red-600/20 active:scale-95 w-full sm:w-auto"
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
           <span>SAVE CHANGES</span>
@@ -273,7 +276,7 @@ export default function AdminSettingsPage() {
                 </button>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {["All", "Clear EU", "Clear Non EU", "Tracked Non EU", "Other"].map(zone => (
                   <button
                     key={zone}
@@ -465,7 +468,7 @@ export default function AdminSettingsPage() {
                     <p className="text-white/30 text-xs">Destructive actions — use with caution</p>
                   </div>
                 </div>
-                <div className="flex items-center justify-between p-4 rounded-2xl bg-black/30 border border-white/5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-black/30 border border-white/5">
                   <div>
                     <p className="text-white font-semibold text-sm">Clear Revenue Stats</p>
                     <p className="text-white/30 text-xs mt-0.5">Zeros out all order amounts. Resets Revenue &amp; EST Profit on the dashboard.</p>
@@ -473,7 +476,7 @@ export default function AdminSettingsPage() {
                   <button
                     onClick={() => setRevenueModal(true)}
                     disabled={clearingRevenue}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-red-600/10 hover:bg-red-600/20 border border-red-600/30 text-red-400 font-bold text-xs uppercase tracking-wider rounded-xl transition-all disabled:opacity-50 flex-shrink-0 ml-4"
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600/10 hover:bg-red-600/20 border border-red-600/30 text-red-400 font-bold text-xs uppercase tracking-wider rounded-xl transition-all disabled:opacity-50 flex-shrink-0 w-full sm:w-auto"
                   >
                     {clearingRevenue ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                     Clear Revenue
@@ -488,8 +491,8 @@ export default function AdminSettingsPage() {
               <SectionHeader title="Security & Authentication" description="Manage your admin account security." />
               
               <div className="bg-red-500/[0.03] border border-red-500/10 rounded-2xl p-6 mb-6">
-                <div className="flex gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center text-red-500">
+                <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
+                  <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center text-red-500 flex-shrink-0">
                     <Lock className="w-6 h-6" />
                   </div>
                   <div className="flex-1">
@@ -499,18 +502,27 @@ export default function AdminSettingsPage() {
                     <div className="max-w-md space-y-4">
                       <div className="space-y-2">
                         <label className="text-white/30 text-[10px] uppercase font-bold tracking-widest ml-1">New Password</label>
-                        <input
-                          type="password"
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          placeholder="••••••••"
-                          className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-white focus:outline-none focus:border-red-500/50 focus:bg-white/[0.05] transition-all placeholder:text-white/10"
-                        />
+                        <div className="relative">
+                          <input
+                            type={showPassword ? "text" : "password"}
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder="••••••••"
+                            className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-white focus:outline-none focus:border-red-500/50 focus:bg-white/[0.05] transition-all placeholder:text-white/10 pr-12"
+                          />
+                          <button
+                            type="button"
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-300 transition-colors focus:outline-none"
+                            onClick={() => setShowPassword(!showPassword)}
+                          >
+                            {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                          </button>
+                        </div>
                       </div>
                       <button
                         onClick={handleChangePassword}
                         disabled={passwordLoading}
-                        className="flex items-center gap-2 px-6 py-3 bg-white text-black font-bold rounded-xl hover:bg-white/90 disabled:bg-white/50 transition-all active:scale-95"
+                        className="flex items-center justify-center gap-2 px-6 py-3 bg-white text-black font-bold rounded-xl hover:bg-white/90 disabled:bg-white/50 transition-all active:scale-95 w-full sm:w-auto"
                       >
                         {passwordLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         <span>UPDATE PASSWORD</span>

@@ -308,36 +308,36 @@ export default function AdminOrdersPage() {
         description={confirmModal.description}
         confirmLabel="Yes, Delete"
       />
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-display font-black text-white tracking-tight uppercase">Order Management</h1>
+          <h1 className="text-2xl sm:text-3xl font-display font-black text-white tracking-tight uppercase">Order Management</h1>
           <p className="text-white/40 text-sm">Track sales, shipping status, and generate invoices · <span className="text-white/60 font-bold">{totalOrders} total orders</span></p>
         </div>
         
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full lg:w-auto">
 
 
             <button
               onClick={deleteAllOrders}
               disabled={deletingAll || orders.length === 0}
-              className="flex items-center gap-1.5 px-3 py-2.5 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 hover:bg-red-500/20 transition-all text-[10px] font-bold uppercase tracking-wider disabled:opacity-50"
+              className="flex items-center justify-center flex-1 sm:flex-none gap-1.5 px-3 py-2.5 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 hover:bg-red-500/20 transition-all text-[10px] font-bold uppercase tracking-wider disabled:opacity-50 min-w-fit"
             >
               {deletingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-              {deletingAll ? 'Deleting All...' : 'Delete All'}
+              {deletingAll ? 'Deleting...' : 'Delete All'}
             </button>
-            <div className="relative">
+            <div className="relative flex-1 w-full sm:w-auto min-w-[150px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
                 <input 
                     type="text" 
-                    placeholder="Search name, email, template..."
+                    placeholder="Search name, email..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-red-500/50 transition-all min-w-[280px]"
+                    className="bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-red-500/50 transition-all w-full md:min-w-[280px]"
                 />
             </div>
             <button 
               onClick={() => setShowFilters(!showFilters)}
-              className={`p-2.5 border rounded-xl transition-all relative ${
+              className={`p-2.5 border rounded-xl transition-all relative flex-shrink-0 ${
                 activeFilterCount > 0 || showFilters
                   ? 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20' 
                   : 'bg-white/5 border-white/10 text-white/60 hover:text-white'

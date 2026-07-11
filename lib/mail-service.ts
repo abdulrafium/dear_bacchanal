@@ -24,13 +24,14 @@ interface Attachment {
 }
 
 interface EmailOptions {
+  from?: string;
   to: string;
   subject: string;
   html: string;
   attachments?: Attachment[];
 }
 
-export const sendEmail = async ({ to, subject, html, attachments }: EmailOptions) => {
+export const sendEmail = async ({ from, to, subject, html, attachments }: EmailOptions) => {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
     console.error("Email credentials missing in .env");
     return { success: false, error: "Credentials missing" };
@@ -38,7 +39,7 @@ export const sendEmail = async ({ to, subject, html, attachments }: EmailOptions
 
   try {
     const info = await getTransporter().sendMail({
-      from: process.env.EMAIL_FROM || `"Dear Bacchanal" <${process.env.EMAIL_USER}>`,
+      from: from || process.env.EMAIL_FROM || `"Dear Bacchanal" <${process.env.EMAIL_USER}>`,
       to,
       subject,
       html,

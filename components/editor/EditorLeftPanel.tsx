@@ -1,4 +1,5 @@
-import { useEditorStore } from "@/store/editor-store";
+import { useEditorStore, isFullyLockedSpread, isTemplateSpread } from "@/store/editor-store";
+
 import { getAvailableTemplates } from "@/lib/book-templates";
 import NextImage from "next/image";
 import { ChevronDown, Star, Grid3X3, Image, Paintbrush, Sticker, LayoutGrid, BookOpen, CheckCircle2, Plus, Loader2, Trash2, Upload, Sparkles, Filter, MoreHorizontal, History, Calendar } from "lucide-react";
@@ -72,6 +73,17 @@ function LayoutsPanel() {
                 key={layout.id}
                 draggable
                 onDragStart={(e) => handleDragStart(e, layout.id)}
+                onClick={() => {
+                  const { spreads, currentSpreadIndex, isAdmin } = useEditorStore.getState();
+                  const currentSpread = spreads[currentSpreadIndex];
+                  const targetPage = currentSpread?.leftPage;
+                  const isLocked = targetPage?.isLocked || isFullyLockedSpread(currentSpread, isAdmin, currentSpreadIndex);
+                  if (isLocked) {
+                    toast.error("That page is locked for the final template.");
+                  } else {
+                    toast.info("Drag and drop this layout onto the left or right page.");
+                  }
+                }}
                 className="aspect-[3/4] bg-white border-2 border-gray-200 rounded-lg p-1.5 cursor-grab hover:border-[#2d2d2d] hover:shadow-md transition-all group relative"
                 title={layout.name}
               >
@@ -102,27 +114,31 @@ function LayoutsPanel() {
 function ImagesPanel() {
   const [images, setImages] = useState<{ id: string; url: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [imageToDelete, setImageToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const addElement = useEditorStore((s) => s.addElement);
-  const spreads = useEditorStore((s) => s.spreads);
-  const currentSpreadIndex = useEditorStore((s) => s.currentSpreadIndex);
-  const selectedElementId = useEditorStore((s) => s.selectedElementId);
   const updateElement = useEditorStore((s) => s.updateElement);
 
   // Fetch images on mount
   useEffect(() => {
     const fetchImages = async () => {
       try {
-        const res = await fetch("/api/book-images");
-        if (res.ok) {
-          const data = await res.json();
+        const dbRes = await fetch("/api/book-images");
+        let dbImages = [];
+        
+        if (dbRes.ok) {
+          const data = await dbRes.json();
           const imageMap = data.images || {};
-          const loadedImages = Object.entries(imageMap).map(([id, url]) => ({
-            id,
-            url: url as string,
-          }));
-          // Sort by newest first (approximate if no timestamp, but let's just show them)
-          setImages(loadedImages.reverse());
+          if (typeof imageMap === 'object' && !Array.isArray(imageMap)) {
+            dbImages = Object.entries(imageMap).map(([id, url]) => ({ id, url: url as string }));
+          } else {
+            dbImages = imageMap;
+          }
         }
+        
+        const unique = Array.from(new Map(dbImages.map((item: any) => [item.url, item])).values()) as any;
+        
+        setImages(unique);
       } catch (err) {
         console.error("Failed to load images", err);
       } finally {
@@ -169,10 +185,12 @@ function ImagesPanel() {
     await startUpload(Array.from(files));
   };
 
-  const currentSpread = spreads[currentSpreadIndex];
-  const targetPage = targetSide === "left" ? currentSpread?.leftPage : currentSpread?.rightPage;
-
   const handleImageClick = (url: string) => {
+    const { spreads, currentSpreadIndex, selectedElementId, isAdmin } = useEditorStore.getState();
+    const currentSpread = spreads[currentSpreadIndex];
+    const targetPage = targetSide === "left" ? currentSpread?.leftPage : currentSpread?.rightPage;
+    const isLocked = targetPage?.isLocked || isFullyLockedSpread(currentSpread, isAdmin, currentSpreadIndex);
+
     // 1. If an image or photo frame is selected, replace its src directly (even on locked pages)
     if (selectedElementId) {
       let foundPageId = null;
@@ -192,7 +210,7 @@ function ImagesPanel() {
     }
 
     // 2. Otherwise, add as a new floating image (requires unlocked page)
-    if (targetPage && !targetPage.isLocked) {
+    if (targetPage && !isLocked) {
       addElement(targetPage.id, {
         type: "image",
         x: 50 + Math.random() * 50,
@@ -203,25 +221,33 @@ function ImagesPanel() {
         src: url,
       });
       toast.success("Image placed on " + targetSide + " page");
-    } else if (targetPage?.isLocked) {
+    } else if (isLocked) {
       toast.error("That page is locked for the final template. Select a photo frame first to fill it.");
     }
   };
 
-  const handleDeleteImage = async (e: React.MouseEvent, imageId: string) => {
+  const handleDeleteImage = (e: React.MouseEvent, imageId: string) => {
     e.stopPropagation();
-    if (!confirm("Are you sure you want to delete this image?")) return;
+    setImageToDelete(imageId);
+  };
+
+  const confirmDeleteImage = async () => {
+    if (!imageToDelete) return;
+    setIsDeleting(true);
     
     try {
-      const res = await fetch(`/api/book-images?imageId=${imageId}`, {
+      const res = await fetch(`/api/book-images?imageId=${imageToDelete}`, {
         method: "DELETE",
       });
       if (res.ok) {
-        setImages((prev) => prev.filter((img) => img.id !== imageId));
+        setImages((prev) => prev.filter((img) => img.id !== imageToDelete));
         toast.success("Image deleted");
       }
     } catch (err) {
       toast.error("Failed to delete image");
+    } finally {
+      setIsDeleting(false);
+      setImageToDelete(null);
     }
   };
 
@@ -311,6 +337,33 @@ function ImagesPanel() {
           </div>
         )}
       </div>
+
+      {/* Custom Delete Modal */}
+      {imageToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-black text-gray-900 mb-2 uppercase tracking-wide">Delete Image?</h3>
+            <p className="text-gray-500 text-sm mb-6">Are you sure you want to permanently remove this image? This cannot be undone.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setImageToDelete(null)}
+                className="flex-1 px-4 py-2.5 rounded-xl border-2 border-gray-100 text-gray-600 font-bold hover:bg-gray-50 transition-colors"
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteImage}
+                disabled={isDeleting}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-[#9f2e2b] text-white font-bold hover:bg-red-800 transition-colors flex items-center justify-center gap-2"
+              >
+                {isDeleting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -672,10 +725,8 @@ function TemplatesPanel() {
 
 function BackgroundsPanel() {
   const updatePageBackground = useEditorStore((s) => s.updatePageBackground);
-  const spreads = useEditorStore((s) => s.spreads);
-  const currentSpreadIndex = useEditorStore((s) => s.currentSpreadIndex);
-  const currentSpread = spreads[currentSpreadIndex];
   const [targetSide, setTargetSide] = useState<"left" | "right">("right");
+  const [currentBg, setCurrentBg] = useState("#ffffff");
 
   const colors = [
     "#ffffff", "#f5f5f5", "#e5e7eb", "#2d2d2d", "#1a1a1a",
@@ -683,8 +734,17 @@ function BackgroundsPanel() {
     "#0891b2", "#2563eb", "#7c3aed", "#db2777", "#f43f5e",
   ];
 
-  const targetPage = targetSide === "left" ? currentSpread?.leftPage : currentSpread?.rightPage;
-  const currentBg = targetPage?.background || "#ffffff";
+  const applyBackground = (color: string) => {
+    const { spreads, currentSpreadIndex, isAdmin } = useEditorStore.getState();
+    const currentSpread = spreads[currentSpreadIndex];
+    const targetPage = targetSide === "left" ? currentSpread?.leftPage : currentSpread?.rightPage;
+    const isLocked = targetPage?.isLocked || isFullyLockedSpread(currentSpread, isAdmin, currentSpreadIndex);
+    
+    if (targetPage && !isLocked) {
+      updatePageBackground(targetPage.id, color);
+      setCurrentBg(color);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-[#fafafa]">
@@ -724,11 +784,7 @@ function BackgroundsPanel() {
               <input 
                 type="color"
                 value={currentBg}
-                onChange={(e) => {
-                  if (targetPage && !targetPage.isLocked) {
-                    updatePageBackground(targetPage.id, e.target.value);
-                  }
-                }}
+                onChange={(e) => applyBackground(e.target.value)}
                 className="absolute inset-0 opacity-0 cursor-pointer scale-150"
               />
             </div>
@@ -742,8 +798,8 @@ function BackgroundsPanel() {
                 value={currentBg.toUpperCase()}
                 onChange={(e) => {
                     const val = e.target.value;
-                    if (/^#[0-9A-F]{6}$/i.test(val) && targetPage && !targetPage.isLocked) {
-                        updatePageBackground(targetPage.id, val);
+                    if (/^#[0-9A-F]{6}$/i.test(val)) {
+                        applyBackground(val);
                     }
                 }}
                 className="text-sm font-bold text-gray-700 bg-transparent w-full focus:outline-none"
@@ -760,11 +816,7 @@ function BackgroundsPanel() {
             {colors.map((color) => (
               <button
                 key={color}
-                onClick={() => {
-                  if (targetPage && !targetPage.isLocked) {
-                    updatePageBackground(targetPage.id, color);
-                  }
-                }}
+                onClick={() => applyBackground(color)}
                 className={`w-full aspect-square rounded-xl border-2 transition-all hover:scale-110 active:scale-95 shadow-sm ${currentBg.toLowerCase() === color.toLowerCase() ? 'border-[#2d2d2d] ring-2 ring-[#2d2d2d]/10' : 'border-white'}`}
                 style={{ backgroundColor: color }}
               />
@@ -779,9 +831,8 @@ function BackgroundsPanel() {
 function StickersPanel() {
   const isAdmin = useEditorStore((s) => s.isAdmin);
   const addElement = useEditorStore((s) => s.addElement);
-  const spreads = useEditorStore((s) => s.spreads);
-  const currentSpreadIndex = useEditorStore((s) => s.currentSpreadIndex);
-  const currentSpread = spreads[currentSpreadIndex];
+  
+  // Choose which side of the spread to add graphics to
   const [targetSide, setTargetSide] = useState<"left" | "right">("right");
 
   const [stickers, setStickers] = useState<{ _id: string; url: string; name: string }[]>([]);
@@ -808,11 +859,29 @@ function StickersPanel() {
 
   const fetchStickers = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/stickers");
-      if (res.ok) {
-        const data = await res.json();
-        setStickers(data.stickers || []);
+      const [localRes, dbRes] = await Promise.all([
+        fetch("/api/local-assets"),
+        fetch("/api/admin/stickers")
+      ]);
+      
+      let localStickers = [];
+      let dbStickers = [];
+      
+      if (localRes.ok) {
+        const data = await localRes.json();
+        localStickers = data.stickers || [];
       }
+      
+      if (dbRes.ok) {
+        const data = await dbRes.json();
+        dbStickers = data.stickers || [];
+      }
+      
+      // Merge without duplicates based on URL
+      const merged = [...localStickers, ...dbStickers];
+      const unique = Array.from(new Map(merged.map(item => [item.url, item])).values());
+      
+      setStickers(unique);
     } catch (err) {
       console.error("Failed to load stickers library", err);
     } finally {
@@ -900,8 +969,11 @@ function StickersPanel() {
               onDragStart={(e) => handleStickerDragStart(e, sticker.url)}
               className="group relative aspect-square bg-white rounded-xl overflow-hidden cursor-grab border border-gray-100 hover:border-teal/30 hover:shadow-lg transition-all p-1.5"
               onClick={() => {
+                const { spreads, currentSpreadIndex, isAdmin } = useEditorStore.getState();
+                const currentSpread = spreads[currentSpreadIndex];
                 const page = targetSide === "left" ? currentSpread?.leftPage : currentSpread?.rightPage;
-                if (page && !page.isLocked) {
+                const isLocked = page?.isLocked || isFullyLockedSpread(currentSpread, isAdmin, currentSpreadIndex);
+                if (page && !isLocked) {
                   addElement(page.id, {
                     type: "sticker",
                     src: sticker.url,
@@ -938,9 +1010,6 @@ function StickersPanel() {
 
 function CalendarPanel() {
   const addElement = useEditorStore((s) => s.addElement);
-  const spreads = useEditorStore((s) => s.spreads);
-  const currentSpreadIndex = useEditorStore((s) => s.currentSpreadIndex);
-  const currentSpread = spreads[currentSpreadIndex];
   const [targetSide, setTargetSide] = useState<"left" | "right">("right");
   const [selectedMonth, setSelectedMonth] = useState(0); // 0 = Jan
   const [selectedYear, setSelectedYear] = useState(2026);
@@ -953,8 +1022,11 @@ function CalendarPanel() {
   const years = [2025, 2026, 2027, 2028, 2029, 2030];
 
   const addCalendar = () => {
+    const { spreads, currentSpreadIndex, isAdmin } = useEditorStore.getState();
+    const currentSpread = spreads[currentSpreadIndex];
     const page = targetSide === "left" ? currentSpread?.leftPage : currentSpread?.rightPage;
-    if (page && !page.isLocked) {
+    const isLocked = page?.isLocked || isFullyLockedSpread(currentSpread, isAdmin, currentSpreadIndex);
+    if (page && !isLocked) {
       addElement(page.id, {
         type: "calendar",
         x: 25,
@@ -1058,23 +1130,48 @@ function CalendarPanel() {
 export function EditorLeftPanel() {
   const activeSidebarPanel = useEditorStore((s) => s.activeSidebarPanel);
   const currentSpreadIndex = useEditorStore((s) => s.currentSpreadIndex);
+  const spreads = useEditorStore((s) => s.spreads);
   const isAdmin = useEditorStore((s) => s.isAdmin);
 
-  const isCoverLocked = currentSpreadIndex === 0 && !isAdmin;
+  const currentSpread = spreads[currentSpreadIndex];
+  const isFullyLocked = isFullyLockedSpread(currentSpread, isAdmin, currentSpreadIndex);
+  const isTemplate = isTemplateSpread(currentSpread, isAdmin, currentSpreadIndex);
 
-  if (isCoverLocked) {
+  if (isFullyLocked) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-6 text-center gap-4">
         <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-3xl">🔒</div>
         <div>
-          <p className="text-sm font-black text-gray-800 leading-tight">Cover Page Locked</p>
+          <p className="text-sm font-black text-gray-800 leading-tight">Page Locked</p>
           <p className="text-[11px] text-gray-400 font-medium mt-2 leading-relaxed">
-            The cover design is fixed and cannot be edited. Navigate to any other page to start adding elements.
+            This page's design is fixed and cannot be edited. Navigate to an unlocked page to add elements.
           </p>
         </div>
         <div className="w-full border border-dashed border-gray-200 rounded-xl p-3 bg-gray-50">
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tip</p>
-          <p className="text-[11px] text-gray-500 mt-1">Use the page thumbnails at the bottom to navigate away from the cover.</p>
+          <p className="text-[11px] text-gray-500 mt-1">Use the page thumbnails at the bottom to navigate away from this page.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isTemplate && activeSidebarPanel !== "images") {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-6 text-center gap-4">
+        <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center text-blue-500">
+          <LayoutGrid className="w-8 h-8" />
+        </div>
+        <div>
+          <p className="text-sm font-black text-gray-800 leading-tight">Template Mode</p>
+          <p className="text-[11px] text-gray-400 font-medium mt-2 leading-relaxed">
+            Fill in the template on the canvas. 
+            <br/><br/>
+            You can edit text placeholders, check boxes, and add events to the calendar directly on the page.
+          </p>
+        </div>
+        <div className="w-full border border-dashed border-blue-200 rounded-xl p-3 bg-blue-50/50">
+          <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Add Photos</p>
+          <p className="text-[11px] text-gray-600 mt-1">Click an empty image frame on the canvas to open your photos.</p>
         </div>
       </div>
     );

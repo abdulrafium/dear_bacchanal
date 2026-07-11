@@ -92,7 +92,7 @@ export function createBacchanaleTemplate(): BookTemplate {
       rightPage: createPage("Page 2", "#ffffff", [
         { ...createText("Dear Bacchanal,", 60, 220, 44, "#e5a7a7", PAGE_WIDTH - 80, "left"), fontFamily: "Kalam" },
         { ...createText("This is my Trinidad Carnival 2026.", 60, 320, 28, "#e5a7a7", PAGE_WIDTH - 80, "left"), fontFamily: "Kalam" },
-        { ...createText("( Your Name )", PAGE_WIDTH - 200, 420, 28, "#c8413d", 160, "right"), fontFamily: "Kalam" },
+        { ...createText("Your Name", PAGE_WIDTH - 200, 420, 26, "#e5a7a7", 160, "right"), fontFamily: "Caveat" },
       ]),
     },
     // Spread 2 — THE GREATEST (NinthPage)
@@ -212,7 +212,7 @@ export function createBacchanaleTemplate(): BookTemplate {
     {
       id: uuidv4(),
       leftPage: createPage("Page 15", "#ffffff", [
-        {...createBgImage("/assets/layer-13.png"), isLocked: true},
+        {...createBgImage("/assets/crix2.png"), isLocked: true},
       ]),
       rightPage: createPage("Page 16", "#ffffff", [
         {...createBgImage("/assets/layer-3.png"), isLocked: true},

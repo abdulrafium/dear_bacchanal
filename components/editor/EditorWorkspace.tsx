@@ -35,9 +35,47 @@ export default function EditorWorkspace() {
   const [loading, setLoading] = useState(true);
   const lastLoadedRef = useRef<string | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(220);
-  const [bottomBarHeight, setBottomBarHeight] = useState(140);
+  const [bottomBarHeight, setBottomBarHeight] = useState(128);
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [isResizingBottom, setIsResizingBottom] = useState(false);
+  const [showLoading, setShowLoading] = useState(true);
+  const [isFadingOut, setIsFadingOut] = useState(false);
+  const [isPortrait, setIsPortrait] = useState(false);
+  const templateLoaded = useEditorStore((s) => s.templateLoaded);
+  const isPageTransitioning = useEditorStore((s) => s.isPageTransitioning);
+
+  // Handle Orientation and Lock for Mobile Landscape
+  useEffect(() => {
+    const checkOrientation = () => {
+      setIsPortrait(window.innerHeight > window.innerWidth);
+    };
+
+    checkOrientation();
+    window.addEventListener("resize", checkOrientation);
+
+    const lockLandscape = async () => {
+      try {
+        if (screen.orientation && (screen.orientation as any).lock) {
+          await (screen.orientation as any).lock("landscape");
+        }
+      } catch (err) {
+        console.warn("Screen orientation lock failed or not supported:", err);
+      }
+    };
+
+    lockLandscape();
+
+    return () => {
+      window.removeEventListener("resize", checkOrientation);
+      if (screen.orientation && (screen.orientation as any).unlock) {
+        try {
+          (screen.orientation as any).unlock();
+        } catch (e) {
+          // ignore
+        }
+      }
+    };
+  }, []);
 
   // Sync isAdmin securely from Auth/URL
   useEffect(() => {
@@ -153,10 +191,9 @@ export default function EditorWorkspace() {
                 rightPage: { ...s.rightPage, elements: s.rightPage.elements?.map((e: any) => e.type === 'checkbox' ? { ...e, isChecked: false } : e) }
               }));
               loadTemplate(cleanSpreads, data.template.templateName, data.template.description, data.template.country, data.template.year, data.template._id);
-              const targetIndex = spreadFromUrl ? parseInt(spreadFromUrl) : data.template.currentSpreadIndex;
-              if (targetIndex !== undefined) {
-                setCurrentSpread(targetIndex);
-              }
+              // Templates always open from page 1 (never restore last admin position)
+              const targetIndex = spreadFromUrl ? parseInt(spreadFromUrl) : 0;
+              setCurrentSpread(targetIndex);
             } else if (templateName) {
               const { getAvailableTemplates } = await import('@/lib/book-templates');
               const hardTemplate = getAvailableTemplates().find(t => t.name === templateName);
@@ -172,10 +209,9 @@ export default function EditorWorkspace() {
             }
           } else if (data.book?.spreads?.length) {
             loadTemplate(data.book.spreads, data.book.activeTemplateName, data.book.templateDescription, data.book.templateCountry, data.book.templateYear, data.book._id);
-            const targetIndex = spreadFromUrl ? parseInt(spreadFromUrl) : data.book.currentSpreadIndex;
-            if (targetIndex !== undefined) {
-              setCurrentSpread(targetIndex);
-            }
+            // Restore last saved page for user's own book, or use URL param if present
+            const targetIndex = spreadFromUrl ? parseInt(spreadFromUrl) : (data.book.currentSpreadIndex ?? 0);
+            setCurrentSpread(targetIndex);
           }
         }
       } catch (err) {
@@ -235,7 +271,28 @@ export default function EditorWorkspace() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []); // Only on mount
 
-  // DEDICATED AUTO-SAVE: Watch spreads and dirty state
+  // DEDICATED AUTO-SAVE: Watch spreads and dirty state using subscribe to avoid re-renders
+  useEffect(() => {
+    if (!loading && templateLoaded) {
+      const waitForCanvas = async () => {
+        try {
+          const { preloadSpreadImages } = await import('./EditorCanvas');
+          // Wait for images to load, with a minimum 2-second delay for the animation
+          await Promise.all([
+            preloadSpreadImages(useEditorStore.getState().spreads),
+            new Promise(resolve => setTimeout(resolve, 2000))
+          ]);
+        } catch (e) {
+          console.error("Failed to preload canvas images", e);
+        }
+        setIsFadingOut(true);
+        setTimeout(() => setShowLoading(false), 500); // Wait for fade transition
+      };
+      
+      waitForCanvas();
+    }
+  }, [loading, templateLoaded]);
+
   const spreads = useEditorStore((s) => s.spreads);
   const isDirty = useEditorStore((s) => s.isDirty);
   const save = useEditorStore((s) => s.save);
@@ -365,8 +422,63 @@ export default function EditorWorkspace() {
 
   if (loading) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-[#f5f5f5]">
-        <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+      <div className="fixed inset-0 z-[9999] bg-[#1a1a1a] flex flex-col items-center justify-center">
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10" />
+        {/* Book animation */}
+        <div className="relative mb-10 flex items-center gap-1">
+          {[...Array(5)].map((_, i) => (
+            <div
+              key={i}
+              className="rounded-sm"
+              style={{
+                width: '18px',
+                height: `${48 + Math.sin(i) * 12}px`,
+                background: i === 2 ? '#c0392b' : `rgba(192,57,43,${0.3 + i * 0.12})`,
+                borderRadius: '2px',
+                animation: `bookPage 1.2s ease-in-out infinite`,
+                animationDelay: `${i * 0.15}s`,
+                transformOrigin: 'bottom center',
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Brand name */}
+        <div className="relative z-10 text-center">
+          <h1
+            className="text-white text-4xl font-black tracking-[0.25em] uppercase mb-2"
+            style={{ fontFamily: 'var(--font-luckiest-guy), cursive', letterSpacing: '0.3em' }}
+          >
+            DEAR BACCHANAL
+          </h1>
+          <p className="text-white/50 text-xs tracking-[0.4em] uppercase mb-10">Carnival {new Date().getFullYear()}</p>
+        </div>
+
+        {/* Loading bar */}
+        <div className="w-64 relative z-10">
+          <div className="w-full bg-white/10 rounded-full h-0.5 overflow-hidden">
+            <div
+              className="h-full w-1/2 bg-[#c0392b] rounded-full"
+              style={{
+                animation: 'loadingBar 1.5s ease-in-out infinite',
+              }}
+            />
+          </div>
+          <p className="text-white/30 text-[10px] tracking-widest uppercase text-center mt-4">
+            Preparing your canvas...
+          </p>
+        </div>
+
+        <style dangerouslySetInnerHTML={{ __html: `
+          @keyframes bookPage {
+            0%, 100% { transform: scaleY(1); opacity: 0.6; }
+            50% { transform: scaleY(1.25); opacity: 1; }
+          }
+          @keyframes loadingBar {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(200%); }
+          }
+        `}} />
       </div>
     );
   }
@@ -445,6 +557,84 @@ export default function EditorWorkspace() {
         </div>
       )}
 
+      {showLoading && !isPreviewMode && (
+        <div className={`fixed inset-0 z-[9999] bg-[#1a1a1a] flex flex-col items-center justify-center transition-opacity duration-500 ease-in-out ${isFadingOut ? 'opacity-0' : 'opacity-100'}`}>
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10" />
+          {/* Book animation */}
+          <div className="relative mb-10 flex items-center gap-1">
+            {[...Array(5)].map((_, i) => (
+              <div
+                key={i}
+                className="rounded-sm"
+                style={{
+                  width: '18px',
+                  height: `${48 + Math.sin(i) * 12}px`,
+                  background: i === 2 ? '#c0392b' : `rgba(192,57,43,${0.3 + i * 0.12})`,
+                  borderRadius: '2px',
+                  animation: `bookPage 1.2s ease-in-out infinite`,
+                  animationDelay: `${i * 0.15}s`,
+                  transformOrigin: 'bottom center',
+                }}
+              />
+            ))}
+          </div>
+
+          {/* Brand name */}
+          <div className="relative z-10 text-center">
+            <h1
+              className="text-white text-4xl font-black tracking-[0.25em] uppercase mb-2"
+              style={{ fontFamily: 'var(--font-luckiest-guy), cursive', letterSpacing: '0.3em' }}
+            >
+              DEAR BACCHANAL
+            </h1>
+            <p className="text-white/50 text-xs tracking-[0.4em] uppercase mb-10">Carnival {new Date().getFullYear()}</p>
+          </div>
+
+          {/* Loading bar */}
+          <div className="w-64 relative z-10">
+            <div className="w-full bg-white/10 rounded-full h-0.5 overflow-hidden">
+              <div
+                className="h-full w-1/2 bg-[#c0392b] rounded-full"
+                style={{
+                  animation: 'loadingBar 1.5s ease-in-out infinite',
+                }}
+              />
+            </div>
+            <p className="text-white/30 text-[10px] tracking-widest uppercase text-center mt-4">
+              Preparing your canvas...
+            </p>
+          </div>
+
+          <style dangerouslySetInnerHTML={{ __html: `
+            @keyframes bookPage {
+              0%, 100% { transform: scaleY(1); opacity: 0.6; }
+              50% { transform: scaleY(1.25); opacity: 1; }
+            }
+            @keyframes loadingBar {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(200%); }
+            }
+          `}} />
+        </div>
+      )}
+
+      {/* Portrait Warning Overlay for Mobile */}
+      {isPortrait && (
+        <div className="md:hidden fixed inset-0 z-[10000] bg-[#1a1a1a] flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-300">
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10" />
+          <div className="relative z-10 flex flex-col items-center">
+            <div className="w-16 h-24 border-4 border-white/20 rounded-xl mb-6 relative flex items-center justify-center">
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 w-4 h-1 bg-white/20 rounded-full" />
+              <div className="w-8 h-8 rounded-full border-2 border-white/50 border-r-transparent animate-spin" />
+            </div>
+            <h2 className="text-white text-2xl font-black uppercase tracking-widest mb-3">Rotate Device</h2>
+            <p className="text-white/60 text-sm max-w-[250px] leading-relaxed">
+              Please turn your phone sideways to use the editor canvas.
+            </p>
+          </div>
+        </div>
+      )}
+
       <EditorElementToolbar />
       <EditorTopToolbar />
 
@@ -457,26 +647,17 @@ export default function EditorWorkspace() {
         )}
 
         {!isPreviewMode && (
-          <div className="hidden md:block flex-shrink-0 border-r border-gray-200">
+          <div className="flex-shrink-0 border-r border-gray-200">
             <EditorLeftSidebar />
           </div>
         )}
 
         {!isPreviewMode && activeSidebarPanel && (
           <div
-            style={{ width: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : sidebarWidth }}
-            className="absolute inset-x-0 bottom-0 top-auto z-40 md:relative md:inset-auto md:z-auto h-[65vh] md:h-auto border-t md:border-t-0 border-gray-200 shadow-[0_-10px_40px_rgba(0,0,0,0.1)] md:shadow-none animate-in slide-in-from-bottom md:animate-none text-black flex flex-row shrink-0 bg-white rounded-t-3xl md:rounded-none overflow-hidden"
+            style={{ width: typeof window !== 'undefined' && window.innerWidth < 500 ? window.innerWidth - 60 : sidebarWidth }}
+            className="relative z-40 h-auto border-r border-gray-200 text-black flex flex-row shrink-0 bg-white overflow-hidden shadow-none"
           >
             <div className="flex-1 flex flex-col h-full overflow-hidden">
-              <div className="flex flex-col items-center bg-white md:hidden border-b border-gray-50">
-                <div className="w-12 h-1 bg-gray-200 rounded-full mt-3 mb-2" />
-                <button
-                  onClick={() => useEditorStore.getState().setSidebarPanel(null)}
-                  className="w-full py-2 text-[10px] font-black text-gray-400 uppercase tracking-widest"
-                >
-                  Dismiss Tools
-                </button>
-              </div>
               <EditorLeftPanel />
             </div>
 
@@ -495,12 +676,21 @@ export default function EditorWorkspace() {
 
         <div className="flex-1 relative overflow-hidden flex justify-center items-center">
           <EditorCanvas />
+          {/* Page Transition Spinner */}
+          {isPageTransitioning && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#f5f5f5]/40 backdrop-blur-[2px]">
+              <div className="bg-white p-4 rounded-2xl shadow-xl shadow-black/5 flex flex-col items-center gap-3">
+                <Loader2 className="w-8 h-8 text-[#9f2e2b] animate-spin" />
+                <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Opening...</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       <div
-        style={{ height: bottomBarHeight }}
-        className="hidden md:block border-t border-gray-200 bg-white shrink-0 relative z-50"
+        style={{ height: typeof window !== 'undefined' && window.innerHeight < 500 ? 70 : bottomBarHeight }}
+        className="border-t border-gray-200 bg-white shrink-0 relative z-50"
       >
         {/* Resize Handle */}
         <div
@@ -517,48 +707,7 @@ export default function EditorWorkspace() {
         </div>
       </div>
 
-      {/* Mobile Tool Navigation */}
-      {!isPreviewMode && (
-        <div className="md:hidden fixed bottom-[70px] left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-xl border border-gray-200 rounded-full shadow-2xl z-50 transition-all active:scale-95">
-          <button
-            onClick={() => useEditorStore.getState().setSidebarPanel("stickers")}
-            className={`p-2 rounded-full transition-colors ${activeSidebarPanel === "stickers" ? "bg-black text-white" : "text-gray-500"}`}
-          >
-            <LayoutGrid className="w-5 h-5" />
-          </button>
-          <div className="w-px h-4 bg-gray-200" />
-          <button
-            onClick={() => useEditorStore.getState().setSidebarPanel("text")}
-            className={`p-2 rounded-full transition-colors ${activeSidebarPanel === "text" ? "bg-black text-white" : "text-gray-500"}`}
-          >
-            <Edit3 className="w-5 h-5" />
-          </button>
-          <div className="w-px h-4 bg-gray-200" />
-          <button
-            onClick={() => useEditorStore.getState().setSidebarPanel("layouts")}
-            className={`p-2 rounded-full transition-colors ${activeSidebarPanel === "layouts" ? "bg-black text-white" : "text-gray-500"}`}
-          >
-            <Layout className="w-5 h-5" />
-          </button>
-          {!isAdminStore && (
-            <>
-              <div className="w-px h-4 bg-gray-200" />
-              <button
-                onClick={() => useEditorStore.getState().setIsOrderModalOpen(true)}
-                className="p-2.5 bg-[#9f2e2b] text-white rounded-full shadow-lg shadow-red-500/20 active:scale-90 transition-all"
-              >
-                <ShoppingCart className="w-5 h-5" />
-              </button>
-            </>
-          )}
-        </div>
-      )}
 
-      {!isPreviewMode && (
-        <div className="md:hidden border-t border-gray-200 h-[60px] bg-white">
-          <EditorBottomBar />
-        </div>
-      )}
 
       <OrderModal
         isOpen={isOrderModalOpen}

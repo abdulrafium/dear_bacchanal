@@ -12,5 +12,5 @@ export interface User {
 
 export interface AuthModalState {
   isOpen: boolean;
-  view: "signin" | "signup";
+  view: "signin" | "signup" | "forgot-password";
 }

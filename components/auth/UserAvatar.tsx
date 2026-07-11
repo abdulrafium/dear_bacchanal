@@ -2,13 +2,15 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
-import { User, LogOut, Settings, LayoutDashboard, ChevronDown } from "lucide-react";
+import { User, LogOut, Settings, LayoutDashboard, ChevronDown, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
+import { ChangePasswordModal } from "./ChangePasswordModal";
 
-export function UserAvatar() {
+export function UserAvatar({ align = "right" }: { align?: "left" | "right" }) {
   const { user, isLoading, logout } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -60,7 +62,7 @@ export function UserAvatar() {
           </div>
         </div>
         
-        <div className="hidden sm:flex flex-col items-start leading-none text-left">
+        <div className="flex flex-col items-start leading-none text-left">
           <span className="text-[11px] font-black uppercase tracking-widest text-white/90">
             {user.name || "Explorer"}
           </span>
@@ -73,7 +75,9 @@ export function UserAvatar() {
 
       {/* Premium Dropdown Menu */}
       {isMenuOpen && (
-        <div className="absolute top-full right-0 mt-3 w-64 bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300 z-[100]">
+        <div className={`absolute top-full mt-3 w-64 bg-black/90 backdrop-blur-xl border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300 z-[100] ${
+          align === "left" ? "left-0 sm:left-auto sm:right-0" : "right-0"
+        }`}>
           {/* User Header */}
           <div className="p-4 border-b border-white/5 bg-gradient-to-br from-white/5 to-transparent">
             <p className="text-sm font-black text-white uppercase tracking-wider truncate">
@@ -105,6 +109,19 @@ export function UserAvatar() {
               </Link>
             )}
 
+            {(user as any).provider === "credentials" && !(user as any).isAdmin && (
+              <button
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  setIsChangePasswordOpen(true);
+                }}
+                className="flex w-full items-center gap-3 px-3 py-2.5 text-sm text-neutral-300 hover:text-white hover:bg-white/10 rounded-xl transition-all duration-200 group"
+              >
+                <KeyRound className="w-4 h-4 text-coral group-hover:rotate-12 transition-transform" />
+                Change Password
+              </button>
+            )}
+
             <div className="h-px bg-white/5 my-2" />
 
             <button
@@ -117,6 +134,11 @@ export function UserAvatar() {
           </div>
         </div>
       )}
+
+      <ChangePasswordModal 
+        isOpen={isChangePasswordOpen} 
+        onClose={() => setIsChangePasswordOpen(false)} 
+      />
     </div>
   );
 }
