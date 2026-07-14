@@ -48,11 +48,10 @@ export function SignInForm() {
         closeModal();
         
         if (session?.user?.isAdmin) {
-          router.push("/admin/dashboard");
+          window.location.href = "/admin/dashboard";
         } else {
-          router.push("/customize");
+          window.location.href = "/customize";
         }
-        router.refresh();
       }
     } catch (error) {
       console.error("Login Error:", error);

@@ -144,19 +144,68 @@ export async function DELETE(req: NextRequest) {
         const { ObjectId: OId } = await import("mongodb");
         const validObjIds = bookIds.filter((id: string) => OId.isValid(id) && id.length === 24).map((id: string) => new OId(id));
         if (validObjIds.length > 0) {
+          // Fetch books to get their UploadThing URLs before deletion
+          const books = await db.collection("user_books").find({ _id: { $in: validObjIds } }).toArray();
+          const fileKeys: string[] = [];
+          for (const book of books) {
+            if (book.savedCoverPdfUrl) {
+              const key = book.savedCoverPdfUrl.split("/f/")[1];
+              if (key) fileKeys.push(key);
+            }
+            if (book.savedTextPdfUrl) {
+              const key = book.savedTextPdfUrl.split("/f/")[1];
+              if (key) fileKeys.push(key);
+            }
+            if (book.savedPdfUrl) {
+              const key = book.savedPdfUrl.split("/f/")[1];
+              if (key) fileKeys.push(key);
+            }
+          }
+          
+          // Delete physical files from UploadThing
+          if (fileKeys.length > 0) {
+            const { UTApi } = await import("uploadthing/server");
+            const utapi = new UTApi();
+            await utapi.deleteFiles(fileKeys).catch(err => console.error("UploadThing delete failed:", err));
+          }
+
           await db.collection("user_books").deleteMany({ _id: { $in: validObjIds } });
         }
       }
-      return NextResponse.json({ success: true, message: "Orders and related books deleted" });
+      return NextResponse.json({ success: true, message: "Orders, related books, and PDF files permanently deleted" });
     } else if (orderId) {
       // Fetch bookId from order before deleting
       const order = await db.collection("orders").findOne({ _id: new ObjectId(orderId) }, { projection: { bookId: 1 } });
       await db.collection("orders").deleteOne({ _id: new ObjectId(orderId) });
-      // Cascade: delete matching user_book
+      
+      // Cascade: delete matching user_book and its UploadThing files
       if (order?.bookId && ObjectId.isValid(order.bookId) && order.bookId.length === 24) {
-        await db.collection("user_books").deleteOne({ _id: new ObjectId(order.bookId) });
+        const book = await db.collection("user_books").findOne({ _id: new ObjectId(order.bookId) });
+        if (book) {
+          const fileKeys: string[] = [];
+          if (book.savedCoverPdfUrl) {
+            const key = book.savedCoverPdfUrl.split("/f/")[1];
+            if (key) fileKeys.push(key);
+          }
+          if (book.savedTextPdfUrl) {
+            const key = book.savedTextPdfUrl.split("/f/")[1];
+            if (key) fileKeys.push(key);
+          }
+          if (book.savedPdfUrl) {
+            const key = book.savedPdfUrl.split("/f/")[1];
+            if (key) fileKeys.push(key);
+          }
+
+          if (fileKeys.length > 0) {
+            const { UTApi } = await import("uploadthing/server");
+            const utapi = new UTApi();
+            await utapi.deleteFiles(fileKeys).catch(err => console.error("UploadThing delete failed:", err));
+          }
+
+          await db.collection("user_books").deleteOne({ _id: new ObjectId(order.bookId) });
+        }
       }
-      return NextResponse.json({ success: true, message: "Order and related book deleted" });
+      return NextResponse.json({ success: true, message: "Order, related book, and PDF files permanently deleted" });
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   } catch (error: any) {

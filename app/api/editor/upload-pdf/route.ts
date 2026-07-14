@@ -59,18 +59,75 @@ export async function POST(req: NextRequest) {
     try {
       let bookQuery: any = null;
 
-      if (bookId && ObjectId.isValid(bookId) && bookId.length === 24) {
-        bookQuery = { _id: new ObjectId(bookId) };
-      } else if (templateName) {
+      // Ensure bookId is a string (Next.js sometimes serializes ObjectId as {"$oid": "..."})
+      let cleanBookId = bookId;
+      if (typeof bookId === 'object' && bookId !== null && (bookId as any).$oid) {
+        cleanBookId = (bookId as any).$oid;
+      }
+
+      if (cleanBookId && typeof cleanBookId === 'string') {
+        if (ObjectId.isValid(cleanBookId) && cleanBookId.length === 24) {
+          bookQuery = { _id: new ObjectId(cleanBookId) };
+        } else if (cleanBookId.length === 18) {
+          // If the frontend accidentally passed the truncated 18-character SiteFlow ID,
+          // find the book whose _id ends with this string.
+          const match = await db.collection("user_books").aggregate([
+            { $addFields: { idString: { $toString: "$_id" } } },
+            { $match: { idString: { $regex: `${cleanBookId}$` } } }
+          ]).toArray();
+          
+          if (match.length > 0) {
+            bookQuery = { _id: match[0]._id };
+          }
+        }
+      } 
+      
+      if (!bookQuery && templateName) {
         bookQuery = {
           $or: [{ userId }, { email: user.email }],
           activeTemplateName: templateName,
         };
       }
 
+      console.log(`[upload-pdf] Using bookQuery:`, JSON.stringify(bookQuery));
+
+      let matchedCount = 0;
+      let modifiedCount = 0;
+      let errorMessage = null;
+
       if (bookQuery) {
-        await db.collection("user_books").updateOne(bookQuery, { $set: updateFields });
+        const result = await db.collection("user_books").updateOne(bookQuery, { $set: updateFields });
+        console.log(`[upload-pdf] Database update result: matched ${result.matchedCount}, modified ${result.modifiedCount}`);
+        matchedCount = result.matchedCount;
+        modifiedCount = result.modifiedCount;
+        
+        if (result.matchedCount === 0) {
+            console.error(`[upload-pdf] CRITICAL ERROR: Could not find user_book in database for this query!`);
+            errorMessage = "Could not find matching book in database to save PDF URLs.";
+        }
+      } else {
+        errorMessage = "No bookQuery generated (missing bookId and templateName)";
       }
+
+      // WRITE TO DEBUG_LOGS COLLECTION SO I CAN SEE IT
+      await db.collection("debug_logs").insertOne({
+        action: "upload-pdf",
+        timestamp: new Date(),
+        bookId_received: bookId,
+        cleanBookId: cleanBookId,
+        templateName: templateName,
+        bookQuery: JSON.stringify(bookQuery),
+        matchedCount,
+        modifiedCount,
+        errorMessage,
+        coverUrl,
+        textUrl
+      }).catch(() => {}); // ignore errors
+
+      if (errorMessage) {
+        return NextResponse.json({ error: errorMessage }, { status: 404 });
+      }
+
     } catch (bookErr) {
       console.error("[upload-pdf] Failed to save to user_books record:", bookErr);
     }

@@ -583,6 +583,29 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     // Clear selection so the transformer box doesn't appear in the PDF
     selectElement(null);
 
+    // Eagerly pre-load the TTF font and massive pdf-lib libraries in the background
+    // This allows the network fetch and WASM parsing to complete in parallel with the canvas image generation loop
+    let fontPreloadPromise: Promise<any> | null = null;
+    if (isHardCopy) {
+      fontPreloadPromise = (async () => {
+        try {
+          const [pdfLibModule, fontkitModule, fontRes] = await Promise.all([
+            import('pdf-lib'),
+            import('@pdf-lib/fontkit'),
+            fetch('/api/font-embed')
+          ]);
+          const { fontBase64 } = await fontRes.json();
+          const fontBinary = atob(fontBase64);
+          const fontBytes = new Uint8Array(fontBinary.length);
+          for (let i = 0; i < fontBinary.length; i++) fontBytes[i] = fontBinary.charCodeAt(i);
+          return { pdfLibModule, fontkitModule, fontBytes };
+        } catch (e) {
+          console.error("Font preload failed", e);
+          return null;
+        }
+      })();
+    }
+
     try {
       const { jsPDF } = await import("jspdf");
       const PAGE_WIDTH = 500;
@@ -617,13 +640,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           compress: true
         });
       } else {
-        const firstPageFormat = (pdfType === 'cover' || pdfType === 'both') 
-          ? [929.84, 433.34] // Cover safe zone: 1000 - 70.16, 500 - 66.66
-          : [988.46, 488.46]; // Inner safe zone: 1000 - 11.54, 500 - 11.54
+        // SOFT COPY: Always use the Inner Page cropped dimensions as the uniform PDF page size
         softPdf = new jsPDF({
           orientation: "landscape",
           unit: "pt",
-          format: firstPageFormat,
+          format: [988.46, 488.46],
           compress: true
         });
       }
@@ -767,8 +788,13 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                          !isHardCopy         ? softTotal  :
                          /* both */            spreads.length;
 
-        const pageLabel = i === 0 ? 'Cover' : `Inner page ${innerPageNum} of ${innerTotal}`;
-        const toastLabel = pdfType === 'cover'
+        const pageLabel = !isHardCopy 
+          ? `page ${relCurrent} of ${relTotal}` 
+          : (i === 0 ? 'Cover' : `Inner page ${innerPageNum} of ${innerTotal}`);
+          
+        const toastLabel = !isHardCopy
+          ? `Rendering page ${relCurrent} of ${relTotal}...`
+          : pdfType === 'cover'
           ? `Rendering cover (1 of 1)...`
           : pdfType === 'inner'
           ? `Rendering inner page ${innerPageNum} of ${innerTotal}...`
@@ -821,7 +847,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         }
 
         // Wait for React to mount components and images to start loading
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // 800ms gives React enough time to flush the new spread nodes into the Konva Stage
+        // before we query them for loading completion.
+        await new Promise(resolve => setTimeout(resolve, 800));
 
         // 2. Re-fetch stageRef from store (it updates when canvas re-renders)
         const currentStageRef = get().stageRef;
@@ -893,11 +921,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           }
 
           // 5. Extra settling time for SVG renders, complex stickers, etc.
-          await new Promise(r => setTimeout(r, 1000));
+          await new Promise(r => setTimeout(r, 400));
 
           // 6. Final redraw after everything is loaded
           currentStageRef.batchDraw();
-          await new Promise(r => setTimeout(r, 300)); // Let the draw flush
+          await new Promise(r => setTimeout(r, 50)); // Let the draw flush
 
           // 7. Capture high-quality snapshot for the ENTIRE continuous spread (Left + Right, gap is removed in UI)
           set({
@@ -933,7 +961,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           currentStageRef.batchDraw();
 
           if (!isHardCopy && softPdf) {
-            // SOFT COPY - Unified Document, exact canvas size without bleed
+            // SOFT COPY - Unified Document, exact canvas size without bleed cropping
             let cropX = 0, cropY = 0, cropW = PAGE_WIDTH * 2, cropH = PAGE_HEIGHT;
             
             if (i === 0) {
@@ -956,9 +984,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             });
             const isFirstIteration = (pdfType === 'inner') ? (i === 1) : (i === 0);
             if (!isFirstIteration) {
-              softPdf.addPage([cropW, cropH], "landscape");
+              softPdf.addPage([988.46, 488.46], "landscape");
             }
-            softPdf.addImage(spreadDataUrl, 'JPEG', 0, 0, cropW, cropH);
+            // Force the cropped image to scale and perfectly fill the uniform PDF page dimensions
+            softPdf.addImage(spreadDataUrl, 'JPEG', 0, 0, 988.46, 488.46);
           } else if (isHardCopy && coverPdf && textPdf) {
             // HARD COPY - Strict layout for Pureprint factory requirements
             if (i === 0) {
@@ -1042,20 +1071,16 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       // ── Post-process with pdf-lib to guarantee font embedding at binary level ──
       const embedFontWithPdfLib = async (inputBlob: Blob): Promise<Blob> => {
         try {
-          const { PDFDocument, rgb } = await import('pdf-lib');
-          // Fetch font as base64 from our server API (reliable, no browser binary conversion)
-          const fontRes = await fetch('/api/font-embed');
-          const { fontBase64 } = await fontRes.json();
-          // Decode base64 to bytes
-          const fontBinary = atob(fontBase64);
-          const fontBytes = new Uint8Array(fontBinary.length);
-          for (let i = 0; i < fontBinary.length; i++) fontBytes[i] = fontBinary.charCodeAt(i);
+          if (!fontPreloadPromise) return inputBlob;
+          const preloaded = await fontPreloadPromise;
+          if (!preloaded) return inputBlob;
+          
+          const { pdfLibModule: { PDFDocument, rgb }, fontkitModule, fontBytes } = preloaded;
 
           const inputBytes = await inputBlob.arrayBuffer();
           const pdfDoc = await PDFDocument.load(inputBytes, { ignoreEncryption: true });
           
           // Must register fontkit to embed custom TTF fonts
-          const fontkitModule = await import('@pdf-lib/fontkit');
           const fontkit = fontkitModule.default || fontkitModule;
           pdfDoc.registerFontkit(fontkit);
 
@@ -1063,7 +1088,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           const font = await pdfDoc.embedFont(fontBytes, { subset: false });
           // Draw a dot with standard opacity off-screen or tiny so strict parsers don't strip it
           const pages = pdfDoc.getPages();
-          pages.forEach(page => {
+          pages.forEach((page: any) => {
             page.drawText('.', {
               x: -50, y: -50, // Off-screen
               size: 12,
@@ -1089,35 +1114,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const rawTextBlob = textPdf.output('blob');
         coverBlob = await embedFontWithPdfLib(rawCoverBlob);
         textBlob = await embedFontWithPdfLib(rawTextBlob);
-
-        // Trigger local downloads for the generated print-ready PDFs
-        if (pdfType === 'cover' || pdfType === 'both') {
-          const coverBlobUrl = URL.createObjectURL(coverBlob);
-          const coverLink = document.createElement('a');
-          coverLink.href = coverBlobUrl;
-          coverLink.download = `${baseFileName}_Cover_PrintReady.pdf`;
-          document.body.appendChild(coverLink);
-          coverLink.click();
-          document.body.removeChild(coverLink);
-          setTimeout(() => URL.revokeObjectURL(coverBlobUrl), 5000);
-        }
-
-        if (pdfType === 'inner' || pdfType === 'both') {
-          const textBlobUrl = URL.createObjectURL(textBlob);
-          const textLink = document.createElement('a');
-          textLink.href = textBlobUrl;
-          textLink.download = `${baseFileName}_Inner_PrintReady.pdf`;
-          document.body.appendChild(textLink);
-          textLink.click();
-          document.body.removeChild(textLink);
-          setTimeout(() => URL.revokeObjectURL(textBlobUrl), 5000);
-        }
         
-        toast.success("Print-ready PDFs downloaded successfully!", { duration: 5000 });
+        if (!coverBlob) coverBlob = rawCoverBlob;
+        if (!textBlob) textBlob = rawTextBlob;
+
+        // Note: We DO NOT trigger local downloads for Hard Copies. 
+        // Hard copy files are massive and are strictly meant for the Pureprint factory,
+        // so they are only uploaded directly to the S3 bucket in the background.
       } else if (!isHardCopy && softPdf) {
-        const rawSoftBlob = softPdf.output('blob');
-        softBlob = await embedFontWithPdfLib(rawSoftBlob);
-        
+        // For soft copies, we DO NOT need to embed fonts for printer pre-flight checks!
+        // This saves massive amounts of processing time at the end of the generation.
+        softBlob = softPdf.output('blob');
         // Trigger Single Unified Download for Soft Copy (or specific Admin no-bleed export)
         const softBlobUrl = URL.createObjectURL(softBlob);
         const softLink = document.createElement('a');
@@ -1139,51 +1146,57 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         toast.success("PDF downloaded successfully!", { duration: 5000 });
       }
 
-      // ─── Background upload to UploadThing so SiteFlow can fetch it (HARD COPY ONLY) ──────────
-      // This runs silently after the download — any failure is non-blocking.
+      // ─── Upload to UploadThing so SiteFlow can fetch it (HARD COPY ONLY) ──────────
       if (isHardCopy && pdfType === 'both' && coverBlob && textBlob) {
         try {
           const { activeTemplateId: bookId, activeTemplateName: tmplName } = get();
           
+          // Update the full-screen loading overlay text so the user knows why it's waiting
+          set((state) => ({
+            pdfGenerationProgress: state.pdfGenerationProgress 
+              ? { ...state.pdfGenerationProgress, status: "Uploading Print Files to Factory..." }
+              : null
+          }));
+
           const coverPdfFile = new File([coverBlob], `${baseFileName}_Cover.pdf`, { type: "application/pdf" });
           const textPdfFile = new File([textBlob], `${baseFileName}_Text.pdf`, { type: "application/pdf" });
 
-          // 1. Upload files DIRECTLY to UploadThing from the browser (bypasses Next.js 4.5MB body limit)
-          const uploadResult = await uploadFiles("bookPdfUploader", {
-            files: [coverPdfFile, textPdfFile]
-          });
-
-          if (uploadResult && uploadResult.length === 2) {
-            const coverUrl = uploadResult.find(r => r.name.includes("_Cover"))?.url || uploadResult[0].url;
-            const textUrl = uploadResult.find(r => r.name.includes("_Text"))?.url || uploadResult[1].url;
-
-            // 2. Send the resulting URLs to the backend to save in the database
-            const uploadResponse = await fetch("/api/editor/upload-pdf", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                coverUrl,
-                textUrl,
-                bookId,
-                templateName: tmplName
-              }),
+            // 1. Upload files DIRECTLY to UploadThing from the browser (bypasses Next.js 4.5MB body limit)
+            const uploadResult = await uploadFiles("bookPdfUploader", {
+              files: [coverPdfFile, textPdfFile]
             });
-            
-            const data = await uploadResponse.json();
-            
-            if (data.success) {
-              console.log("[editor] PDFs uploaded for SiteFlow!");
+
+            if (uploadResult && uploadResult.length === 2) {
+              const coverUrl = uploadResult.find(r => r.name.includes("_Cover"))?.url || uploadResult[0].url;
+              const textUrl = uploadResult.find(r => r.name.includes("_Text"))?.url || uploadResult[1].url;
+
+              // 2. Send the resulting URLs to the backend to save in the database
+              const uploadResponse = await fetch("/api/editor/upload-pdf", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  coverUrl,
+                  textUrl,
+                  bookId,
+                  templateName: tmplName
+                }),
+              });
+              
+              const data = await uploadResponse.json();
+              
+              if (data.success) {
+                console.log("[editor] PDFs uploaded for SiteFlow!");
+              toast.success("Print files securely uploaded to factory!", { duration: 5000 });
             } else {
-              console.warn("[editor] PDF upload for SiteFlow failed:", data.error);
-              toast.error("Failed to save PDF securely to the server.");
+              console.error("[editor] Failed to save URLs to DB:", data);
+              toast.error("Failed to link print files to order. Please contact support.", { duration: 8000 });
             }
           } else {
-            console.warn("[editor] Failed to upload files to UploadThing");
-            toast.error("Server upload failed. Check your UploadThing environment variables.");
+            toast.error("File upload failed. Please contact support.", { duration: 8000 });
           }
-        } catch (uploadSetupErr: any) {
-          console.warn("[editor] Could not start PDF upload:", uploadSetupErr);
-          toast.error("Upload process crashed. Please check your internet connection.");
+        } catch (e: any) {
+          console.error("[editor] Background PDF upload failed:", e);
+          toast.error(`Upload error: ${e.message || "Network issue"}. Contact support.`, { duration: 8000 });
         }
       }
 

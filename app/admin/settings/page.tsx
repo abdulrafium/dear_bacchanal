@@ -36,6 +36,8 @@ export default function AdminSettingsPage() {
   
   const [clearingRevenue, setClearingRevenue] = useState(false);
   const [revenueModal, setRevenueModal] = useState(false);
+  const [wipeModal, setWipeModal] = useState(false);
+  const [wiping, setWiping] = useState(false);
 
   const executeClearRevenue = async () => {
     setClearingRevenue(true);
@@ -146,6 +148,32 @@ export default function AdminSettingsPage() {
           title="Clear Revenue Stats"
           description="Are you absolutely sure you want to clear the revenue stats? This will set all order amounts to zero and cannot be undone."
           confirmLabel="Yes, Clear Revenue"
+        />
+        <ConfirmModal
+          isOpen={wipeModal}
+          onClose={() => setWipeModal(false)}
+          onConfirm={async () => {
+            setWiping(true);
+            try {
+              const res = await fetch("/api/admin/clean-all", { method: "POST" });
+              const data = await res.json();
+              if (data.success) {
+                toast.success(data.message);
+                fetchSettings(); // Refresh stats implicitly if needed
+                window.location.reload(); // Refresh the page to update stats
+              } else {
+                toast.error(data.error || "Failed to wipe database");
+              }
+            } catch (e: any) {
+              toast.error(e.message || "Failed to wipe database");
+            } finally {
+              setWiping(false);
+              setWipeModal(false);
+            }
+          }}
+          title="Wipe Database & Live Books"
+          description="Are you absolutely sure? This will delete EVERY order, EVERY live book, and permanently destroy ALL PDF files from your cloud storage. This cannot be undone!"
+          confirmLabel="Yes, Wipe Database"
         />
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -478,8 +506,20 @@ export default function AdminSettingsPage() {
                     disabled={clearingRevenue}
                     className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600/10 hover:bg-red-600/20 border border-red-600/30 text-red-400 font-bold text-xs uppercase tracking-wider rounded-xl transition-all disabled:opacity-50 flex-shrink-0 w-full sm:w-auto"
                   >
-                    {clearingRevenue ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                    Clear Revenue
+                    {clearingRevenue ? <Loader2 className="w-4 h-4 animate-spin" /> : "CLEAR REVENUE"}
+                  </button>
+                </div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-2xl bg-black/30 border border-white/5">
+                  <div>
+                    <p className="text-white font-semibold text-sm">Wipe Database &amp; Live Books</p>
+                    <p className="text-white/30 text-xs mt-0.5">Destroys ALL orders, deletes ALL Live Books (including drafts), and permanently wipes all PDF files from UploadThing cloud storage. Your global templates will remain completely safe.</p>
+                  </div>
+                  <button
+                    onClick={() => setWipeModal(true)}
+                    disabled={wiping}
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-red-600/10 hover:bg-red-600/20 border border-red-600/30 text-red-400 font-bold text-xs uppercase tracking-wider rounded-xl transition-all disabled:opacity-50 flex-shrink-0 w-full sm:w-auto"
+                  >
+                    {wiping ? <Loader2 className="w-4 h-4 animate-spin" /> : "WIPE DATABASE"}
                   </button>
                 </div>
               </div>

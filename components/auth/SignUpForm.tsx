@@ -43,22 +43,8 @@ export function SignUpForm() {
         throw new Error(result.error || "Registration failed");
       }
 
-      // Automatically sign in after registration
-      const signInResult = await signIn("credentials", {
-        email: data.email,
-        password: data.password,
-        redirect: false,
-      });
-
-      if (signInResult?.error) {
-        toast.error("Account created, but failed to sign in automatically");
-        toggleView(); // Switch to sign in
-      } else {
-        toast.success("Account created successfully!");
-        closeModal();
-        router.push("/customize");
-        router.refresh();
-      }
+      toast.success("Account created successfully! Please sign in.");
+      toggleView(); // Switch to sign in view
     } catch (error: any) {
       console.error("Signup error:", error);
       toast.error(error.message || "Registration failed. Please try again.");

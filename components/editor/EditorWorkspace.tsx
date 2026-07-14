@@ -137,7 +137,8 @@ export default function EditorWorkspace() {
       const state = useEditorStore.getState();
       const currentKey = `${isAdmin}_${templateName}_${isNewParam}_${freshParamStr}_${bookIdParam}`;
 
-      const isPaymentReturn = searchParams.get("payment") === "success";
+      const paymentParam = searchParams.get("payment");
+      const isPaymentReturn = paymentParam === "success" || paymentParam === "success_hard";
 
       // INSTANT LOAD: If the store already has the data loaded in memory, skip the network entirely!
       if (!isPaymentReturn && freshParamStr !== "true" && state.templateLoaded) {
@@ -163,8 +164,7 @@ export default function EditorWorkspace() {
         if (isNewParam) query.set("new", "true");
 
         // If returning from payment without templateName, still load user's book
-        const paymentParam = searchParams.get("payment");
-        if (!templateName && paymentParam === "success") {
+        if (!templateName && isPaymentReturn) {
           // Load the user's latest book
           query.set("loadLatest", "true");
         }

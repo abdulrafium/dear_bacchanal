@@ -12,6 +12,16 @@ export const revalidate = 0;
  * The [id] is the bookId stored on the order (user_books._id).
  * We look up the user's savedPdfUrl and redirect SiteFlow there.
  */
+
+// Handle preflight CORS requests
+export async function OPTIONS() {
+  const response = new NextResponse(null, { status: 204 });
+  response.headers.set("Access-Control-Allow-Origin", "*");
+  response.headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+  response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  return response;
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -21,7 +31,15 @@ export async function GET(
     const type = req.nextUrl.searchParams.get("type") || "text"; // "cover" | "text"
 
     if (!id) {
-      return NextResponse.json({ error: "Book ID is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Book ID is required" }, 
+        { 
+          status: 400,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+          }
+        }
+      );
     }
 
     const db = await getDatabase();
@@ -72,7 +90,12 @@ export async function GET(
       console.error(`[export] Book not found for id: ${id}`);
       return NextResponse.json(
         { error: "Book not found" },
-        { status: 404 }
+        { 
+          status: 404,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+          }
+        }
       );
     }
 
@@ -112,19 +135,33 @@ export async function GET(
           bookId: id,
           type,
         },
-        { status: 404 }
+        { 
+          status: 404,
+          headers: {
+            "Access-Control-Allow-Origin": "*",
+          }
+        }
       );
     }
 
     console.log(`[export] Serving PDF for book ${id} (type: ${type}) → ${pdfUrl}`);
 
     // ─── 4. Redirect SiteFlow to the actual PDF URL ───────────────────────────
-    return NextResponse.redirect(pdfUrl, { status: 302 });
+    const response = NextResponse.redirect(pdfUrl, { status: 302 });
+    response.headers.set("Access-Control-Allow-Origin", "*");
+    response.headers.set("Access-Control-Allow-Methods", "GET, OPTIONS");
+    response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    return response;
   } catch (error: any) {
     console.error("[export] Unhandled error:", error);
     return NextResponse.json(
       { error: error.message || "Internal server error" },
-      { status: 500 }
+      { 
+        status: 500,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+        }
+      }
     );
   }
 }
