@@ -6,6 +6,8 @@ import { adminAuthMiddleware } from "@/lib/admin-auth";
 import { ObjectId } from "mongodb";
 import { sendEmail } from "@/lib/mail-service";
 import { getOrderCompletedEmail, getRefundEmail } from "@/lib/email-templates";
+import { HPSiteFlowClient } from "@/lib/hp-site-flow";
+import { UTApi } from "uploadthing/server";
 
 // GET - List all orders
 export async function GET(req: NextRequest) {
@@ -111,6 +113,21 @@ export async function PATCH(req: NextRequest) {
                 subject: "Your Refund has been Processed",
                 html: getRefundEmail(order.orderId || order._id.toString(), order.amount / 100)
             });
+        }
+
+        // TRIGGER PUREPRINT (SITEFLOW) CANCELLATION IF NEEDED
+        if (status === 'cancelled' && order.type === 'hard' && order.siteFlowOrderId) {
+            try {
+                const client = new HPSiteFlowClient();
+                // Send the short sourceOrderId to SiteFlow
+                const rawOrderId = order._id.toString();
+                const shortOrderId = rawOrderId.length > 18 ? rawOrderId.substring(rawOrderId.length - 18) : rawOrderId;
+                await client.cancelOrder(shortOrderId);
+                console.log(`[Admin] Cancelled SiteFlow order: ${shortOrderId}`);
+            } catch (sfError: any) {
+                console.error(`[Admin] Failed to cancel SiteFlow order for ${order._id}:`, sfError);
+                // We don't fail the API request if SiteFlow cancellation fails, but we log it.
+            }
         }
     }
 
