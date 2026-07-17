@@ -266,4 +266,36 @@ export class HPSiteFlowClient {
             return null;
         }
     }
+
+    async cancelOrder(sourceOrderId: string) {
+        // SiteFlow endpoint for cancellation: PUT /api/order/{destination}/{sourceOrderId}/cancel
+        const destination = "pureprint";
+        const path = `/api/order/${destination}/${sourceOrderId}/cancel`;
+        
+        if (process.env.NODE_ENV === "development") {
+            console.log(`🛠️ DEVELOPMENT MODE: Bypassing actual Pureprint Site Flow cancellation for ${sourceOrderId}.`);
+            return { success: true, message: "Mock order cancelled on localhost" };
+        }
+
+        try {
+            const response = await fetch(`${HP_API_BASE_URL}/order/${destination}/${sourceOrderId}/cancel`, {
+                method: "PUT",
+                headers: this.getHeaders("PUT", path)
+            });
+
+            const data = await response.json().catch(() => null);
+
+            if (!response.ok) {
+                console.error(`HP Site Flow Order Cancellation Failed for ${sourceOrderId}:`, data);
+                throw new Error(`HP Site Flow Error: ${JSON.stringify(data)}`);
+            }
+
+            console.log(`HP Site Flow Order ${sourceOrderId} successfully cancelled.`);
+            return data;
+
+        } catch (error) {
+            console.error(`Error cancelling HP Site Flow order ${sourceOrderId}:`, error);
+            throw error;
+        }
+    }
 }
