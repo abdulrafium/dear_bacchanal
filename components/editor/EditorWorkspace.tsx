@@ -25,6 +25,7 @@ export default function EditorWorkspace() {
   const setCurrentSpread = useEditorStore((s) => s.setCurrentSpread);
   const isAdmin = useEditorStore((s) => s.isAdmin);
   const isGeneratingPdf = useEditorStore((s) => s.isGeneratingPdf);
+  const fetchUserImages = useEditorStore((s) => s.fetchUserImages);
   const { user, refreshUser } = useAuth();
 
   const searchParams = useSearchParams();
@@ -39,6 +40,7 @@ export default function EditorWorkspace() {
   const [isResizingSidebar, setIsResizingSidebar] = useState(false);
   const [isResizingBottom, setIsResizingBottom] = useState(false);
   const [showLoading, setShowLoading] = useState(true);
+  const [loadProgress, setLoadProgress] = useState(0);
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [isPortrait, setIsPortrait] = useState(false);
   const templateLoaded = useEditorStore((s) => s.templateLoaded);
@@ -137,6 +139,9 @@ export default function EditorWorkspace() {
       const state = useEditorStore.getState();
       const currentKey = `${isAdmin}_${templateName}_${isNewParam}_${freshParamStr}_${bookIdParam}`;
 
+      // Fetch user images in parallel with template loading
+      fetchUserImages();
+
       const paymentParam = searchParams.get("payment");
       const isPaymentReturn = paymentParam === "success" || paymentParam === "success_hard";
 
@@ -212,6 +217,17 @@ export default function EditorWorkspace() {
             // Restore last saved page for user's own book, or use URL param if present
             const targetIndex = spreadFromUrl ? parseInt(spreadFromUrl) : (data.book.currentSpreadIndex ?? 0);
             setCurrentSpread(targetIndex);
+          } else if (data.template?.spreads?.length) {
+            // Fresh template loaded for a user
+            const cleanSpreads = data.template.spreads.map((s: any) => ({
+              ...s,
+              leftPage: { ...s.leftPage, elements: s.leftPage.elements?.map((e: any) => e.type === 'checkbox' ? { ...e, isChecked: false } : e) },
+              rightPage: { ...s.rightPage, elements: s.rightPage.elements?.map((e: any) => e.type === 'checkbox' ? { ...e, isChecked: false } : e) }
+            }));
+            // Pass null for ID so it generates a new user_book ID on first save
+            loadTemplate(cleanSpreads, data.template.templateName, data.template.description, data.template.country, data.template.year, null);
+            const targetIndex = spreadFromUrl ? parseInt(spreadFromUrl) : 0;
+            setCurrentSpread(targetIndex);
           }
         }
       } catch (err) {
@@ -235,7 +251,12 @@ export default function EditorWorkspace() {
 
     // Add keyboard listeners
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      // Allow default behavior inside text inputs/textareas
+      if (
+        document.activeElement?.tagName === "INPUT" ||
+        document.activeElement?.tagName === "TEXTAREA" ||
+        (document.activeElement as HTMLElement)?.isContentEditable
+      ) {
         return;
       }
 
@@ -277,40 +298,37 @@ export default function EditorWorkspace() {
       const waitForCanvas = async () => {
         try {
           const { preloadSpreadImages } = await import('./EditorCanvas');
-          // Wait for images to load, with a minimum 2-second delay for the animation
-          await Promise.all([
-            preloadSpreadImages(useEditorStore.getState().spreads),
-            new Promise(resolve => setTimeout(resolve, 2000))
-          ]);
+          // Preload images and track real-time progress
+          const state = useEditorStore.getState();
+          await preloadSpreadImages(state.spreads, (p) => setLoadProgress(p));
         } catch (e) {
           console.error("Failed to preload canvas images", e);
         }
         setIsFadingOut(true);
-        setTimeout(() => setShowLoading(false), 500); // Wait for fade transition
+        setTimeout(() => setShowLoading(false), 300); // short fade-out only
       };
       
       waitForCanvas();
     }
   }, [loading, templateLoaded]);
 
-  const spreads = useEditorStore((s) => s.spreads);
-  const isDirty = useEditorStore((s) => s.isDirty);
-  const save = useEditorStore((s) => s.save);
-  const isAdminStore = useEditorStore((s) => s.isAdmin);
-
   useEffect(() => {
     let saveTimeout: NodeJS.Timeout;
 
-    if (isDirty && !isAdminStore) {
-      saveTimeout = setTimeout(() => {
-        save();
-      }, 3000); // 3 second debounce
-    }
+    const unsubscribe = useEditorStore.subscribe((state, prevState) => {
+      if (state.isDirty && !state.isAdmin && !state.isSaving && state.spreads !== prevState.spreads) {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => {
+          useEditorStore.getState().save();
+        }, 3000);
+      }
+    });
 
     return () => {
-      if (saveTimeout) clearTimeout(saveTimeout);
+      clearTimeout(saveTimeout);
+      unsubscribe();
     };
-  }, [isDirty, spreads, isAdminStore, save]);
+  }, []);
 
   const downloadTriggeredRef = useRef(false);
 
@@ -376,18 +394,21 @@ export default function EditorWorkspace() {
   }, [searchParams, templateName]); // Removed `loading` and `refreshUser` — they cause re-fires after PDF completes
 
 
-  // Sync templateName, isAdmin, and currentSpreadIndex with URL and handle beforeunload
+  // Sync templateName, isAdmin, activeTemplateId and currentSpreadIndex with URL and handle beforeunload
   useEffect(() => {
-    const state = useEditorStore.getState();
-    const activeTemplateName = state.activeTemplateName;
-    const currentSpreadIndex = state.currentSpreadIndex;
-    const isAdminStore = state.isAdmin;
+    // We subscribe to the store to catch when activeTemplateId gets populated after an autosave.
+    const unsubscribe = useEditorStore.subscribe((state) => {
+      const activeTemplateName = state.activeTemplateName;
+      const currentSpreadIndex = state.currentSpreadIndex;
+      const isAdminStore = state.isAdmin;
+      const activeTemplateId = state.activeTemplateId;
+      
+      if (!activeTemplateName && !activeTemplateId) return;
 
-    if (activeTemplateName) {
       const url = new URL(window.location.href);
       let changed = false;
 
-      if (url.searchParams.get("templateName") !== activeTemplateName) {
+      if (activeTemplateName && url.searchParams.get("templateName") !== activeTemplateName) {
         url.searchParams.set("templateName", activeTemplateName);
         changed = true;
       }
@@ -403,10 +424,43 @@ export default function EditorWorkspace() {
         changed = true;
       }
 
+      // ONLY sync bookId and strip fresh if the template is fully loaded and we actually have a valid activeTemplateId for the CURRENT document.
+      const isFreshInUrl = url.searchParams.has("fresh");
+      
+      console.log("[URL Sync Debug] templateLoaded:", state.templateLoaded, "activeTemplateId:", activeTemplateId, "isFreshInUrl:", isFreshInUrl);
+
+      if (state.templateLoaded && !isAdminStore) {
+        if (activeTemplateId && activeTemplateId !== "undefined") {
+          if (url.searchParams.get("bookId") !== activeTemplateId) {
+            url.searchParams.set("bookId", activeTemplateId);
+            changed = true;
+            console.log("[URL Sync Debug] Set bookId to:", activeTemplateId);
+          }
+          if (isFreshInUrl) {
+            url.searchParams.delete("fresh");
+            changed = true;
+            console.log("[URL Sync Debug] Deleted fresh=true");
+          }
+        } else {
+          // This is a fresh template without an ID yet.
+          // Strip any old bookId from the URL so a refresh doesn't load a stale book.
+          if (url.searchParams.has("bookId")) {
+            url.searchParams.delete("bookId");
+            changed = true;
+            console.log("[URL Sync Debug] Deleted stale bookId");
+          }
+          if (!isFreshInUrl) {
+            url.searchParams.set("fresh", "true");
+            changed = true;
+            console.log("[URL Sync Debug] Added fresh=true");
+          }
+        }
+      }
+
       if (changed) {
         window.history.replaceState({}, "", url.toString());
       }
-    }
+    });
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (useEditorStore.getState().isDirty) {
@@ -417,19 +471,22 @@ export default function EditorWorkspace() {
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [useEditorStore((s) => s.activeTemplateName), useEditorStore((s) => s.currentSpreadIndex), useEditorStore((s) => s.isDirty), useEditorStore((s) => s.isAdmin)]);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      unsubscribe();
+      // Reset critical store states on unmount to prevent stale data bleeding into next editor session
+      useEditorStore.setState({ templateLoaded: false, activeTemplateId: null });
+    };
+  }, []);
 
   if (loading) {
     return (
       <div className="fixed inset-0 z-[9999] bg-[#1a1a1a] flex flex-col items-center justify-center">
-        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10" />
-        {/* Book animation */}
+        {/* Book animation - pure CSS, no external resources */}
         <div className="relative mb-10 flex items-center gap-1">
           {[...Array(5)].map((_, i) => (
             <div
               key={i}
-              className="rounded-sm"
               style={{
                 width: '18px',
                 height: `${48 + Math.sin(i) * 12}px`,
@@ -459,9 +516,7 @@ export default function EditorWorkspace() {
           <div className="w-full bg-white/10 rounded-full h-0.5 overflow-hidden">
             <div
               className="h-full w-1/2 bg-[#c0392b] rounded-full"
-              style={{
-                animation: 'loadingBar 1.5s ease-in-out infinite',
-              }}
+              style={{ animation: 'loadingBar 1.5s ease-in-out infinite' }}
             />
           </div>
           <p className="text-white/30 text-[10px] tracking-widest uppercase text-center mt-4">
@@ -592,17 +647,20 @@ export default function EditorWorkspace() {
 
           {/* Loading bar */}
           <div className="w-64 relative z-10">
-            <div className="w-full bg-white/10 rounded-full h-0.5 overflow-hidden">
+            <div className="w-full bg-white/10 rounded-full h-1 overflow-hidden relative">
               <div
-                className="h-full w-1/2 bg-[#c0392b] rounded-full"
-                style={{
-                  animation: 'loadingBar 1.5s ease-in-out infinite',
-                }}
+                className="h-full bg-[#c0392b] rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${loadProgress}%` }}
               />
             </div>
-            <p className="text-white/30 text-[10px] tracking-widest uppercase text-center mt-4">
-              Preparing your canvas...
-            </p>
+            <div className="flex justify-between items-center mt-4">
+              <p className="text-white/30 text-[10px] tracking-widest uppercase">
+                Preparing your canvas...
+              </p>
+              <p className="text-[#c0392b] text-[10px] font-bold tracking-widest">
+                {loadProgress}%
+              </p>
+            </div>
           </div>
 
           <style dangerouslySetInnerHTML={{ __html: `
@@ -621,7 +679,6 @@ export default function EditorWorkspace() {
       {/* Portrait Warning Overlay for Mobile */}
       {isPortrait && (
         <div className="md:hidden fixed inset-0 z-[10000] bg-[#1a1a1a] flex flex-col items-center justify-center p-8 text-center animate-in fade-in duration-300">
-          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-10" />
           <div className="relative z-10 flex flex-col items-center">
             <div className="w-16 h-24 border-4 border-white/20 rounded-xl mb-6 relative flex items-center justify-center">
               <div className="absolute top-2 left-1/2 -translate-x-1/2 w-4 h-1 bg-white/20 rounded-full" />

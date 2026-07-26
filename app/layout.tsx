@@ -68,7 +68,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${poppins.variable} ${luckiestGuy.variable} ${caveat.variable} antialiased overflow-x-hidden`}
       >
-        <SessionProvider>
+        <SessionProvider refetchInterval={0} refetchOnWindowFocus={false}>
           <AuthProvider>
             <SettingsProvider>
               <GlobalPrefetcher />

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useEditorStore, SidebarPanel, isTemplateSpread, isFullyLockedSpread } from "@/store/editor-store";
 import { Image, LayoutGrid, Grid3X3, Paintbrush, Sticker, Calendar } from "lucide-react";
 
@@ -23,11 +24,32 @@ export function EditorLeftSidebar() {
   const isTemplatePage = isTemplateSpread(currentSpread, isAdmin, currentSpreadIndex);
   const isFullyLocked = isFullyLockedSpread(currentSpread, isAdmin, currentSpreadIndex);
 
+  const hasFrames = currentSpread?.leftPage.elements.some(e => e.type === "photo-card") || 
+                    currentSpread?.rightPage.elements.some(e => e.type === "photo-card");
+
+  // Automatically manage the images panel if navigating to a page without frames (for customers)
+  useEffect(() => {
+    if (activeSidebarPanel === "images" && !isAdmin && !hasFrames) {
+      if (isFullyLocked || isTemplatePage) {
+        // Switch to templates panel so the EditorLeftPanel can display the "Template Mode" or "Page Locked" message
+        setSidebarPanel("templates");
+      } else {
+        // For normal unlocked pages, just close it
+        setSidebarPanel(null);
+      }
+    }
+  }, [activeSidebarPanel, isAdmin, hasFrames, isFullyLocked, isTemplatePage, setSidebarPanel]);
+
   return (
     <div className="w-full md:w-16 h-16 md:h-full bg-white border-t md:border-t-0 md:border-r border-gray-200 flex flex-row md:flex-col items-center justify-around md:justify-start py-1 md:py-3 gap-1 flex-shrink-0">
       {sidebarItems.map(({ panel, label, icon: Icon }) => {
         const isActive = activeSidebarPanel === panel;
-        const isDisabled = isFullyLocked || (isTemplatePage && panel !== "images");
+        let isDisabled = isFullyLocked || (isTemplatePage && panel !== "images");
+        
+        // Disable Images tab for customers if there are no photo frames on the current spread
+        if (panel === "images" && !isAdmin && !hasFrames) {
+          isDisabled = true;
+        }
 
         return (
           <button

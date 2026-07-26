@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";
 import { auth } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 // GET - Retrieve all book images for the current user
 export async function GET(req: NextRequest) {
   try {
@@ -125,6 +127,15 @@ export async function DELETE(req: NextRequest) {
         },
       }
     );
+
+    // Delete the actual physical file from UploadThing
+    try {
+      const { UTApi } = await import("uploadthing/server");
+      const utapi = new UTApi();
+      await utapi.deleteFiles(imageId);
+    } catch (err) {
+      console.error("UploadThing delete failed:", err);
+    }
 
     return NextResponse.json(
       { message: "Image deleted successfully" },

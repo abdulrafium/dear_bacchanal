@@ -10,7 +10,15 @@ if (!process.env.MONGODB_URI) {
 }
 
 const uri = process.env.MONGODB_URI;
-const options = {};
+const options = {
+  // Keep a pool of 10 connections ready so requests don't wait for a new connection
+  maxPoolSize: 10,
+  minPoolSize: 2,
+  // Fail fast if MongoDB is unreachable (instead of hanging for 30 seconds)
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 10000,
+  connectTimeoutMS: 5000,
+};
 
 let client: MongoClient;
 let clientPromise: Promise<MongoClient>;

@@ -13,9 +13,28 @@ import {
   Columns2,
   Grid2X2,
 } from "lucide-react";
-import { useState, memo, useRef } from "react";
+import { useState, memo, useRef, useCallback } from "react";
 
-export function EditorBottomBar() {
+const ThumbnailButton = memo(({ spread, index, currentSpreadIndex, handlePageSelect }: any) => (
+  <button
+    onClick={() => handlePageSelect(index)}
+    className={`flex-shrink-0 group transition-all duration-300 ${index === currentSpreadIndex ? "scale-105" : "opacity-50 hover:opacity-100"}`}
+  >
+    <div className={`flex rounded-lg overflow-hidden shadow-xl transition-all ${index === currentSpreadIndex
+      ? "ring-2 ring-[#2d2d2d] ring-offset-2"
+      : "ring-1 ring-gray-200 group-hover:ring-gray-300"
+      }`}
+    >
+      <MiniPage page={spread.leftPage} isLeft={true} />
+      <MiniPage page={spread.rightPage} isLeft={false} />
+    </div>
+    <p className="text-[9px] font-bold text-gray-500 text-center mt-2 uppercase tracking-widest group-hover:text-[#2d2d2d] transition-colors">
+      {index === 0 ? "Cover" : `P. ${index * 2 - 1}-${index * 2}`}
+    </p>
+  </button>
+));
+
+export const EditorBottomBar = memo(function EditorBottomBar() {
   const spreads = useEditorStore((s) => s.spreads);
   const currentSpreadIndex = useEditorStore((s) => s.currentSpreadIndex);
   const setCurrentSpread = useEditorStore((s) => s.setCurrentSpread);
@@ -37,20 +56,11 @@ export function EditorBottomBar() {
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const handlePageSelect = (index: number) => {
+  const handlePageSelect = useCallback((index: number) => {
     if (index === currentSpreadIndex) return;
-    setIsPageTransitioning(true);
-    
-    // Give the browser time to actually paint the spinner before blocking the thread
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          setCurrentSpread(index);
-          setTimeout(() => setIsPageTransitioning(false), 100);
-        }, 10);
-      });
-    });
-  };
+    // Switch spread immediately — no artificial delay or spinner needed
+    setCurrentSpread(index);
+  }, [currentSpreadIndex, setCurrentSpread]);
 
   const scrollLeft = () => {
     if (scrollRef.current) scrollRef.current.scrollBy({ left: -300, behavior: "smooth" });
@@ -70,8 +80,8 @@ export function EditorBottomBar() {
           <button
             onClick={() => setViewMode("spread")}
             className={`px-3 h-8 rounded-lg text-[10px] font-semibold tracking-wider uppercase transition-all flex items-center gap-1.5 ${viewMode === "spread"
-                ? "bg-[#2d2d2d] text-white shadow-md shadow-black/10"
-                : "text-gray-400 hover:text-[#2d2d2d] hover:bg-gray-50"
+              ? "bg-[#2d2d2d] text-white shadow-md shadow-black/10"
+              : "text-gray-400 hover:text-[#2d2d2d] hover:bg-gray-50"
               }`}
           >
             <Columns2 className="w-3.5 h-3.5" />
@@ -80,8 +90,8 @@ export function EditorBottomBar() {
           <button
             onClick={() => setViewMode("single")}
             className={`px-3 h-8 rounded-lg text-[10px] font-semibold tracking-wider uppercase transition-all flex items-center gap-1.5 ${viewMode === "single"
-                ? "bg-[#2d2d2d] text-white shadow-md shadow-black/10"
-                : "text-gray-400 hover:text-[#2d2d2d] hover:bg-gray-50"
+              ? "bg-[#2d2d2d] text-white shadow-md shadow-black/10"
+              : "text-gray-400 hover:text-[#2d2d2d] hover:bg-gray-50"
               }`}
           >
             <Grid2X2 className="w-3.5 h-3.5" />
@@ -229,24 +239,13 @@ export function EditorBottomBar() {
               style={{ scrollbarWidth: 'thin', scrollbarColor: '#d1d5db transparent' }}
             >
               {spreads.map((spread, index) => (
-                <button
+                <ThumbnailButton
                   key={spread.id}
-                  onClick={() => handlePageSelect(index)}
-                  className={`flex-shrink-0 group transition-all duration-300 ${index === currentSpreadIndex ? "scale-105" : "opacity-50 hover:opacity-100"
-                    }`}
-                >
-                  <div className={`flex rounded-lg overflow-hidden shadow-xl transition-all ${index === currentSpreadIndex
-                      ? "ring-2 ring-[#2d2d2d] ring-offset-2"
-                      : "ring-1 ring-gray-200 group-hover:ring-gray-300"
-                    }`}
-                  >
-                    <MiniPage page={spread.leftPage} isLeft={true} />
-                    <MiniPage page={spread.rightPage} isLeft={false} />
-                  </div>
-                  <p className="text-[9px] font-bold text-gray-500 text-center mt-2 uppercase tracking-widest group-hover:text-[#2d2d2d] transition-colors">
-                    {index === 0 ? "Cover" : `P. ${index * 2 - 1}-${index * 2}`}
-                  </p>
-                </button>
+                  spread={spread}
+                  index={index}
+                  currentSpreadIndex={currentSpreadIndex}
+                  handlePageSelect={handlePageSelect}
+                />
               ))}
             </div>
 
@@ -267,7 +266,7 @@ export function EditorBottomBar() {
       })()}
     </div>
   );
-}
+});
 
 const MiniPage = memo(({ page, isLeft }: { page: any; isLeft?: boolean }) => {
   let bg = page.background;

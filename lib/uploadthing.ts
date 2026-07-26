@@ -9,7 +9,7 @@ export const ourFileRouter = {
   bookImageUploader: f({
     image: {
       maxFileSize: "32MB",
-      maxFileCount: 4,
+      maxFileCount: 10,
     },
   })
     .middleware(async ({ req }) => {

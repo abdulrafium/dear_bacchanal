@@ -1,7 +1,7 @@
 "use client";
 
 import { useEditorStore, isTemplateSpread } from "@/store/editor-store";
-import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Layers, Trash2, Bookmark, ChevronDown, Lock, Unlock, Image, ImageOff, UserMinus } from "lucide-react";
+import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight, Layers, Trash2, Bookmark, ChevronDown, Lock, Unlock, Image, ImageOff, UserMinus, RotateCw, ArrowDownToLine, ArrowUpToLine } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
 
 export function EditorElementToolbar() {
@@ -9,6 +9,8 @@ export function EditorElementToolbar() {
   const selectedElementId = useEditorStore((s) => s.selectedElementId);
   const updateElement = useEditorStore((s) => s.updateElement);
   const removeElement = useEditorStore((s) => s.removeElement);
+  const moveElementToBack = useEditorStore((s) => s.moveElementToBack);
+  const moveElementToFront = useEditorStore((s) => s.moveElementToFront);
   const addElement = useEditorStore((s) => s.addElement);
   const toggleElementLock = useEditorStore((s) => s.toggleElementLock);
   const isPreviewMode = useEditorStore((s) => s.isPreviewMode);
@@ -126,7 +128,7 @@ export function EditorElementToolbar() {
     "serif"
   ];
 
-  const sizes = [12, 14, 16, 18, 20, 24, 28, 36, 48, 60, 72, 84, 96, 120];
+  const sizes = [12, 14, 16, 18, 20, 24, 28, 36, 48, 60, 72, 84, 96, 120, 140, 160, 180, 200, 220];
 
   const update = (updates: Partial<typeof element>) => {
     updateElement(pageId, element.id, updates);
@@ -375,6 +377,37 @@ export function EditorElementToolbar() {
                  <ImageOff className="w-5 h-5" />
                </button>
              )}
+             <div className="w-[1px] h-6 bg-gray-200 mx-1" />
+             <button 
+               className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-gray-600 hover:bg-gray-50 transition-colors shrink-0" 
+               title="Rotate Frame (Swap Dimensions)"
+               onClick={() => {
+                  const currentRotation = element.rotation || 0;
+                  const rad = (currentRotation * Math.PI) / 180;
+                  const w = element.width;
+                  const h = element.height;
+                  
+                  // 1. Calculate true center
+                  const cx = element.x + (w / 2) * Math.cos(rad) - (h / 2) * Math.sin(rad);
+                  const cy = element.y + (w / 2) * Math.sin(rad) + (h / 2) * Math.cos(rad);
+                  
+                  // 2. Rotate by 90 deg
+                  const newRotation = (currentRotation + 90) % 360;
+                  const newRad = (newRotation * Math.PI) / 180;
+                  
+                  // 3. Calculate new top-left (x, y) so the center remains exactly the same
+                  const newX = cx - (w / 2) * Math.cos(newRad) + (h / 2) * Math.sin(newRad);
+                  const newY = cy - (w / 2) * Math.sin(newRad) - (h / 2) * Math.cos(newRad);
+                  
+                  update({ 
+                    rotation: newRotation,
+                    x: newX,
+                    y: newY
+                  } as any);
+               }}
+             >
+               <RotateCw className="w-5 h-5" />
+             </button>
            </>
         )}
 
@@ -396,10 +429,24 @@ export function EditorElementToolbar() {
           </div>
         )}
 
-        {/* Lock/Unlock feature for Admins */}
+        {/* Lock/Unlock & Layer Ordering feature for Admins */}
         {isAdmin && (
           <>
             <div className="w-[1px] h-6 bg-gray-200 mx-1" />
+            <button
+              onClick={() => moveElementToBack(pageId, element.id)}
+              className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-gray-600 hover:bg-gray-50 transition-colors shrink-0"
+              title="Send to Back"
+            >
+              <ArrowDownToLine className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => moveElementToFront(pageId, element.id)}
+              className="w-10 h-10 rounded-lg flex items-center justify-center border border-transparent text-gray-600 hover:bg-gray-50 transition-colors shrink-0"
+              title="Bring to Front"
+            >
+              <ArrowUpToLine className="w-5 h-5" />
+            </button>
             <button
               onClick={() => toggleElementLock(pageId, element.id)}
               className={`w-10 h-10 rounded-lg flex items-center justify-center border transition-colors ${element.isLocked ? "bg-red-50 border-red-200 text-red-600" : "border-transparent text-gray-600 hover:bg-gray-50"

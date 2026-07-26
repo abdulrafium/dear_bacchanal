@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback, memo } from "react";
-import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group, Circle, Line } from "react-konva";
+import { useRef, useEffect, useState, useCallback, memo, forwardRef } from "react";
+import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group, Circle, Line, Path } from "react-konva";
 import { Html } from "react-konva-utils";
 import { useEditorStore, EditorElement, BookPage, isFullyLockedSpread, isTemplateSpread } from "@/store/editor-store";
 import Konva from "konva";
@@ -17,22 +17,23 @@ const PAGE_HEIGHT = 500;
 const PageElement = memo(function PageElement({
   el,
   pageId,
-  isSelected,
   onSelect,
   pageIsLocked,
+  isTemplatePage,
   onEditCalendarNote,
   safeZoneRight,
 }: {
   el: EditorElement;
   pageId: string;
-  isSelected: boolean;
   onSelect: (id: string) => void;
   pageIsLocked?: boolean;
+  isTemplatePage?: boolean;
   onEditCalendarNote?: (elId: string, pageId: string, dateKey: string, initialValue: string) => void;
   safeZoneRight?: number; // right edge of the safe zone (px from page left) for capping textarea width
 }) {
   const shapeRef = useRef<any>(null);
   const trRef = useRef<Konva.Transformer>(null);
+  const isSelected = useEditorStore((s) => s.selectedElementId === el.id);
   const updateElement = useEditorStore((s) => s.updateElement);
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(el.text || "");
@@ -66,17 +67,31 @@ const PageElement = memo(function PageElement({
 
   const isPreviewMode = useEditorStore((s) => s.isPreviewMode);
   const isAdmin = useEditorStore((s) => s.isAdmin);
-  const currentSpreadIndex = useEditorStore((s) => s.currentSpreadIndex);
-  const currentSpread = useEditorStore((s) => s.spreads[currentSpreadIndex]);
-  const isTemplatePage = isTemplateSpread(currentSpread, isAdmin, currentSpreadIndex);
 
   const isDropdown = el.type === "text" && el.options && el.options.length > 0;
   const defaultPlaceholder = isDropdown ? "Select..." : "Enter Text";
   const isPlaceholderText = el.type === "text" && (!el.text || el.text === "Enter Text" || el.text === "Your Name" || el.text === "( Your Name )" || el.text === "Insert Your Name" || el.text === "Select...");
-  const isFillableElement = isPlaceholderText || el.type === "image" || el.type === "photo-card" || el.type === "checkbox" || el.type === "calendar";
+  // ALL text elements are fillable — user must be able to re-edit text even after typing
+  // (previously only placeholder text was fillable, making filled-in text permanently non-interactive)
+  const isFillableElement = el.type === "text" || el.type === "image" || el.type === "photo-card" || el.type === "checkbox" || el.type === "calendar" || el.type === "sticker" || el.type === "shape";
 
-  const canInteract = !isPreviewMode && (!pageIsLocked && !el.isLocked || isAdmin) && (!isTemplatePage || isFillableElement);
-  const canMove = !isPreviewMode && (!pageIsLocked && !el.isLocked || isAdmin) && !isTemplatePage;
+  // Prevent customers from editing specific static template headers
+  const isStaticVibeText = el.type === "text" && (
+    el.text?.toUpperCase() === "VIBE");
+
+  const effectiveIsLocked = el.isLocked || isStaticVibeText;
+
+  // Elements that span the entire page are considered background overlays.
+  // If they are locked, they should NOT be selectable, otherwise they intercept all clicks on the page.
+  const isBackgroundSized = el.width >= PAGE_WIDTH - 10 && el.height >= PAGE_HEIGHT - 10;
+
+  // All fillable elements (photo cards, shapes, text, small stickers) must remain selectable 
+  // so customers can upload images or edit text, even if the element or page is locked.
+  // We explicitly exclude full-page background overlays.
+  const isSelectableWhenLocked = isFillableElement && !isBackgroundSized && !isStaticVibeText;
+
+  const canInteract = !isPreviewMode && (!pageIsLocked && !effectiveIsLocked || isSelectableWhenLocked || isAdmin) && (!isTemplatePage || isFillableElement || isAdmin);
+  const canMove = !isPreviewMode && (!pageIsLocked && !effectiveIsLocked || isSelectableWhenLocked || isAdmin);
   const isCircle = el.shapeType === "ellipse";
 
   const previewElement = useEditorStore((s) => s.previewElement);
@@ -96,8 +111,13 @@ const PageElement = memo(function PageElement({
     shadowOffsetX: (displayEl as any)?.shadowOffsetX,
     shadowOffsetY: (displayEl as any)?.shadowOffsetY,
     draggable: canMove,
-    onClick: canInteract ? () => onSelect(el.id) : undefined,
-    onTap: canInteract ? () => onSelect(el.id) : undefined,
+    opacity: (displayEl as any)?.opacity ?? 1,
+    onClick: canInteract
+      ? (e: any) => { e.cancelBubble = true; onSelect(el.id); }
+      : (e: any) => { e.cancelBubble = true; onSelect(null as any); },
+    onTap: canInteract
+      ? (e: any) => { e.cancelBubble = true; onSelect(el.id); }
+      : (e: any) => { e.cancelBubble = true; onSelect(null as any); },
     onDragEnd: canMove ? handleDragEnd : undefined,
     onTransformEnd: canMove ? handleTransformEnd : undefined,
   };
@@ -125,19 +145,33 @@ const PageElement = memo(function PageElement({
             lineHeight={displayEl.lineHeight || 1.2}
             wrap="word"
             height={undefined}
-            onClick={() => {
+            // Show I-beam cursor on hover for text elements
+            onMouseEnter={(e: any) => {
               if (!canInteract) return;
-              if (isPlaceholderText || isDropdown) {
-                // Single click on placeholder OR dropdown immediately opens edit mode
+              const container = e.target.getStage()?.container();
+              if (container) container.style.cursor = isDropdown ? "pointer" : "text";
+            }}
+            onMouseLeave={(e: any) => {
+              const container = e.target.getStage()?.container();
+              if (container) container.style.cursor = "default";
+            }}
+            onClick={(e: any) => {
+              if (!canInteract) return;
+              e.cancelBubble = true;
+              // Always open editor on single click — select the element AND start editing
+              onSelect(el.id);
+              if (isDropdown) {
+                setIsEditing(true);
+                setEditValue(displayEl.text || "");
+              } else {
                 setIsEditing(true);
                 setEditValue(isPlaceholderText ? "" : (displayEl.text || ""));
-              } else {
-                // Normal click just selects
-                if (commonProps.onClick) (commonProps.onClick as any)();
               }
             }}
-            onDblClick={() => {
+            onTap={(e: any) => {
               if (!canInteract) return;
+              e.cancelBubble = true;
+              onSelect(el.id);
               setIsEditing(true);
               setEditValue(isPlaceholderText ? "" : (displayEl.text || ""));
             }}
@@ -199,7 +233,7 @@ const PageElement = memo(function PageElement({
         return (
           <Rect
             {...commonProps}
-            fill={el.shapeFill || "transparent"}
+            fill={!el.shapeFill ? "transparent" : el.shapeFill}
             stroke={el.stroke || "#333"}
             strokeWidth={el.strokeWidth || 2}
             cornerRadius={isCircle ? Math.min(el.width, el.height) / 2 : 0}
@@ -207,7 +241,7 @@ const PageElement = memo(function PageElement({
         );
 
       case "photo-card":
-        return <PhotoCardElement {...commonProps} el={el} pageId={pageId} canInteract={canInteract} />;
+        return <PhotoCardElement {...commonProps} el={el} pageId={pageId} canInteract={canInteract} isSelected={isSelected} />;
 
       default:
         return <Rect {...commonProps} fill="#ccc" stroke="#999" strokeWidth={1} />;
@@ -233,7 +267,7 @@ const PageElement = memo(function PageElement({
           anchorFill="#ffffff"
           shadowBlur={10}
           shadowColor="rgba(0,0,0,0.3)"
-          rotateEnabled={!el.isLocked}
+          rotateEnabled={!el.isLocked && el.type !== "photo-card"}
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right', 'top-center', 'bottom-center']}
         />
       )}
@@ -294,7 +328,7 @@ const PageElement = memo(function PageElement({
                     const finalValue = e.target.value;
                     setEditValue(finalValue);
                     setIsEditing(false);
-                    
+
                     let newFontSize = 24; // Start from a good base size
                     if (el.fontSize && el.fontSize > 24) newFontSize = el.fontSize;
 
@@ -309,7 +343,7 @@ const PageElement = memo(function PageElement({
                     });
                     span.textContent = finalValue;
                     document.body.appendChild(span);
-                    
+
                     const targetWidth = el.width || 250;
                     while (newFontSize > 12) {
                       span.style.fontSize = `${newFontSize}px`;
@@ -326,8 +360,8 @@ const PageElement = memo(function PageElement({
                     });
                   }}
                   onBlur={(e) => {
+                    const finalValue = editValue.trim() === "" ? "" : editValue;
                     setIsEditing(false);
-                    const finalValue = editValue.trim() === "" ? (displayEl.text || defaultPlaceholder) : editValue;
                     updateElement(pageId, el.id, {
                       text: finalValue,
                     });
@@ -368,20 +402,35 @@ const PageElement = memo(function PageElement({
                     setEditValue(e.target.value);
                     autoResize(e.target);
                   }}
-                  placeholder={displayEl.text || defaultPlaceholder}
+                  placeholder={defaultPlaceholder}
                   onBlur={(e) => {
                     const node = e.target as HTMLTextAreaElement;
+                    const finalValue = editValue.trim() === "" ? "" : editValue;
                     setIsEditing(false);
-                    const finalValue = editValue.trim() === "" ? (displayEl.text || defaultPlaceholder) : editValue;
                     updateElement(pageId, el.id, {
                       text: finalValue,
                       width: parseInt(node.style.width) || el.width,
                       height: parseInt(node.style.height) || el.height,
                     });
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      // Escape: discard changes and exit
+                      e.preventDefault();
+                      setIsEditing(false);
+                    }
+                    // Ctrl+Enter or Cmd+Enter: confirm and exit
+                    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+                      e.preventDefault();
+                      (e.target as HTMLTextAreaElement).blur();
+                    }
+                  }}
                   ref={(node) => {
                     if (node) {
                       node.focus();
+                      // Place cursor at end of text
+                      const len = node.value.length;
+                      node.setSelectionRange(len, len);
                       autoResize(node);
                     }
                   }}
@@ -430,38 +479,19 @@ function getCachedImage(src: string | undefined): HTMLImageElement | null {
   return null;
 }
 
-/** Pre-load ALL image URLs from a spread into the global cache immediately and return a Promise */
-export function preloadSpreadImages(spreads: any[]): Promise<void> {
+/** Pre-load image URLs from spreads into the global cache and return a Promise.
+ *  Preloads ALL spreads immediately so the loading screen waits for the entire book.
+ */
+export function preloadSpreadImages(spreads: any[], onProgress?: (progress: number) => void): Promise<void> {
   if (typeof window === 'undefined') return Promise.resolve();
-  
-  const promises: Promise<void>[] = [];
 
-  spreads.forEach((spread) => {
-    [spread.leftPage, spread.rightPage].forEach((page) => {
+  const collectSrcs = (spread: any): string[] => {
+    const srcs: string[] = [];
+    [spread?.leftPage, spread?.rightPage].forEach((page) => {
       if (!page) return;
-      
-      const loadImg = (src: string) => {
-        if (!src || getCachedImage(src)) return;
-        promises.push(new Promise((resolve) => {
-          const img = new window.Image();
-          img.crossOrigin = "anonymous";
-          img.onload = () => {
-            globalImageCache[src] = img;
-            resolve();
-          };
-          img.onerror = () => {
-            console.warn("Failed to load image (broken state):", src);
-            resolve();
-          };
-          img.src = src;
-          setTimeout(() => resolve(), 15000);
-        }));
-      };
-
       if (page.background && (page.background.startsWith("http") || page.background.startsWith("data:") || page.background.startsWith("/"))) {
-        loadImg(page.background);
+        srcs.push(page.background);
       }
-      
       (page.elements || []).forEach((el: any) => {
         let src = el.src;
         if (!src) return;
@@ -469,12 +499,59 @@ export function preloadSpreadImages(spreads: any[]): Promise<void> {
         if (src.includes('crix2.PNG')) src = src.replace('crix2.PNG', 'crix2.png');
         if (src.includes('historyLayer.PNG')) src = src.replace('historyLayer.PNG', 'historyLayer.png');
         if (src.includes('banner.PNG')) src = src.replace('banner.PNG', 'banner.png');
-        loadImg(src);
+        srcs.push(src);
       });
     });
-  });
+    return srcs;
+  };
 
-  return Promise.all(promises).then(() => {});
+  const allSrcs = Array.from(new Set(spreads.flatMap(spread => collectSrcs(spread))));
+  if (allSrcs.length === 0) {
+    if (onProgress) onProgress(100);
+    return Promise.resolve();
+  }
+
+  let loadedCount = 0;
+  const updateProgress = () => {
+    loadedCount++;
+    const percentage = Math.min(100, Math.round((loadedCount / allSrcs.length) * 100));
+    if (onProgress) onProgress(percentage);
+  };
+
+  const loadImg = (src: string): Promise<void> => {
+    if (!src || getCachedImage(src)) {
+      updateProgress();
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      const img = new window.Image();
+      if (src.startsWith("http")) {
+        img.crossOrigin = "anonymous";
+      }
+      img.onload = async () => {
+        try {
+          await img.decode();
+        } catch (e) {
+          // Ignore decode errors
+        }
+        globalImageCache[src] = img;
+        updateProgress();
+        resolve();
+      };
+      img.onerror = () => { console.warn("Failed to preload image:", src); updateProgress(); resolve(); };
+      img.src = src;
+      setTimeout(() => { updateProgress(); resolve(); }, 30000); // 30s timeout fallback
+    });
+  };
+
+  return (async () => {
+    // Increased batch size from 5 to 20 to aggressively load background pages faster
+    const batchSize = 20;
+    for (let i = 0; i < allSrcs.length; i += batchSize) {
+      const batch = allSrcs.slice(i, i + batchSize);
+      await Promise.all(batch.map(loadImg));
+    }
+  })();
 }
 
 function ImageElement(props: any) {
@@ -487,9 +564,10 @@ function ImageElement(props: any) {
     if (s.includes('crix2.PNG')) return s.replace('crix2.PNG', 'crix2.png');
     if (s.includes('historyLayer.PNG')) return s.replace('historyLayer.PNG', 'historyLayer.png');
     if (s.includes('banner.PNG')) return s.replace('banner.PNG', 'banner.png');
+    if (s.startsWith('blob:')) return "";
     return s;
   })();
-  
+
   const [image, setImage] = useState<HTMLImageElement | null>(getCachedImage(actualSrc));
   useEffect(() => {
     if (actualSrc) {
@@ -499,7 +577,9 @@ function ImageElement(props: any) {
         return;
       }
       const img = new window.Image();
-      img.crossOrigin = "anonymous";
+      if (actualSrc.startsWith("http")) {
+        img.crossOrigin = "anonymous";
+      }
       img.src = actualSrc;
       img.onload = () => {
         globalImageCache[actualSrc] = img;
@@ -511,103 +591,409 @@ function ImageElement(props: any) {
   return <KonvaImage {...props} image={image} />;
 }
 
-function PhotoCardElement({ el, pageId, canInteract, ...props }: any) {
-  const [image, setImage] = useState<HTMLImageElement | null>(getCachedImage(el.src));
+const PhotoCardElement = forwardRef<any, any>(({ el, pageId, canInteract, isSelected, ...props }, ref) => {
+  const actualSrc = el.src?.startsWith("blob:") ? "" : el.src;
+  const [image, setImage] = useState<HTMLImageElement | null>(getCachedImage(actualSrc));
+  const [isLoading, setIsLoading] = useState(false);
+  const [isPanningMode, setIsPanningMode] = useState(false);
 
   useEffect(() => {
-    if (el.src) {
-      const cached = getCachedImage(el.src);
+    if (!isSelected) {
+      setIsPanningMode(false);
+    }
+  }, [isSelected]);
+
+  useEffect(() => {
+    if (actualSrc) {
+      const cached = getCachedImage(actualSrc);
       if (cached) {
         setImage(cached);
+        setIsLoading(false);
         return;
       }
+      setIsLoading(true);
       const img = new window.Image();
-      img.crossOrigin = "anonymous";
-      img.src = el.src;
+      if (actualSrc.startsWith("http")) {
+        img.crossOrigin = "anonymous";
+      }
+      img.src = actualSrc;
       img.onload = () => {
-        globalImageCache[el.src] = img;
+        globalImageCache[actualSrc] = img;
         setImage(img);
+        setIsLoading(false);
+      };
+      img.onerror = () => {
+        setIsLoading(false);
       };
     } else {
       setImage(null);
+      setIsLoading(false);
     }
-  }, [el.src]);
+  }, [actualSrc]);
 
   const isCircle = el.shapeType === "ellipse";
 
-  const handleEmptyClick = (e: any) => {
-    const isPreview = useEditorStore.getState().isPreviewMode;
-    if (!el.src && !isPreview) {
-      e.cancelBubble = true; // prevent default select (we'll handle it)
-      useEditorStore.getState().selectElement(el.id);
-      useEditorStore.getState().setSidebarPanel("images");
+  const handleFrameClick = (e: any) => {
+    const state = useEditorStore.getState();
+    const isPreview = state.isPreviewMode;
+    if (!isPreview) {
+      e.cancelBubble = true;
+      if (state.selectedElementId === el.id) {
+        state.selectElement(null);
+      } else {
+        state.selectElement(el.id);
+        if (state.activeSidebarPanel !== "images") {
+          state.setSidebarPanel("images");
+        }
+      }
     }
   };
 
+  const isGeneratingPdf = useEditorStore((s) => s.isGeneratingPdf);
+  if (isGeneratingPdf && !actualSrc) {
+    return null;
+  }
+
+  const glowColor = "#ffffff";
+
   return (
-    <Group {...props}>
+    <Group {...props} ref={ref}>
       {/* Base Card Background (Supports Rectangle and Circle) */}
       {isCircle ? (
         <Circle
           x={el.width / 2}
           y={el.height / 2}
           radius={el.width / 2}
-          fill={el.src ? "transparent" : "rgba(0,0,0,0.1)"}
-          stroke="white"
-          strokeWidth={12}
-          shadowBlur={10}
-          shadowColor="rgba(0,0,0,0.15)"
-          onClick={handleEmptyClick}
-          onTap={handleEmptyClick}
+          fill={actualSrc ? "transparent" : "rgba(0,0,0,0.1)"}
+          stroke={glowColor}
+          strokeWidth={isSelected ? 10 : 6}
+          shadowBlur={isSelected ? 25 : 10}
+          shadowColor={isSelected ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.15)"}
+          perfectDrawEnabled={false}
+          onClick={handleFrameClick}
+          onTap={handleFrameClick}
         />
       ) : (
         <Rect
           width={el.width}
           height={el.height}
-          fill={el.src ? "transparent" : "rgba(0,0,0,0.1)"}
-          stroke="white"
-          strokeWidth={12}
-          shadowBlur={10}
-          shadowColor="rgba(0,0,0,0.15)"
-          onClick={handleEmptyClick}
-          onTap={handleEmptyClick}
+          fill={actualSrc ? "transparent" : "rgba(0,0,0,0.1)"}
+          stroke={glowColor}
+          strokeWidth={isSelected ? 10 : 6}
+          shadowBlur={isSelected ? 25 : 10}
+          shadowColor={isSelected ? "rgba(255,255,255,0.7)" : "rgba(0,0,0,0.15)"}
+          perfectDrawEnabled={false}
+          onClick={handleFrameClick}
+          onTap={handleFrameClick}
         />
       )}
 
-      {/* Image Rendering with optimized Shape-Aware Clipping */}
-      {image && (
-        <Group clipFunc={(ctx) => {
-          ctx.beginPath();
-          if (isCircle) {
-            ctx.arc(el.width / 2, el.height / 2, el.width / 2, 0, Math.PI * 2);
-          } else {
-            ctx.roundRect(0, 0, el.width, el.height, 4);
-          }
-          ctx.closePath();
-        }}>
-          <KonvaImage
-            image={image}
-            width={el.width}
-            height={el.height}
-          />
-        </Group>
-      )}
+      {/* Image Rendering with optimized Shape-Aware Clipping (object-fit: cover) */}
+      {image && (() => {
+        let drawWidth = el.width;
+        let drawHeight = el.height;
+        let baseX = 0;
+        let baseY = 0;
+
+        const imgRatio = image.width / image.height;
+        const frameRatio = el.width / el.height;
+
+        if (imgRatio > frameRatio) {
+          // Image is wider than frame (Match height, let width overflow)
+          drawHeight = el.height;
+          drawWidth = el.height * imgRatio;
+          baseX = -(drawWidth - el.width) / 2;
+        } else {
+          // Image is taller than frame (Match width, let height overflow)
+          drawWidth = el.width;
+          drawHeight = el.width / imgRatio;
+          baseY = -(drawHeight - el.height) / 2;
+        }
+
+        const drawX = baseX + (el.cropX || 0);
+        const drawY = baseY + (el.cropY || 0);
+
+        return (
+          <Group
+            clipFunc={(ctx) => {
+              ctx.beginPath();
+              if (isCircle) {
+                ctx.arc(el.width / 2, el.height / 2, el.width / 2, 0, Math.PI * 2);
+              } else {
+                ctx.roundRect(0, 0, el.width, el.height, 4);
+              }
+              ctx.closePath();
+            }}
+            onClick={handleFrameClick}
+            onTap={handleFrameClick}
+          >
+            <KonvaImage
+              image={image}
+              x={drawX}
+              y={drawY}
+              width={drawWidth}
+              height={drawHeight}
+              perfectDrawEnabled={false}
+              draggable={canInteract && isPanningMode}
+              onDblClick={(e) => {
+                if (canInteract) {
+                  e.cancelBubble = true;
+                  setIsPanningMode(true);
+                }
+              }}
+              onDblTap={(e) => {
+                if (canInteract) {
+                  e.cancelBubble = true;
+                  setIsPanningMode(true);
+                }
+              }}
+              onMouseEnter={(e: any) => {
+                if (canInteract && isPanningMode) {
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = "move";
+                }
+              }}
+              onMouseLeave={(e: any) => {
+                const container = e.target.getStage()?.container();
+                if (container) container.style.cursor = "default";
+              }}
+              onDragStart={(e: any) => {
+                if (canInteract && isPanningMode) {
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = "grabbing";
+                }
+              }}
+              onDragMove={(e) => {
+                if (!canInteract || !isPanningMode) return;
+                const node = e.target;
+                const limitX = Math.max(0, drawWidth - el.width);
+                const limitY = Math.max(0, drawHeight - el.height);
+
+                let newX = node.x();
+                let newY = node.y();
+
+                if (newX < -limitX) newX = -limitX;
+                if (newX > 0) newX = 0;
+                if (newY < -limitY) newY = -limitY;
+                if (newY > 0) newY = 0;
+
+                node.x(newX);
+                node.y(newY);
+              }}
+              onDragEnd={(e) => {
+                if (!canInteract || !isPanningMode) return;
+
+                const container = e.target.getStage()?.container();
+                if (container) container.style.cursor = "move";
+
+                const node = e.target;
+                const finalCropX = node.x() - baseX;
+                const finalCropY = node.y() - baseY;
+                useEditorStore.getState().updateElement(pageId, el.id, { cropX: finalCropX, cropY: finalCropY });
+              }}
+            />
+          </Group>
+        );
+      })()}
 
       {/* Large Center (+) */}
-      {!el.src && (
+      {!el.src && !isLoading && (
         <Group
           x={el.width / 2}
           y={el.height / 2}
-          onClick={handleEmptyClick}
-          onTap={handleEmptyClick}
+          onClick={handleFrameClick}
+          onTap={handleFrameClick}
         >
           <Circle radius={45} fill="rgba(255,255,255,0.15)" stroke="white" strokeWidth={2} opacity={0.8} />
           <Text text="+" fontSize={64} fill="white" x={-20} y={-38} fontFamily="Inter" fontStyle="100" />
         </Group>
       )}
+
+      {/* Loading Indicator */}
+      {isLoading && (
+        <Group
+          x={el.width / 2}
+          y={el.height / 2}
+        >
+          <Circle radius={45} fill="rgba(0,0,0,0.4)" />
+          <Text
+            text="Loading..."
+            fontSize={14}
+            fill="white"
+            x={-35}
+            y={-6}
+            fontFamily="Inter"
+            fontStyle="bold"
+          />
+        </Group>
+      )}
+
+      {/* On-Canvas Frame Rotate Handle */}
+      {isSelected && canInteract && (() => {
+        const minDim = Math.min(el.width, el.height);
+        const isSmall = minDim < 120;
+        const scale = isSmall ? Math.max(0.4, minDim / 120) : 1;
+        const offsetDist = 12 * scale;
+
+        // Edge detection to prevent clipping by the page bounds
+        let handleX = el.width + offsetDist;
+        let handleY = -offsetDist;
+
+        // If near the right edge of the page, keep it top-right but tuck it inside the frame
+        if (el.x + el.width + offsetDist + 20 > 500) {
+          handleX = el.width - (24 * scale) - offsetDist;
+        }
+        // If near the top edge of the page, keep it top-right but tuck it inside the frame
+        if (el.y - offsetDist - 20 < 0) {
+          handleY = offsetDist;
+        }
+
+        return (
+          <Group
+            x={handleX}
+            y={handleY}
+            draggable
+            onDragStart={(e) => {
+              e.cancelBubble = true;
+              const parent = e.target.getParent();
+              if (!parent) return;
+              
+              const w = el.width;
+              const h = el.height;
+              const currentRotation = el.rotation || 0;
+              const rad = (currentRotation * Math.PI) / 180;
+              
+              const cx = el.x + (w / 2) * Math.cos(rad) - (h / 2) * Math.sin(rad);
+              const cy = el.y + (w / 2) * Math.sin(rad) + (h / 2) * Math.cos(rad);
+              
+              const absCenter = parent.getAbsoluteTransform().point({ x: w / 2, y: h / 2 });
+              const stage = e.target.getStage();
+              const pos = stage?.getPointerPosition();
+              const startPointerAngle = pos ? Math.atan2(pos.y - absCenter.y, pos.x - absCenter.x) * (180 / Math.PI) : 0;
+
+              e.target.setAttrs({
+                dragStartX: handleX,
+                dragStartY: handleY,
+                initialRotation: currentRotation,
+                cx, cy,
+                absCenter,
+                startPointerAngle
+              });
+            }}
+            onDragMove={(e) => {
+              e.cancelBubble = true;
+              const stage = e.target.getStage();
+              const parent = e.target.getParent();
+              if (!stage || !parent) return;
+
+              const pos = stage.getPointerPosition();
+              if (!pos) return;
+
+              const attrs = e.target.attrs;
+              const { initialRotation, cx, cy, absCenter, startPointerAngle } = attrs;
+
+              const pointerAngle = Math.atan2(pos.y - absCenter.y, pos.x - absCenter.x) * (180 / Math.PI);
+              const deltaAngle = pointerAngle - startPointerAngle;
+              
+              let newRotation = initialRotation + deltaAngle;
+              
+              const w = el.width;
+              const h = el.height;
+              const newRad = (newRotation * Math.PI) / 180;
+              
+              parent.rotation(newRotation);
+              
+              const newX = cx - (w / 2) * Math.cos(newRad) + (h / 2) * Math.sin(newRad);
+              const newY = cy - (w / 2) * Math.sin(newRad) - (h / 2) * Math.cos(newRad);
+              parent.x(newX);
+              parent.y(newY);
+
+              e.target.x(attrs.dragStartX);
+              e.target.y(attrs.dragStartY);
+            }}
+            onDragEnd={(e) => {
+              e.cancelBubble = true;
+              const parent = e.target.getParent();
+              if (!parent) return;
+              
+              useEditorStore.getState().updateElement(pageId, el.id, { 
+                rotation: parent.rotation(),
+                x: parent.x(),
+                y: parent.y()
+              } as any);
+            }}
+            onClick={(e) => {
+              e.cancelBubble = true;
+              const state = useEditorStore.getState();
+
+              const currentRotation = el.rotation || 0;
+              const rad = (currentRotation * Math.PI) / 180;
+              const w = el.width;
+              const h = el.height;
+
+              // 1. Calculate true center
+              const cx = el.x + (w / 2) * Math.cos(rad) - (h / 2) * Math.sin(rad);
+              const cy = el.y + (w / 2) * Math.sin(rad) + (h / 2) * Math.cos(rad);
+
+              // 2. Rotate by 90 deg
+              const newRotation = (currentRotation + 90) % 360;
+              const newRad = (newRotation * Math.PI) / 180;
+
+              // 3. Calculate new top-left (x, y) so the center remains exactly the same
+              const newX = cx - (w / 2) * Math.cos(newRad) + (h / 2) * Math.sin(newRad);
+              const newY = cy - (w / 2) * Math.sin(newRad) - (h / 2) * Math.cos(newRad);
+
+              state.updateElement(pageId, el.id, {
+                rotation: newRotation,
+                x: newX,
+                y: newY,
+              } as any);
+            }}
+            onTap={(e) => {
+              e.cancelBubble = true;
+              const state = useEditorStore.getState();
+              const currentRotation = el.rotation || 0;
+              const rad = (currentRotation * Math.PI) / 180;
+              const w = el.width;
+              const h = el.height;
+              const cx = el.x + (w / 2) * Math.cos(rad) - (h / 2) * Math.sin(rad);
+              const cy = el.y + (w / 2) * Math.sin(rad) + (h / 2) * Math.cos(rad);
+              const newRotation = (currentRotation + 90) % 360;
+              const newRad = (newRotation * Math.PI) / 180;
+              const newX = cx - (w / 2) * Math.cos(newRad) + (h / 2) * Math.sin(newRad);
+              const newY = cy - (w / 2) * Math.sin(newRad) - (h / 2) * Math.cos(newRad);
+              state.updateElement(pageId, el.id, {
+                rotation: newRotation,
+                x: newX,
+                y: newY,
+              } as any);
+            }}
+            onMouseEnter={(e) => {
+              const container = e.target.getStage()?.container();
+              if (container) container.style.cursor = 'pointer';
+            }}
+            onMouseLeave={(e) => {
+              const container = e.target.getStage()?.container();
+              if (container) container.style.cursor = 'default';
+            }}
+          >
+            <Circle radius={16 * scale} fill="#ffffff" stroke="#9f2e2b" strokeWidth={2 * scale} shadowColor="rgba(0,0,0,0.2)" shadowBlur={4 * scale} />
+            <Path
+              data="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8 M21 3v5h-5"
+              stroke="#9f2e2b"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="transparent"
+              scale={{ x: 0.8 * scale, y: 0.8 * scale }}
+              offset={{ x: 12, y: 12 }}
+            />
+          </Group>
+        );
+      })()}
     </Group>
   );
-}
+});
 
 function PhotoCardInput({ el, pageId, isSelected }: any) {
   // We no longer overlay an invisible <input> here because it doesn't map correctly 
@@ -686,15 +1072,22 @@ function CalendarElement({
           const dayName = fullWeekDays[index % 7];
           const note = settings.data[dateKey] || "";
 
+          const isCarnivalDays = settings.month === 1 && (day === 16 || day === 17);
+          const displayText = isCarnivalDays ? `${note.trim().toUpperCase()}\n${dayName}` : note.trim().toUpperCase();
+
           return (
             <Group
               key={day} x={x} y={y}
               onClick={(e) => {
                 e.cancelBubble = true;
+                const isAdminStore = useEditorStore.getState().isAdmin;
+                if (isCarnivalDays && !isAdminStore) return; // Prevent customer edits on fixed dates
                 if (!isPreviewMode && onEditNote) onEditNote(el.id, pageId, dateKey, note);
               }}
               onTap={(e) => {
                 e.cancelBubble = true;
+                const isAdminStore = useEditorStore.getState().isAdmin;
+                if (isCarnivalDays && !isAdminStore) return; // Prevent customer edits on fixed dates
                 if (!isPreviewMode && onEditNote) onEditNote(el.id, pageId, dateKey, note);
               }}
             >
@@ -713,7 +1106,7 @@ function CalendarElement({
               {note && (
                 <Group y={4} x={cellWidth / 2} rotation={-8} listening={false}>
                   <Text
-                    text={`${note.trim().toUpperCase()}\n${dayName}`}
+                    text={displayText}
                     width={cellWidth * 1.5}
                     offsetX={(cellWidth * 1.5) / 2}
                     align="center"
@@ -726,7 +1119,7 @@ function CalendarElement({
                     lineHeight={1}
                   />
                   <Text
-                    text={`${note.trim().toUpperCase()}\n${dayName}`}
+                    text={displayText}
                     width={cellWidth * 1.5}
                     offsetX={(cellWidth * 1.5) / 2}
                     align="center"
@@ -745,18 +1138,19 @@ function CalendarElement({
   );
 }
 
-function PageCanvas({
+const PageCanvas = memo(function PageCanvas({
   page,
   offsetX,
   onEditCalendarNote,
   hasShadow = true,
+  isTemplatePage = false,
 }: {
   page: BookPage;
   offsetX: number;
   onEditCalendarNote?: (elId: string, pageId: string, dateKey: string, initialValue: string) => void;
   hasShadow?: boolean;
+  isTemplatePage?: boolean;
 }) {
-  const selectedElementId = useEditorStore((s) => s.selectedElementId);
   const selectElement = useEditorStore((s) => s.selectElement);
   const isGeneratingPdf = useEditorStore((s) => s.isGeneratingPdf);
 
@@ -772,7 +1166,9 @@ function PageCanvas({
         return;
       }
       const img = new window.Image();
-      img.crossOrigin = "anonymous";
+      if (page.background.startsWith("http")) {
+        img.crossOrigin = "anonymous";
+      }
       img.src = page.background;
       img.onload = () => {
         globalImageCache[page.background!] = img;
@@ -799,6 +1195,14 @@ function PageCanvas({
         shadowBlur={(isGeneratingPdf || !hasShadow) ? 0 : 8}
         shadowColor={(isGeneratingPdf || !hasShadow) ? "transparent" : "rgba(0,0,0,0.15)"}
         shadowOffsetY={(isGeneratingPdf || !hasShadow) ? 0 : 2}
+        onClick={(e) => {
+          e.cancelBubble = true;
+          useEditorStore.getState().selectElement(null);
+        }}
+        onTap={(e) => {
+          e.cancelBubble = true;
+          useEditorStore.getState().selectElement(null);
+        }}
       />
       <Group clipX={0} clipY={0} clipWidth={PAGE_WIDTH} clipHeight={PAGE_HEIGHT}>
         {page.elements.map((el) => {
@@ -817,9 +1221,9 @@ function PageCanvas({
               key={el.id}
               el={el}
               pageId={page.id}
-              isSelected={selectedElementId === el.id}
               onSelect={selectElement}
               pageIsLocked={page.isLocked}
+              isTemplatePage={isTemplatePage}
               onEditCalendarNote={onEditCalendarNote}
               safeZoneRight={_safeRight}
             />
@@ -838,11 +1242,6 @@ function PageCanvas({
           let safeHeight = PAGE_HEIGHT - 32;
 
           if (isCover) {
-            // Perfect physical mapping for 570x300mm Cover (Ratio mapped to 1000x500px UI)
-            // Left page represents 285mm: 20mm bleed (35.08px), 260mm face (456.15px), 5mm spine (8.77px)
-            // Right page represents 285mm: 5mm spine (8.77px), 260mm face (456.15px), 20mm bleed (35.08px)
-            // Height represents 300mm: 20mm bleed (33.33px), 260mm face (433.34px), 20mm bleed (33.33px)
-
             safeY = 33.33;
             safeHeight = 433.34;
 
@@ -888,13 +1287,87 @@ function PageCanvas({
       </Group>
     </Group>
   );
+});
+
+function CalendarNoteModal({
+  noteData,
+  onSave,
+  onCancel
+}: {
+  noteData: { elementId: string; pageId: string; dateKey: string; initialValue: string; note: string };
+  onSave: (note: string) => void;
+  onCancel: () => void;
+}) {
+  const [note, setNote] = useState(noteData.initialValue);
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[99999] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
+      <div className="bg-white rounded-[2.5rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] w-full max-w-md overflow-hidden border border-white/20 animate-in zoom-in-95 slide-in-from-bottom-10 duration-500">
+        <div className="h-2 bg-gradient-to-r from-[#fbba00] via-[#d22e56] to-[#009d94]" />
+
+        <div className="p-8">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center border border-gray-100">
+                <Calendar className="w-6 h-6 text-[#d22e56]" />
+              </div>
+              <div>
+                <h3 className="text-2xl font-black text-gray-900 leading-none">
+                  {noteData.dateKey.replace('-', ' ')}
+                </h3>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Calendar Note</p>
+              </div>
+            </div>
+            <button
+              onClick={onCancel}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+
+          <div className="space-y-4 mb-8">
+            <label className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+              <Edit3 className="w-3.5 h-3.5" />
+              Your Note
+            </label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="w-full h-32 p-6 bg-gray-50 border-2 border-gray-100 rounded-[2rem] focus:ring-4 focus:ring-[#009d94]/10 focus:border-[#009d94] outline-none text-xl text-black resize-none transition-all placeholder:text-gray-200 font-handwritten"
+              placeholder="Add something special about this day..."
+              autoFocus
+            />
+          </div>
+
+          <div className="flex gap-4">
+            <button
+              onClick={onCancel}
+              className="flex-1 h-14 rounded-2xl border-2 border-gray-100 text-gray-900 font-bold hover:bg-gray-50 transition-all active:scale-95"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => onSave(note)}
+              className="flex-[1.5] h-14 rounded-2xl bg-black text-white font-black uppercase tracking-widest text-sm transition-all hover:bg-gray-900 shadow-xl shadow-black/10 active:scale-95"
+            >
+              Save Note
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function EditorCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-  const spreads = useEditorStore((s) => s.spreads);
+  // Select only the current spread — avoids re-render when OTHER spreads change
   const currentSpreadIndex = useEditorStore((s) => s.currentSpreadIndex);
+  const currentSpread = useEditorStore((s) => s.spreads[s.currentSpreadIndex]);
+  // Still need spread count for navigation functions (but full array is fetched via getState() to avoid renders)
+  const spreadCount = useEditorStore((s) => s.spreads.length);
   const zoom = useEditorStore((s) => s.zoom);
   const selectElement = useEditorStore((s) => s.selectElement);
   const addElement = useEditorStore((s) => s.addElement);
@@ -905,7 +1378,7 @@ export function EditorCanvas() {
   const templateLoaded = useEditorStore((s) => s.templateLoaded);
   const isGeneratingPdf = useEditorStore((s) => s.isGeneratingPdf);
   const isAdmin = useEditorStore((s) => s.isAdmin);
-  const currentSpread = spreads[currentSpreadIndex];
+  const previewElement = useEditorStore((s) => s.previewElement);
 
   const isLockedSpread = isFullyLockedSpread(currentSpread, isAdmin, currentSpreadIndex);
   const isTemplatePage = isTemplateSpread(currentSpread, isAdmin, currentSpreadIndex);
@@ -932,12 +1405,18 @@ export function EditorCanvas() {
 
   useEffect(() => {
     if (stageRef.current) setStageRefStore(stageRef.current);
-    preloadSpreadImages(spreads); // Pre-load all images for fast rendering
-  }, [setStageRefStore, spreads]);
+  }, [setStageRefStore]);
+
+  // Only preload images ONCE when the template first loads (not on every keypress/drag)
+  useEffect(() => {
+    if (templateLoaded && spreadCount > 0) {
+      preloadSpreadImages(useEditorStore.getState().spreads);
+    }
+  }, [templateLoaded, spreadCount]); // intentionally NOT including full spreads to avoid re-running on every edit
 
   useEffect(() => {
     if (stageRef.current) stageRef.current.batchDraw();
-  }, [spreads, useEditorStore((s) => s.previewElement)]);
+  }, [currentSpread, previewElement]);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -976,9 +1455,12 @@ export function EditorCanvas() {
   const stageY = Math.max(0, (containerSize.height - stageHeight) / 2);
 
   const handleStageClick = (e: any) => {
-    if (e.target === e.target.getStage() || e.target.getClassName() === "Rect") {
-      const clickedOnElement = e.target.parent?.parent !== null && e.target.getClassName() !== "Rect";
-      if (!clickedOnElement) selectElement(null);
+    const target = e.target;
+    const stage = target.getStage();
+    // If clicking on the background rect or stage itself
+    if (target === stage || target.name() === "background") {
+      selectElement(null);
+      useEditorStore.getState().setCroppingElement(null);
     }
   };
 
@@ -1031,16 +1513,33 @@ export function EditorCanvas() {
           </button>
         </div>
       )}
-      <div className="flex-1 relative overflow-hidden">
+      <div
+        className="flex-1 relative overflow-hidden"
+        onPointerDown={(e) => {
+          if (e.target === e.currentTarget) {
+            selectElement(null);
+          }
+        }}
+      >
         {isPreviewMode && (
           <>
             <button onClick={prevSpread} disabled={currentSpreadIndex === 0} className="absolute left-5 top-1/2 -translate-y-1/2 z-20 text-gray-300 hover:text-gray-600 disabled:opacity-0"><ChevronLeft className="w-20 h-20" /></button>
-            <button onClick={nextSpread} disabled={currentSpreadIndex === spreads.length - 1} className="absolute right-5 top-1/2 -translate-y-1/2 z-20 text-gray-300 hover:text-gray-600 disabled:opacity-0"><ChevronRight className="w-20 h-20" /></button>
+            <button onClick={nextSpread} disabled={currentSpreadIndex === spreadCount - 1} className="absolute right-5 top-1/2 -translate-y-1/2 z-20 text-gray-300 hover:text-gray-600 disabled:opacity-0"><ChevronRight className="w-20 h-20" /></button>
           </>
         )}
 
         <div style={{ position: "absolute", left: stageX, top: stageY, width: stageWidth, height: stageHeight }}>
-          <Stage ref={stageRef} width={stageWidth} height={stageHeight} scaleX={scale} scaleY={scale} onClick={handleStageClick}>
+          <Stage
+            ref={stageRef}
+            width={stageWidth}
+            height={stageHeight}
+            scaleX={scale}
+            scaleY={scale}
+            onClick={handleStageClick}
+            onMouseLeave={() => {
+              if (stageRef.current) stageRef.current.container().style.cursor = "default";
+            }}
+          >
             <Layer>
               {isSingle ? (
                 <PageCanvas
@@ -1048,6 +1547,7 @@ export function EditorCanvas() {
                   offsetX={0}
                   onEditCalendarNote={handleEditCalendarNote}
                   hasShadow={true}
+                  isTemplatePage={isTemplatePage}
                 />
               ) : (
                 <Group>
@@ -1068,12 +1568,14 @@ export function EditorCanvas() {
                     offsetX={0}
                     onEditCalendarNote={handleEditCalendarNote}
                     hasShadow={false}
+                    isTemplatePage={isTemplatePage}
                   />
                   <PageCanvas
                     page={currentSpread.rightPage}
                     offsetX={PAGE_WIDTH + gap}
                     onEditCalendarNote={handleEditCalendarNote}
                     hasShadow={false}
+                    isTemplatePage={isTemplatePage}
                   />
                 </Group>
               )}
@@ -1102,86 +1604,36 @@ export function EditorCanvas() {
       </div>
 
       {editingCalendarNote && (
-        <div className="fixed inset-0 bg-black/60 z-[99999] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white rounded-[2.5rem] shadow-[0_25px_60px_-15px_rgba(0,0,0,0.5)] w-full max-w-md overflow-hidden border border-white/20 animate-in zoom-in-95 slide-in-from-bottom-10 duration-500">
-            {/* Top Carnival bar */}
-            <div className="h-2 bg-gradient-to-r from-[#fbba00] via-[#d22e56] to-[#009d94]" />
+        <CalendarNoteModal
+          noteData={editingCalendarNote}
+          onCancel={() => setEditingCalendarNote(null)}
+          onSave={(note) => {
+            const { elementId, pageId, dateKey } = editingCalendarNote;
+            const allSpreads = useEditorStore.getState().spreads;
+            const el = allSpreads.find(s => s.leftPage.id === pageId || s.rightPage.id === pageId)
+              ?.leftPage.elements.concat(
+                allSpreads.find(s => s.leftPage.id === pageId || s.rightPage.id === pageId)?.rightPage.elements || []
+              ).find(e => e.id === elementId) as EditorElement;
 
-            <div className="p-8">
-              <div className="flex items-center justify-between mb-8">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center border border-gray-100">
-                    <Calendar className="w-6 h-6 text-[#d22e56]" />
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-black text-gray-900 leading-none">
-                      {editingCalendarNote.dateKey.replace('-', ' ')}
-                    </h3>
-                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">Calendar Note</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setEditingCalendarNote(null)}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-400"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
+            if (el) {
+              const newData = { ...(el.calendarSettings?.data || {}) };
+              if (note.trim()) {
+                newData[dateKey] = note;
+              } else {
+                delete newData[dateKey];
+              }
 
-              <div className="space-y-4 mb-8">
-                <label className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                  <Edit3 className="w-3.5 h-3.5" />
-                  Your Note
-                </label>
-                <textarea
-                  value={editingCalendarNote.note}
-                  onChange={(e) => setEditingCalendarNote({ ...editingCalendarNote, note: e.target.value })}
-                  className="w-full h-32 p-6 bg-gray-50 border-2 border-gray-100 rounded-[2rem] focus:ring-4 focus:ring-[#009d94]/10 focus:border-[#009d94] outline-none text-xl text-black resize-none transition-all placeholder:text-gray-200 font-handwritten"
-                  placeholder="Add something special about this day..."
-                  autoFocus
-                />
-              </div>
-
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setEditingCalendarNote(null)}
-                  className="flex-1 h-14 rounded-2xl border-2 border-gray-100 text-gray-900 font-bold hover:bg-gray-50 transition-all active:scale-95"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    const { elementId, pageId, dateKey, note } = editingCalendarNote;
-                    const el = spreads.find(s => s.leftPage.id === pageId || s.rightPage.id === pageId)
-                      ?.leftPage.elements.concat(
-                        spreads.find(s => s.leftPage.id === pageId || s.rightPage.id === pageId)?.rightPage.elements || []
-                      ).find(e => e.id === elementId) as EditorElement;
-
-                    if (el) {
-                      const newData = { ...(el.calendarSettings?.data || {}) };
-                      if (note.trim()) {
-                        newData[dateKey] = note;
-                      } else {
-                        delete newData[dateKey];
-                      }
-
-                      updateElement(pageId, elementId, {
-                        calendarSettings: el.calendarSettings ? {
-                          ...el.calendarSettings,
-                          data: newData
-                        } : undefined
-                      });
-                    }
-                    setEditingCalendarNote(null);
-                  }}
-                  className="flex-[1.5] h-14 rounded-2xl bg-black text-white font-black uppercase tracking-widest text-sm transition-all hover:bg-gray-900 shadow-xl shadow-black/10 active:scale-95"
-                >
-                  Save Note
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+              const updateElement = useEditorStore.getState().updateElement;
+              updateElement(pageId, elementId, {
+                calendarSettings: el.calendarSettings ? {
+                  ...el.calendarSettings,
+                  data: newData
+                } : undefined
+              });
+            }
+            setEditingCalendarNote(null);
+          }}
+        />
       )}
     </div>
   );

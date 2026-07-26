@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { v4 as uuidv4 } from "uuid";
-import Konva from "konva";
+import type Konva from "konva";
 import { toast } from "sonner";
 import { uploadFiles } from "@/lib/uploadthing-client";
 
@@ -29,6 +29,8 @@ export interface EditorElement {
   isLocked?: boolean;
   // Image-specific
   src?: string;
+  cropX?: number;
+  cropY?: number;
   // Text-specific
   text?: string;
   fontSize?: number;
@@ -133,7 +135,16 @@ interface EditorState {
   addElement: (pageId: string, element: Omit<EditorElement, "id">) => void;
   updateElement: (pageId: string, elementId: string, updates: Partial<EditorElement>) => void;
   removeElement: (pageId: string, elementId: string) => void;
+  moveElementToBack: (pageId: string, elementId: string) => void;
+  moveElementToFront: (pageId: string, elementId: string) => void;
   selectElement: (elementId: string | null) => void;
+
+  // User Images (Global state for preloading)
+  userImages: { id: string; url: string }[];
+  isFetchingImages: boolean;
+  fetchUserImages: () => Promise<void>;
+  addUserImage: (image: { id: string; url: string }) => void;
+  removeUserImage: (imageId: string) => void;
   setPreviewElement: (elementId: string | null, updates: Partial<EditorElement> | null) => void;
   toggleElementLock: (pageId: string, elementId: string) => void;
   applyLayout: (pageId: string, frames: { x: number; y: number; width: number; height: number; type: "image" | "text" }[]) => void;
@@ -158,11 +169,15 @@ interface EditorState {
   setIsOrderModalOpen: (open: boolean) => void;
   setIsPageTransitioning: (isTransitioning: boolean) => void;
 
+  croppingElementId: string | null;
+  setCroppingElement: (id: string | null) => void;
+
   // Actions - History
   undo: () => void;
   redo: () => void;
   pushHistory: () => void;
   isDirty: boolean;
+  isSaving: boolean;
   setDirty: (dirty: boolean) => void;
   resetEditor: () => void;
   save: (isAdmin?: boolean) => Promise<boolean>;
@@ -220,30 +235,65 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   previewElement: null,
   stageRef: null,
   isOrderModalOpen: false,
+  userImages: [],
+  isFetchingImages: false,
+
+  fetchUserImages: async () => {
+    set({ isFetchingImages: true });
+    try {
+      const dbRes = await fetch("/api/book-images", { cache: "no-store" });
+      let dbImages: {id: string, url: string}[] = [];
+      if (dbRes.ok) {
+        const data = await dbRes.json();
+        if (data.images) {
+          dbImages = Object.entries(data.images)
+            .filter(([_, url]) => !(url as string).startsWith("blob:"))
+            .map(([id, url]) => ({
+              id,
+              url: url as string,
+            }));
+        }
+      }
+      set({ userImages: dbImages });
+    } catch (err) {
+      console.error("Failed to fetch user images", err);
+    } finally {
+      set({ isFetchingImages: false });
+    }
+  },
+  addUserImage: (image) => set((state) => ({ userImages: [image, ...state.userImages] })),
+  removeUserImage: (imageId) => set((state) => ({ userImages: state.userImages.filter(img => img.id !== imageId) })),
+
+  // History
   history: [],
   historyIndex: -1,
   version: 0,
   isDirty: false,
+  isSaving: false,
   setDirty: (dirty) => set({ isDirty: dirty }),
   setStageRef: (ref) => set({ stageRef: ref }),
   setIsOrderModalOpen: (open) => set({ isOrderModalOpen: open }),
   setIsPageTransitioning: (isTransitioning) => set({ isPageTransitioning: isTransitioning }),
+  croppingElementId: null,
+  setCroppingElement: (id) => set({ croppingElementId: id }),
 
   // Navigation
-  setCurrentSpread: (index) => set(() => ({
+  setCurrentSpread: (index, skipDirty) => set((s) => ({
     currentSpreadIndex: index,
     selectedElementId: null,
+    croppingElementId: null,
+    isDirty: skipDirty ? s.isDirty : true,
   })),
   nextSpread: () => {
     const { currentSpreadIndex, spreads } = get();
     if (currentSpreadIndex < spreads.length - 1) {
-      set({ currentSpreadIndex: currentSpreadIndex + 1, selectedElementId: null });
+      set({ currentSpreadIndex: currentSpreadIndex + 1, selectedElementId: null, croppingElementId: null });
     }
   },
   prevSpread: () => {
     const { currentSpreadIndex } = get();
     if (currentSpreadIndex > 0) {
-      set({ currentSpreadIndex: currentSpreadIndex - 1, selectedElementId: null });
+      set({ currentSpreadIndex: currentSpreadIndex - 1, selectedElementId: null, croppingElementId: null });
     }
   },
 
@@ -295,6 +345,52 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           : spread.rightPage,
       })),
       selectedElementId: state.selectedElementId === elementId ? null : state.selectedElementId,
+    });
+  },
+
+  moveElementToBack: (pageId, elementId) => {
+    const state = get();
+    state.pushHistory();
+    set({
+      spreads: state.spreads.map((spread) => {
+        const moveBack = (elements: EditorElement[]) => {
+          const idx = elements.findIndex(el => el.id === elementId);
+          if (idx <= 0) return elements;
+          const el = elements[idx];
+          const newElements = [...elements];
+          newElements.splice(idx, 1);
+          newElements.unshift(el); // send to very beginning (bottom)
+          return newElements;
+        };
+        return {
+          ...spread,
+          leftPage: spread.leftPage.id === pageId ? { ...spread.leftPage, elements: moveBack(spread.leftPage.elements) } : spread.leftPage,
+          rightPage: spread.rightPage.id === pageId ? { ...spread.rightPage, elements: moveBack(spread.rightPage.elements) } : spread.rightPage,
+        };
+      }),
+    });
+  },
+
+  moveElementToFront: (pageId, elementId) => {
+    const state = get();
+    state.pushHistory();
+    set({
+      spreads: state.spreads.map((spread) => {
+        const moveFront = (elements: EditorElement[]) => {
+          const idx = elements.findIndex(el => el.id === elementId);
+          if (idx === -1 || idx === elements.length - 1) return elements;
+          const el = elements[idx];
+          const newElements = [...elements];
+          newElements.splice(idx, 1);
+          newElements.push(el); // send to very end (top)
+          return newElements;
+        };
+        return {
+          ...spread,
+          leftPage: spread.leftPage.id === pageId ? { ...spread.leftPage, elements: moveFront(spread.leftPage.elements) } : spread.leftPage,
+          rightPage: spread.rightPage.id === pageId ? { ...spread.rightPage, elements: moveFront(spread.rightPage.elements) } : spread.rightPage,
+        };
+      }),
     });
   },
 
@@ -451,8 +547,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   })),
 
   save: async (isAdminParam?: boolean) => {
+    if (get().isSaving) return false;
     const { spreads, isAdmin, activeTemplateId, activeTemplateName, templateDescription, templateCountry, templateYear, currentSpreadIndex, version: startVersion } = get();
 
+    set({ isSaving: true });
     try {
       const res = await fetch("/api/editor/save", {
         method: "POST",
@@ -491,6 +589,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       console.error("Save error:", error);
       toast.error(`Save failed: ${error.message}`);
       return false;
+    } finally {
+      set({ isSaving: false });
     }
   },
 
@@ -507,7 +607,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   pushHistory: () => {
     const state = get();
     const entry: HistoryEntry = {
-      spreads: JSON.parse(JSON.stringify(state.spreads)),
+      spreads: state.spreads,
       currentSpreadIndex: state.currentSpreadIndex,
     };
     const newHistory = state.history.slice(0, state.historyIndex + 1);
@@ -521,7 +621,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     if (historyIndex < 0) return;
     const entry = history[historyIndex];
     set({
-      spreads: JSON.parse(JSON.stringify(entry.spreads)),
+      spreads: entry.spreads,
       currentSpreadIndex: entry.currentSpreadIndex,
       historyIndex: historyIndex - 1,
       selectedElementId: null,
@@ -535,7 +635,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const nextIndex = historyIndex + 1;
     const entry = history[nextIndex];
     set({
-      spreads: JSON.parse(JSON.stringify(entry.spreads)),
+      spreads: entry.spreads,
       currentSpreadIndex: entry.currentSpreadIndex,
       historyIndex: nextIndex,
       selectedElementId: null,
@@ -655,14 +755,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       if (spreads.length > 0 && spreads[0].rightPage?.background) {
         coverBg = spreads[0].rightPage.background;
       }
-      
+
       if (isHardCopy && coverPdf && textPdf) {
         const hexToRgb = (hex: string) => {
           const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
           return result ? { r: parseInt(result[1], 16), g: parseInt(result[2], 16), b: parseInt(result[3], 16) } : { r: 255, g: 255, b: 255 };
         };
         const bgRgb = hexToRgb(coverBg.startsWith('#') ? coverBg : '#ffffff');
-        
+
         coverPdf.setFillColor(bgRgb.r, bgRgb.g, bgRgb.b);
         coverPdf.rect(0, 0, COVER_WIDTH, COVER_HEIGHT, 'F');
       }
@@ -728,7 +828,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       // Cover = 1 page. Inner = all spreads minus cover spread.
       const coverTotal = 1;
       const innerTotal = Math.max(1, spreads.length - 1);
-      const softTotal  = spreads.length; // cover + all inner in one PDF
+      const softTotal = spreads.length; // cover + all inner in one PDF
 
       // Which pages does this export include?
       const exportingCover = pdfType === 'cover' || pdfType === 'both' || !isHardCopy;
@@ -736,14 +836,14 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
       const totalForProgress =
         pdfType === 'cover' ? coverTotal :
-        pdfType === 'inner' ? innerTotal :
-        !isHardCopy         ? softTotal  : // soft copy = all pages
+          pdfType === 'inner' ? innerTotal :
+            !isHardCopy ? softTotal : // soft copy = all pages
         /* both */            spreads.length;
 
       toast.info(
         pdfType === 'cover' ? `Generating Cover PDF (1 page)...` :
-        pdfType === 'inner' ? `Generating Inner Pages PDF (${innerTotal} pages)...` :
-        `Generating PDFs — ${spreads.length} spreads...`,
+          pdfType === 'inner' ? `Generating Inner Pages PDF (${innerTotal} pages)...` :
+            `Generating PDFs — ${spreads.length} spreads...`,
         { duration: 3000 }
       );
 
@@ -779,28 +879,28 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
         // What is the "current page" number in the context of this specific export?
         const relCurrent = pdfType === 'cover' ? coverPageNum :
-                           pdfType === 'inner' ? innerPageNum :
-                           !isHardCopy         ? i + 1 :       // soft: all pages in order
+          pdfType === 'inner' ? innerPageNum :
+            !isHardCopy ? i + 1 :       // soft: all pages in order
                            /* both */            i + 1;
 
         const relTotal = pdfType === 'cover' ? coverTotal :
-                         pdfType === 'inner' ? innerTotal :
-                         !isHardCopy         ? softTotal  :
+          pdfType === 'inner' ? innerTotal :
+            !isHardCopy ? softTotal :
                          /* both */            spreads.length;
 
-        const pageLabel = !isHardCopy 
-          ? `page ${relCurrent} of ${relTotal}` 
+        const pageLabel = !isHardCopy
+          ? `page ${relCurrent} of ${relTotal}`
           : (i === 0 ? 'Cover' : `Inner page ${innerPageNum} of ${innerTotal}`);
-          
+
         const toastLabel = !isHardCopy
           ? `Rendering page ${relCurrent} of ${relTotal}...`
           : pdfType === 'cover'
-          ? `Rendering cover (1 of 1)...`
-          : pdfType === 'inner'
-          ? `Rendering inner page ${innerPageNum} of ${innerTotal}...`
-          : i === 0
-          ? `Rendering cover (1 of 1)...`
-          : `Rendering inner page ${innerPageNum} of ${innerTotal}...`;
+            ? `Rendering cover (1 of 1)...`
+            : pdfType === 'inner'
+              ? `Rendering inner page ${innerPageNum} of ${innerTotal}...`
+              : i === 0
+                ? `Rendering cover (1 of 1)...`
+                : `Rendering inner page ${innerPageNum} of ${innerTotal}...`;
 
         set({
           pdfGenerationProgress: {
@@ -819,7 +919,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         // This ensures they are fully cached before we even ask Konva to render them
         const spread = spreads[i];
         const urlsToPreload: string[] = [];
-        
+
         const isValidUrl = (url?: string) => url && (url.startsWith('http') || url.startsWith('/') || url.startsWith('data:'));
         const extractUrls = (page: BookPage | null) => {
           if (!page) return;
@@ -828,7 +928,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             if (isValidUrl(el.src)) urlsToPreload.push(el.src!);
           });
         };
-        
+
         extractUrls(spread.leftPage);
         extractUrls(spread.rightPage);
 
@@ -843,7 +943,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         }));
 
         if (preloadPromises.length > 0) {
-           await Promise.all(preloadPromises);
+          await Promise.all(preloadPromises);
         }
 
         // Wait for React to mount components and images to start loading
@@ -861,7 +961,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         // 3. Force a full redraw
         currentStageRef.batchDraw();
 
-        const exportBg = new Konva.Rect({
+        // Dynamic import — reuses the same Konva instance already loaded by EditorCanvas
+        const KonvaLib = (await import("konva")).default;
+        const exportBg = new KonvaLib.Rect({
           x: -100,
           y: -100,
           width: PAGE_WIDTH * 2 + 200,
@@ -901,7 +1003,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             }
             // Background pattern images in Rects
             if (node.getClassName() === 'Rect') {
-              const patternImg = (node as Konva.Rect).fillPatternImage();
+              const patternImg = (node as any).fillPatternImage();
               if (patternImg instanceof HTMLImageElement) {
                 if (!patternImg.complete || patternImg.naturalWidth === 0) {
                   loadPromises.push(new Promise<void>(resolve => {
@@ -948,7 +1050,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           // Setting to natural size ensures the full spread is captured with no black areas.
           const originalScaleX = currentStageRef.scaleX();
           const originalScaleY = currentStageRef.scaleY();
-          const originalWidth  = currentStageRef.width();
+          const originalWidth = currentStageRef.width();
           const originalHeight = currentStageRef.height();
 
           currentStageRef.scaleX(1);
@@ -963,7 +1065,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           if (!isHardCopy && softPdf) {
             // SOFT COPY - Unified Document, exact canvas size without bleed cropping
             let cropX = 0, cropY = 0, cropW = PAGE_WIDTH * 2, cropH = PAGE_HEIGHT;
-            
+
             if (i === 0) {
               // Cover: crop out 20mm bleed (35.08px x, 33.33px y)
               cropX = 35.08;
@@ -1045,25 +1147,25 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           textPdf.addPage([TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT], "portrait");
           const endCanvas = document.createElement('canvas');
           const PIXEL_RATIO = 5;
-          endCanvas.width = TEXT_PAGE_WIDTH * PIXEL_RATIO; 
+          endCanvas.width = TEXT_PAGE_WIDTH * PIXEL_RATIO;
           endCanvas.height = TEXT_PAGE_HEIGHT * PIXEL_RATIO;
           const ctx = endCanvas.getContext('2d');
           if (ctx) {
             ctx.scale(PIXEL_RATIO, PIXEL_RATIO);
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
-            
+
             // Draw subtle closing logo/text on the LEFT side of the final spread
             ctx.fillStyle = '#666666'; // Match Trinidad text color
             ctx.font = 'italic 24px "Caveat", cursive';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText('Created with Dear Bacchanal', TEXT_PAGE_WIDTH / 2, TEXT_PAGE_HEIGHT - 100);
-            
+
             const endDataUrl = endCanvas.toDataURL('image/jpeg', 0.92);
             textPdf.addImage(endDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
           }
-        } catch(e) {}
+        } catch (e) { }
       }
 
       const baseFileName = activeTemplateName?.replace(/\s+/g, '_') || 'Carnival_Book';
@@ -1074,12 +1176,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           if (!fontPreloadPromise) return inputBlob;
           const preloaded = await fontPreloadPromise;
           if (!preloaded) return inputBlob;
-          
+
           const { pdfLibModule: { PDFDocument, rgb }, fontkitModule, fontBytes } = preloaded;
 
           const inputBytes = await inputBlob.arrayBuffer();
           const pdfDoc = await PDFDocument.load(inputBytes, { ignoreEncryption: true });
-          
+
           // Must register fontkit to embed custom TTF fonts
           const fontkit = fontkitModule.default || fontkitModule;
           pdfDoc.registerFontkit(fontkit);
@@ -1114,7 +1216,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const rawTextBlob = textPdf.output('blob');
         coverBlob = await embedFontWithPdfLib(rawCoverBlob);
         textBlob = await embedFontWithPdfLib(rawTextBlob);
-        
+
         if (!coverBlob) coverBlob = rawCoverBlob;
         if (!textBlob) textBlob = rawTextBlob;
 
@@ -1129,7 +1231,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         const softBlobUrl = URL.createObjectURL(softBlob);
         const softLink = document.createElement('a');
         softLink.href = softBlobUrl;
-        
+
         if (pdfType === 'cover') {
           softLink.download = `${baseFileName}_Cover_NoBleed.pdf`;
         } else if (pdfType === 'inner') {
@@ -1137,12 +1239,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         } else {
           softLink.download = `${baseFileName}_Digital_Book.pdf`;
         }
-        
+
         document.body.appendChild(softLink);
         softLink.click();
         document.body.removeChild(softLink);
         setTimeout(() => URL.revokeObjectURL(softBlobUrl), 5000);
-        
+
         toast.success("PDF downloaded successfully!", { duration: 5000 });
       }
 
@@ -1150,10 +1252,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       if (isHardCopy && pdfType === 'both' && coverBlob && textBlob) {
         try {
           const { activeTemplateId: bookId, activeTemplateName: tmplName } = get();
-          
+
           // Update the full-screen loading overlay text so the user knows why it's waiting
           set((state) => ({
-            pdfGenerationProgress: state.pdfGenerationProgress 
+            pdfGenerationProgress: state.pdfGenerationProgress
               ? { ...state.pdfGenerationProgress, status: "Uploading Print Files to Factory..." }
               : null
           }));
@@ -1161,31 +1263,31 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           const coverPdfFile = new File([coverBlob], `${baseFileName}_Cover.pdf`, { type: "application/pdf" });
           const textPdfFile = new File([textBlob], `${baseFileName}_Text.pdf`, { type: "application/pdf" });
 
-            // 1. Upload files DIRECTLY to UploadThing from the browser (bypasses Next.js 4.5MB body limit)
-            const uploadResult = await uploadFiles("bookPdfUploader", {
-              files: [coverPdfFile, textPdfFile]
+          // 1. Upload files DIRECTLY to UploadThing from the browser (bypasses Next.js 4.5MB body limit)
+          const uploadResult = await uploadFiles("bookPdfUploader", {
+            files: [coverPdfFile, textPdfFile]
+          });
+
+          if (uploadResult && uploadResult.length === 2) {
+            const coverUrl = uploadResult.find(r => r.name.includes("_Cover"))?.url || uploadResult[0].url;
+            const textUrl = uploadResult.find(r => r.name.includes("_Text"))?.url || uploadResult[1].url;
+
+            // 2. Send the resulting URLs to the backend to save in the database
+            const uploadResponse = await fetch("/api/editor/upload-pdf", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                coverUrl,
+                textUrl,
+                bookId,
+                templateName: tmplName
+              }),
             });
 
-            if (uploadResult && uploadResult.length === 2) {
-              const coverUrl = uploadResult.find(r => r.name.includes("_Cover"))?.url || uploadResult[0].url;
-              const textUrl = uploadResult.find(r => r.name.includes("_Text"))?.url || uploadResult[1].url;
+            const data = await uploadResponse.json();
 
-              // 2. Send the resulting URLs to the backend to save in the database
-              const uploadResponse = await fetch("/api/editor/upload-pdf", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  coverUrl,
-                  textUrl,
-                  bookId,
-                  templateName: tmplName
-                }),
-              });
-              
-              const data = await uploadResponse.json();
-              
-              if (data.success) {
-                console.log("[editor] PDFs uploaded for SiteFlow!");
+            if (data.success) {
+              console.log("[editor] PDFs uploaded for SiteFlow!");
               toast.success("Print files securely uploaded to factory!", { duration: 5000 });
             } else {
               console.error("[editor] Failed to save URLs to DB:", data);
@@ -1218,7 +1320,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           method: 'POST',
           body: JSON.stringify({ message: err?.message, stack: err?.stack, stringified: String(err) })
         });
-      } catch(e){}
+      } catch (e) { }
       toast.error("PDF generation failed. Please try again.");
     } finally {
       toast.dismiss('pdf-progress');

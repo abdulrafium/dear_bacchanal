@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 
 export function EditorTopToolbar() {
   const router = useRouter();
@@ -33,6 +34,8 @@ export function EditorTopToolbar() {
 
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "modified">("saved");
   const [showPdfDropdown, setShowPdfDropdown] = useState(false);
+  const [showEmptyFramesWarning, setShowEmptyFramesWarning] = useState(false);
+  const [emptyFramesCount, setEmptyFramesCount] = useState(0);
 
   const save = useEditorStore((s) => s.save);
 
@@ -62,6 +65,26 @@ export function EditorTopToolbar() {
     } else {
       toast.error("Failed to save the book.");
       setSaveStatus("modified");
+    }
+  };
+
+  const handleOrderClick = () => {
+    let count = 0;
+    spreads.forEach(spread => {
+      [spread.leftPage, spread.rightPage].forEach(page => {
+        page.elements.forEach(el => {
+          if (el.type === "photo-card" && !el.src) {
+            count++;
+          }
+        });
+      });
+    });
+
+    if (count > 0) {
+      setEmptyFramesCount(count);
+      setShowEmptyFramesWarning(true);
+    } else {
+      useEditorStore.getState().setIsOrderModalOpen(true);
     }
   };
 
@@ -238,7 +261,7 @@ export function EditorTopToolbar() {
 
         {!isAdmin && (
           <button 
-            onClick={() => useEditorStore.getState().setIsOrderModalOpen(true)}
+            onClick={handleOrderClick}
             className="flex items-center gap-1 sm:gap-1.5 bg-[#2d2d2d] text-white px-3 sm:px-6 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs md:text-sm font-bold hover:bg-black transition-all ml-0.5 sm:ml-2 shadow-lg shadow-black/10 group"
           >
             <ShoppingCart className="w-4 h-4 group-hover:scale-110 transition-transform" />
@@ -246,6 +269,54 @@ export function EditorTopToolbar() {
           </button>
         )}
       </div>
+
+      {/* Empty Frames Warning Modal */}
+      {showEmptyFramesWarning && typeof document !== 'undefined' && createPortal(
+        <div 
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setShowEmptyFramesWarning(false)}
+        >
+          <div 
+            className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-sm w-full mx-4 animate-in zoom-in-95 duration-200 border border-gray-100 flex flex-col items-center text-center relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mb-4">
+              <ShoppingCart className="w-8 h-8" />
+            </div>
+            
+            <h3 className="text-xl font-bold text-gray-900 mb-2 font-poppins tracking-tight">
+              Wait, you have empty frames!
+            </h3>
+            
+            <p className="text-sm text-gray-500 mb-6 font-medium leading-relaxed">
+              You still have <strong className="text-red-500 text-lg mx-1">{emptyFramesCount}</strong> empty photo {emptyFramesCount === 1 ? 'frame' : 'frames'} left in your book. Are you sure you want to proceed to checkout? Empty frames will not be printed.
+            </p>
+            
+            <div className="flex flex-col gap-2 w-full">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowEmptyFramesWarning(false);
+                  useEditorStore.getState().setIsOrderModalOpen(true);
+                }}
+                className="w-full bg-[#2d2d2d] text-white font-bold py-3 rounded-full hover:bg-black transition-colors"
+              >
+                Yes, proceed to checkout
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowEmptyFramesWarning(false);
+                }}
+                className="w-full bg-gray-100 text-gray-600 font-bold py-3 rounded-full hover:bg-gray-200 transition-colors"
+              >
+                No, let me add photos
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

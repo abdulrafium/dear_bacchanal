@@ -69,6 +69,47 @@ export function SpreadFixer() {
         } as any);
       }
     }
+
+    // --- Fix Spread 6 (Pages 13 & 14) ---
+    // Lock font3 and bus images so they cannot be removed by customers
+    const s6 = spreads[6];
+    if (s6 && s6.leftPage) {
+      s6.leftPage.elements.forEach((el: any) => {
+        if (el.src && (el.src.toLowerCase().includes('font3') || el.src.toLowerCase().includes('bus'))) {
+          if (!el.isLocked) {
+            updateElement(s6.leftPage.id, el.id, { isLocked: true });
+          }
+        }
+      });
+    }
+    if (s6 && s6.rightPage) {
+      s6.rightPage.elements.forEach((el: any) => {
+        if (el.src && (el.src.toLowerCase().includes('font3') || el.src.toLowerCase().includes('bus'))) {
+          if (!el.isLocked) {
+            updateElement(s6.rightPage.id, el.id, { isLocked: true });
+          }
+        }
+      });
+    }
+
+    // --- Fix Spread 3 (Pages 7 & 8) and Spread 4 (Pages 9 & 10) ---
+    // Lock all template background graphics so they don't erroneously trigger the remove image icon
+    [3, 4].forEach(spreadIndex => {
+      const spread = spreads[spreadIndex];
+      if (!spread) return;
+      
+      [spread.leftPage, spread.rightPage].forEach(page => {
+        if (!page) return;
+        page.elements.forEach((el: any) => {
+          if (el.type === 'image' && el.src && el.src.includes('/assets/')) {
+            if (!el.isLocked) {
+              updateElement(page.id, el.id, { isLocked: true });
+            }
+          }
+        });
+      });
+    });
+
   }, [spreads, updateElement, addElement]);
 
   return null;

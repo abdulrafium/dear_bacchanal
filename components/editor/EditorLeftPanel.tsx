@@ -112,41 +112,13 @@ function LayoutsPanel() {
 }
 
 function ImagesPanel() {
-  const [images, setImages] = useState<{ id: string; url: string }[]>([]);
-  const [loading, setLoading] = useState(true);
+  const images = useEditorStore((s) => s.userImages);
+  const loading = useEditorStore((s) => s.isFetchingImages);
+  const removeUserImage = useEditorStore((s) => s.removeUserImage);
   const [imageToDelete, setImageToDelete] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const addElement = useEditorStore((s) => s.addElement);
   const updateElement = useEditorStore((s) => s.updateElement);
-
-  // Fetch images on mount
-  useEffect(() => {
-    const fetchImages = async () => {
-      try {
-        const dbRes = await fetch("/api/book-images");
-        let dbImages = [];
-        
-        if (dbRes.ok) {
-          const data = await dbRes.json();
-          const imageMap = data.images || {};
-          if (typeof imageMap === 'object' && !Array.isArray(imageMap)) {
-            dbImages = Object.entries(imageMap).map(([id, url]) => ({ id, url: url as string }));
-          } else {
-            dbImages = imageMap;
-          }
-        }
-        
-        const unique = Array.from(new Map(dbImages.map((item: any) => [item.url, item])).values()) as any;
-        
-        setImages(unique);
-      } catch (err) {
-        console.error("Failed to load images", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchImages();
-  }, []);
   
   const [targetSide, setTargetSide] = useState<"left" | "right">("right");
 
@@ -157,7 +129,7 @@ function ImagesPanel() {
         url: file.url,
       }));
 
-      // Save to database
+      // Save to database and update local UI
       for (const img of newImages) {
         try {
           await fetch("/api/book-images", {
@@ -168,9 +140,8 @@ function ImagesPanel() {
         } catch (err) {
           console.error("Failed to save image metadata", err);
         }
+        useEditorStore.getState().addUserImage(img);
       }
-
-      setImages((prev) => [...newImages, ...prev]);
       toast.success(`${res.length} images uploaded and saved!`);
     },
     onUploadError: (error: Error) => {
@@ -240,7 +211,7 @@ function ImagesPanel() {
         method: "DELETE",
       });
       if (res.ok) {
-        setImages((prev) => prev.filter((img) => img.id !== imageToDelete));
+        removeUserImage(imageToDelete);
         toast.success("Image deleted");
       }
     } catch (err) {
@@ -300,32 +271,34 @@ function ImagesPanel() {
           </div>
         ) : images.length > 0 ? (
           <div className="grid grid-cols-2 gap-3">
-            {images.map((image) => (
-              <div
-                key={image.id}
-                className="group relative aspect-square bg-gray-50 rounded-xl overflow-hidden cursor-pointer border border-gray-100 hover:border-[#2d2d2d] hover:shadow-lg transition-all"
-                onClick={() => handleImageClick(image.url)}
-              >
-                <NextImage
-                  src={image.url}
-                  alt="Uploaded"
-                  fill
-                  sizes="(max-width: 768px) 100vw, 300px"
-                  style={{ objectFit: "cover" }}
-                  className="group-hover:scale-110 transition-transform duration-500"
-                />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <Plus className="w-6 h-6 text-white" />
-                </div>
-                <button
-                  onClick={(e) => handleDeleteImage(e, image.id)}
-                  className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 shadow-lg z-10"
-                  title="Delete image"
+            {images.map((image) => {
+              const fullUrl = image.url.startsWith("http") ? image.url : `https://utfs.io/f/${image.url}`;
+              return (
+                <div
+                  key={image.id}
+                  className="group relative aspect-square bg-gray-50 rounded-xl overflow-hidden cursor-pointer border border-gray-100 hover:border-[#2d2d2d] hover:shadow-lg transition-all"
+                  onClick={() => handleImageClick(fullUrl)}
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ))}
+                  <img
+                    src={fullUrl}
+                    alt="Uploaded"
+                    loading="lazy"
+                    style={{ objectFit: "cover", width: "100%", height: "100%" }}
+                    className="absolute inset-0 group-hover:scale-110 transition-transform duration-500"
+                  />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <Plus className="w-6 h-6 text-white" />
+                  </div>
+                  <button
+                    onClick={(e) => handleDeleteImage(e, image.id)}
+                    className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 shadow-lg z-10"
+                    title="Delete image"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-20 text-center opacity-40">
@@ -841,11 +814,7 @@ function StickersPanel() {
 
   // Premium Carnival Stickers (14 Curated High-End Stickers)
   const premiumStickers = [
-    { id: "p1", url: "https://images.unsplash.com/photo-1543160732-23720935794b?q=80&w=300&auto=format&fit=crop", name: "Carnival Mask Gold" },
-    { id: "p2", url: "https://images.unsplash.com/photo-1521404094228-56960b73c914?q=80&w=300&auto=format&fit=crop", name: "Beads & Jewelry" },
-    { id: "p3", url: "https://images.unsplash.com/photo-1517457373958-b7bdd058a548?q=80&w=300&auto=format&fit=crop", name: "Feathered Headpiece" },
     { id: "p4", url: "https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?q=80&w=300&auto=format&fit=crop", name: "Samba Costume" },
-    { id: "p5", url: "https://images.unsplash.com/photo-1555436169-20d9321f92f6?q=80&w=300&auto=format&fit=crop", name: "Royal Crown" },
     { id: "p6", url: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=300&auto=format&fit=crop", name: "Festival Dancers" },
     { id: "p7", url: "https://images.unsplash.com/photo-1504196606672-aef5c9cefc92?q=80&w=300&auto=format&fit=crop", name: "Explosive Confetti" },
     { id: "p8", url: "https://images.unsplash.com/photo-1549417229-aa67d3263c09?q=80&w=300&auto=format&fit=crop", name: "Mystic Mask Red" },

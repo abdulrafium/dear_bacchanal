@@ -5,6 +5,41 @@ import { getServerAuth } from "@/lib/server-auth";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+// --- In-memory template cache (5 minutes) ---
+// The global template is the same for every user and rarely changes.
+// Caching it eliminates one MongoDB round-trip on every single editor load.
+const templateCache = new Map<string, { data: any; expires: number }>();
+const TEMPLATE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function getCachedTemplate(name: string | null, db: any): Promise<any> {
+  const key = name || "__default__";
+  const cached = templateCache.get(key);
+  if (cached && cached.expires > Date.now()) {
+    return cached.data;
+  }
+  // Cache miss — fetch from MongoDB
+  const templatesCollection = db.collection("global_templates");
+  let template = null;
+  if (name) {
+    template = await templatesCollection.findOne({ templateName: name });
+  }
+  if (!template) {
+    template = await templatesCollection.findOne({
+      templateName: { $in: ["Bacchanal 2026", "Bacchanal", "Dear Bacchanal"] }
+    });
+  }
+  if (template) {
+    templateCache.set(key, { data: template, expires: Date.now() + TEMPLATE_CACHE_TTL_MS });
+  }
+  return template;
+}
+
+/** Call this when admin saves a template so the cache is immediately invalidated */
+export function invalidateTemplateCache(name?: string) {
+  if (name) templateCache.delete(name);
+  templateCache.delete("__default__");
+}
+
 export async function GET(req: NextRequest) {
   try {
     const user = await getServerAuth();
@@ -41,24 +76,11 @@ export async function GET(req: NextRequest) {
         }, { status: 200 });
       }
 
-      const templatesCollection = db.collection("global_templates");
-      let template = null;
-
-      if (templateName) {
-        template = await templatesCollection.findOne({ templateName });
-      }
-
-      if (!template) {
-        // Fallback to Bacchanal if no specific template requested or found
-        template = await templatesCollection.findOne({
-          templateName: { $in: ["Bacchanal 2026", "Bacchanal", "Dear Bacchanal"] }
-        });
-      }
-
+      // Admin: use cache for template fetch
+      const template = await getCachedTemplate(templateName, db);
       return NextResponse.json({ template }, { status: 200 });
     } else {
       const userBooksCollection = db.collection("user_books");
-      const templatesCollection = db.collection("global_templates");
 
       if (isNew) {
         const { createBlankTemplate } = await import('@/lib/book-templates');
@@ -96,13 +118,15 @@ export async function GET(req: NextRequest) {
         query = null;
       }
 
+      console.log(`[API Load Debug] bookId: ${bookId}, fresh: ${fresh}, query:`, query ? JSON.stringify(query) : 'null');
+
       let book = query ? await userBooksCollection.findOne(query) : null;
+      console.log(`[API Load Debug] found book:`, book ? book._id.toString() : 'null');
 
       // MASTER SMART-SYNC LOGIC: Deeply merge Admin design updates while protecting User personal content
       const templateToSync = book ? book.activeTemplateName : templateName;
-      const dbTemplate = await templatesCollection.findOne({
-        templateName: templateToSync || { $in: ["Bacchanal 2026", "Bacchanal", "Dear Bacchanal"] }
-      });
+      // Use cache — avoids a full MongoDB round-trip for the global template on every editor load
+      const dbTemplate = await getCachedTemplate(templateToSync, db);
 
       if (dbTemplate && dbTemplate.spreads) {
         // Ensure all checkboxes in the global template are unchecked by default
@@ -163,16 +187,17 @@ export async function GET(req: NextRequest) {
             book.templateDescription = dbTemplate.description;
           }
         } else {
-          // New user or fresh template: load template directly and generate a new ID
-          // to ensure it saves as a new book rather than overwriting an existing one
-          const { ObjectId } = require('mongodb');
+          // New user or fresh template: load template directly without an ID
+          // The save API will handle inserting this as a new document when the user makes their first edit.
           book = {
-            _id: new ObjectId().toString() as any,
             userId,
+            email: user?.email,
             spreads: dbTemplate.spreads,
             activeTemplateName: dbTemplate.templateName,
             currentSpreadIndex: 0,
-            templateDescription: dbTemplate.description
+            templateDescription: dbTemplate.description,
+            templateCountry: dbTemplate.country,
+            templateYear: dbTemplate.year
           } as any;
         }
       } else if (!book) {
@@ -180,7 +205,6 @@ export async function GET(req: NextRequest) {
         const { getAvailableTemplates } = await import('@/lib/book-templates');
         const defaultTemplate = getAvailableTemplates().find(t => t.id === "bacchanal-2026");
         book = {
-          _id: "preview-id" as any,
           userId,
           spreads: defaultTemplate?.spreads || [],
           activeTemplateName: defaultTemplate?.name || "Bacchanal 2026",
