@@ -70,28 +70,24 @@ const PageElement = memo(function PageElement({
 
   const isDropdown = el.type === "text" && el.options && el.options.length > 0;
   const defaultPlaceholder = isDropdown ? "Select..." : "Enter Text";
-  const isPlaceholderText = el.type === "text" && (!el.text || el.text === "Enter Text" || el.text === "Your Name" || el.text === "( Your Name )" || el.text === "Insert Your Name" || el.text === "Select...");
-  // ALL text elements are fillable — user must be able to re-edit text even after typing
-  // (previously only placeholder text was fillable, making filled-in text permanently non-interactive)
-  const isFillableElement = el.type === "text" || el.type === "image" || el.type === "photo-card" || el.type === "checkbox" || el.type === "calendar" || el.type === "sticker" || el.type === "shape";
+  // A text is a placeholder if it matches default placeholder text, OR if the customer has already edited it
+  const isPlaceholderText = el.type === "text" && (!el.text || el.text === "Enter Text" || el.text === "Your Name" || el.text === "( Your Name )" || el.text === "Insert Your Name" || el.text === "Select..." || (el as any).customerEdited);
 
-  // Prevent customers from editing specific static template headers
-  const isStaticVibeText = el.type === "text" && (
-    el.text?.toUpperCase() === "VIBE");
-
-  const effectiveIsLocked = el.isLocked || isStaticVibeText;
-
-  // Elements that span the entire page are considered background overlays.
-  // If they are locked, they should NOT be selectable, otherwise they intercept all clicks on the page.
-  const isBackgroundSized = el.width >= PAGE_WIDTH - 10 && el.height >= PAGE_HEIGHT - 10;
-
-  // All fillable elements (photo cards, shapes, text, small stickers) must remain selectable 
-  // so customers can upload images or edit text, even if the element or page is locked.
-  // We explicitly exclude full-page background overlays.
-  const isSelectableWhenLocked = isFillableElement && !isBackgroundSized && !isStaticVibeText;
-
-  const canInteract = !isPreviewMode && (!pageIsLocked && !effectiveIsLocked || isSelectableWhenLocked || isAdmin) && (!isTemplatePage || isFillableElement || isAdmin);
-  const canMove = !isPreviewMode && (!pageIsLocked && !effectiveIsLocked || isSelectableWhenLocked || isAdmin);
+  // EXACT USER REQUEST: "we just open frames text fields and check box and calender only thats it"
+  const isCustomerInteractable = el.type === "photo-card" || el.type === "checkbox" || el.type === "calendar" || isPlaceholderText;
+  
+  const canInteract = !isPreviewMode && (
+    isAdmin || 
+    isCustomerInteractable
+  );
+  
+  // Customers can ONLY move/resize frames (photo-cards). They can NEVER move checkboxes, calendars, text fields, or static images.
+  const isCustomerMovable = el.type === "photo-card";
+  const canMove = !isPreviewMode && (
+    isAdmin ||
+    isCustomerMovable
+  );
+  
   const isCircle = el.shapeType === "ellipse";
 
   const previewElement = useEditorStore((s) => s.previewElement);
@@ -407,11 +403,16 @@ const PageElement = memo(function PageElement({
                     const node = e.target as HTMLTextAreaElement;
                     const finalValue = editValue.trim() === "" ? "" : editValue;
                     setIsEditing(false);
-                    updateElement(pageId, el.id, {
+                    
+                    const updatePayload: any = {
                       text: finalValue,
                       width: parseInt(node.style.width) || el.width,
                       height: parseInt(node.style.height) || el.height,
-                    });
+                    };
+                    
+                    if (!isAdmin) updatePayload.customerEdited = true;
+                    
+                    updateElement(pageId, el.id, updatePayload);
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Escape") {
@@ -1030,7 +1031,7 @@ function CalendarElement({
   const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
 
   return (
-    <Group {...props} x={el.x} y={el.y} width={el.width} height={el.height} rotation={el.rotation} draggable={canInteract}>
+    <Group {...props} x={el.x} y={el.y} width={el.width} height={el.height} rotation={el.rotation}>
       <Rect width={el.width} height={el.height} fill="transparent" />
       {!settings.hideTitle && (
         <Text
