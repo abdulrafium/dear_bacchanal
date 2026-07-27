@@ -122,6 +122,22 @@ function ImagesPanel() {
   
   const [targetSide, setTargetSide] = useState<"left" | "right">("right");
 
+  const selectedElementId = useEditorStore((s) => s.selectedElementId);
+  const currentSpreadIndex = useEditorStore((s) => s.currentSpreadIndex);
+  const currentSpread = useEditorStore((s) => s.spreads[s.currentSpreadIndex]);
+
+  // Auto-switch Placement Target side based on selected element/frame
+  useEffect(() => {
+    if (!selectedElementId || !currentSpread) return;
+    const isOnLeft = currentSpread.leftPage?.elements?.some((e) => e.id === selectedElementId);
+    const isOnRight = currentSpread.rightPage?.elements?.some((e) => e.id === selectedElementId);
+    if (isOnLeft) {
+      setTargetSide("left");
+    } else if (isOnRight) {
+      setTargetSide("right");
+    }
+  }, [selectedElementId, currentSpread]);
+
   const { startUpload, isUploading } = useUploadThing("bookImageUploader", {
     onClientUploadComplete: async (res) => {
       const newImages = res.map((file) => ({
@@ -158,11 +174,8 @@ function ImagesPanel() {
 
   const handleImageClick = (url: string) => {
     const { spreads, currentSpreadIndex, selectedElementId, isAdmin } = useEditorStore.getState();
-    const currentSpread = spreads[currentSpreadIndex];
-    const targetPage = targetSide === "left" ? currentSpread?.leftPage : currentSpread?.rightPage;
-    const isLocked = targetPage?.isLocked || isFullyLockedSpread(currentSpread, isAdmin, currentSpreadIndex);
 
-    // 1. If an image or photo frame is selected, replace its src directly (even on locked pages)
+    // 1. If an image or photo frame is explicitly selected, replace its src
     if (selectedElementId) {
       let foundPageId = null;
       let foundElement = null;
@@ -176,25 +189,12 @@ function ImagesPanel() {
       if (foundElement && (foundElement.type === "photo-card" || foundElement.type === "image")) {
         updateElement(foundPageId!, selectedElementId, { src: url });
         toast.success("Image placed in frame");
-        return; // Successfully placed in frame, stop here.
+        return;
       }
     }
 
-    // 2. Otherwise, add as a new floating image (requires unlocked page)
-    if (targetPage && !isLocked) {
-      addElement(targetPage.id, {
-        type: "image",
-        x: 50 + Math.random() * 50,
-        y: 50 + Math.random() * 50,
-        width: 200,
-        height: 150,
-        rotation: 0,
-        src: url,
-      });
-      toast.success("Image placed on " + targetSide + " page");
-    } else if (isLocked) {
-      toast.error("That page is locked for the final template. Select a photo frame first to fill it.");
-    }
+    // 2. If no photo frame is selected, show toast asking user to select a frame first
+    toast.info("Please select a photo frame first to insert your image.");
   };
 
   const handleDeleteImage = (e: React.MouseEvent, imageId: string) => {
@@ -807,6 +807,22 @@ function StickersPanel() {
   
   // Choose which side of the spread to add graphics to
   const [targetSide, setTargetSide] = useState<"left" | "right">("right");
+
+  const selectedElementId = useEditorStore((s) => s.selectedElementId);
+  const currentSpreadIndex = useEditorStore((s) => s.currentSpreadIndex);
+  const currentSpread = useEditorStore((s) => s.spreads[s.currentSpreadIndex]);
+
+  // Auto-switch Placement Target side based on selected element/frame
+  useEffect(() => {
+    if (!selectedElementId || !currentSpread) return;
+    const isOnLeft = currentSpread.leftPage?.elements?.some((e) => e.id === selectedElementId);
+    const isOnRight = currentSpread.rightPage?.elements?.some((e) => e.id === selectedElementId);
+    if (isOnLeft) {
+      setTargetSide("left");
+    } else if (isOnRight) {
+      setTargetSide("right");
+    }
+  }, [selectedElementId, currentSpread]);
 
   const [stickers, setStickers] = useState<{ _id: string; url: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);

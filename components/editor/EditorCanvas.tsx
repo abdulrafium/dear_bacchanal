@@ -70,19 +70,39 @@ const PageElement = memo(function PageElement({
 
   const isDropdown = el.type === "text" && el.options && el.options.length > 0;
   const defaultPlaceholder = isDropdown ? "Select..." : "Enter Text";
-  // A text is a placeholder if it matches default placeholder text, OR if the customer has already edited it
-  const isPlaceholderText = el.type === "text" && (!el.text || el.text === "Enter Text" || el.text === "Your Name" || el.text === "( Your Name )" || el.text === "Insert Your Name" || el.text === "Select..." || (el as any).customerEdited);
 
-  // EXACT USER REQUEST: "we just open frames text fields and check box and calender only thats it"
-  const isCustomerInteractable = el.type === "photo-card" || el.type === "checkbox" || el.type === "calendar" || isPlaceholderText;
+  // Name field check (e.g. "Your Name", "(Your name)", "( Your Name )", "Insert Your Name")
+  const isNameField = el.type === "text" && (
+    (el as any).isNameField ||
+    el.text?.toLowerCase().includes("your name") ||
+    el.text?.toLowerCase().includes("insert name") ||
+    el.text?.toLowerCase().includes("(your name)") ||
+    el.text?.toLowerCase().includes("( your name )")
+  );
+
+  // A text is a placeholder if it matches default placeholder text, OR if the customer has already edited it
+  const isPlaceholderText = el.type === "text" && (
+    !el.text || 
+    el.text === "Enter Text" || 
+    isNameField || 
+    el.text === "Select..." || 
+    (el as any).customerEdited
+  );
+
+  // An "Enter Text" field is a placeholder text field that is NOT the Page 1/2 Name field
+  const isEnterTextField = isPlaceholderText && !isNameField;
+
+  // Customers can interact with photo-cards, checkboxes, calendars, dropdowns, and text placeholders (including Name field)
+  const isCustomerInteractable = el.type === "photo-card" || el.type === "checkbox" || el.type === "calendar" || isDropdown || isPlaceholderText;
   
   const canInteract = !isPreviewMode && (
     isAdmin || 
     isCustomerInteractable
   );
   
-  // Customers can ONLY move/resize frames (photo-cards). They can NEVER move checkboxes, calendars, text fields, or static images.
-  const isCustomerMovable = el.type === "photo-card";
+  // Customers can move/resize frames (photo-cards) AND "Enter Text" fields.
+  // They CANNOT move or resize checkboxes, calendars, static headers, or the Page 1/2 Name field.
+  const isCustomerMovable = el.type === "photo-card" || isEnterTextField;
   const canMove = !isPreviewMode && (
     isAdmin ||
     isCustomerMovable
@@ -325,42 +345,44 @@ const PageElement = memo(function PageElement({
                     setEditValue(finalValue);
                     setIsEditing(false);
 
-                    let newFontSize = 24; // Start from a good base size
-                    if (el.fontSize && el.fontSize > 24) newFontSize = el.fontSize;
+                    let newFontSize = 18;
+                    if (finalValue) {
+                      newFontSize = 24; // Start from a good base size
+                      if (el.fontSize && el.fontSize > 24) newFontSize = el.fontSize;
 
-                    const span = document.createElement("span");
-                    Object.assign(span.style, {
-                      position: "fixed",
-                      visibility: "hidden",
-                      whiteSpace: "nowrap",
-                      fontFamily: el.fontFamily ? `'${el.fontFamily}', sans-serif` : "Arial",
-                      fontWeight: el.fontStyle?.includes("bold") ? "bold" : "normal",
-                      fontSize: `${newFontSize}px`
-                    });
-                    span.textContent = finalValue;
-                    document.body.appendChild(span);
+                      const span = document.createElement("span");
+                      Object.assign(span.style, {
+                        position: "fixed",
+                        visibility: "hidden",
+                        whiteSpace: "nowrap",
+                        fontFamily: el.fontFamily ? `'${el.fontFamily}', sans-serif` : "Arial",
+                        fontWeight: el.fontStyle?.includes("bold") ? "bold" : "normal",
+                        fontSize: `${newFontSize}px`
+                      });
+                      span.textContent = finalValue;
+                      document.body.appendChild(span);
 
-                    const targetWidth = el.width || 250;
-                    while (newFontSize > 12) {
-                      span.style.fontSize = `${newFontSize}px`;
-                      if (span.offsetWidth <= targetWidth) {
-                        break;
+                      const targetWidth = el.width || 250;
+                      while (newFontSize > 12) {
+                        span.style.fontSize = `${newFontSize}px`;
+                        if (span.offsetWidth <= targetWidth) {
+                          break;
+                        }
+                        newFontSize -= 1;
                       }
-                      newFontSize -= 1;
+                      document.body.removeChild(span);
                     }
-                    document.body.removeChild(span);
 
-                    updateElement(pageId, el.id, {
+                    const updatePayload: any = {
                       text: finalValue,
                       fontSize: newFontSize,
-                    });
+                    };
+                    if (!isAdmin) updatePayload.customerEdited = true;
+
+                    updateElement(pageId, el.id, updatePayload);
                   }}
-                  onBlur={(e) => {
-                    const finalValue = editValue.trim() === "" ? "" : editValue;
+                  onBlur={() => {
                     setIsEditing(false);
-                    updateElement(pageId, el.id, {
-                      text: finalValue,
-                    });
                   }}
                   ref={(node) => {
                     if (node) {
@@ -383,8 +405,8 @@ const PageElement = memo(function PageElement({
                     transition: "all 0.2s",
                   }}
                 >
-                  <option value="" disabled={!editValue}>
-                    {editValue ? "✖ Clear Selection" : "Select an option..."}
+                  <option value="">
+                    {editValue ? "✖ Clear Selection (Reset to Select...)" : "Select an option..."}
                   </option>
                   {el.options.map((opt, i) => (
                     <option key={i} value={opt}>{opt}</option>
@@ -411,6 +433,7 @@ const PageElement = memo(function PageElement({
                     };
                     
                     if (!isAdmin) updatePayload.customerEdited = true;
+                    if (isNameField) updatePayload.isNameField = true;
                     
                     updateElement(pageId, el.id, updatePayload);
                   }}
@@ -607,12 +630,13 @@ const PhotoCardElement = forwardRef<any, any>(({ el, pageId, canInteract, isSele
   useEffect(() => {
     if (actualSrc) {
       const cached = getCachedImage(actualSrc);
-      if (cached) {
+      if (cached && cached.complete && cached.naturalWidth > 0) {
         setImage(cached);
         setIsLoading(false);
         return;
       }
       setIsLoading(true);
+      setImage(null);
       const img = new window.Image();
       if (actualSrc.startsWith("http")) {
         img.crossOrigin = "anonymous";
@@ -640,9 +664,14 @@ const PhotoCardElement = forwardRef<any, any>(({ el, pageId, canInteract, isSele
     if (!isPreview) {
       e.cancelBubble = true;
       if (state.selectedElementId === el.id) {
-        state.selectElement(null);
+        if (isPanningMode) {
+          setIsPanningMode(false);
+        } else {
+          state.selectElement(null);
+        }
       } else {
         state.selectElement(el.id);
+        setIsPanningMode(false);
         if (state.activeSidebarPanel !== "images") {
           state.setSidebarPanel("images");
         }
@@ -658,7 +687,7 @@ const PhotoCardElement = forwardRef<any, any>(({ el, pageId, canInteract, isSele
   const glowColor = "#ffffff";
 
   return (
-    <Group {...props} ref={ref}>
+    <Group {...props} draggable={props.draggable && !isPanningMode} ref={ref}>
       {/* Base Card Background (Supports Rectangle and Circle) */}
       {isCircle ? (
         <Circle
@@ -767,16 +796,14 @@ const PhotoCardElement = forwardRef<any, any>(({ el, pageId, canInteract, isSele
               onDragMove={(e) => {
                 if (!canInteract || !isPanningMode) return;
                 const node = e.target;
-                const limitX = Math.max(0, drawWidth - el.width);
-                const limitY = Math.max(0, drawHeight - el.height);
 
-                let newX = node.x();
-                let newY = node.y();
+                const minX = Math.min(0, el.width - drawWidth);
+                const maxX = 0;
+                const minY = Math.min(0, el.height - drawHeight);
+                const maxY = 0;
 
-                if (newX < -limitX) newX = -limitX;
-                if (newX > 0) newX = 0;
-                if (newY < -limitY) newY = -limitY;
-                if (newY > 0) newY = 0;
+                let newX = Math.min(maxX, Math.max(minX, node.x()));
+                let newY = Math.min(maxY, Math.max(minY, node.y()));
 
                 node.x(newX);
                 node.y(newY);
