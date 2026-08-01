@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     const db = await getDatabase();
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "20");
+    const limit = parseInt(searchParams.get("limit") || "10");
     const search = searchParams.get("search") || "";
 
     const filter: any = {};
@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
         isPurchased: u.isPurchased || false,
         isDisabled: u.isDisabled || false,
         country: u.country,
+        cardInfo: u.cardInfo || null,
         createdAt: u.createdAt,
         updatedAt: u.updatedAt,
       })),
@@ -56,7 +57,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// PATCH - Update user (reset password, disable, etc.)
+// PATCH - Update user (reset password, disable, updateCardInfo, etc.)
 export async function PATCH(req: NextRequest) {
   const authError = await adminAuthMiddleware();
   if (authError) return authError;
@@ -73,6 +74,29 @@ export async function PATCH(req: NextRequest) {
     const objectId = new ObjectId(userId);
 
     switch (action) {
+      case "updateCardInfo": {
+        const user = await usersCollection.findOne({ _id: objectId });
+        if (!user) {
+          return NextResponse.json({ error: "User not found" }, { status: 404 });
+        }
+
+        const cardInfo = value;
+        await usersCollection.updateOne(
+          { _id: objectId },
+          { 
+            $set: { 
+              cardInfo: {
+                ...cardInfo,
+                updatedAt: new Date()
+              },
+              updatedAt: new Date() 
+            } 
+          }
+        );
+
+        return NextResponse.json({ message: "Card information updated successfully", cardInfo });
+      }
+
       case "resetPassword": {
         const user = await usersCollection.findOne({ _id: objectId });
         if (!user) {

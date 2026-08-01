@@ -56,6 +56,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="overflow-x-hidden" suppressHydrationWarning>
       <head>
+        <link
+          rel="icon"
+          type="image/svg+xml"
+          href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><g transform='rotate(-6 50 50)'><rect x='10' y='10' width='80' height='80' rx='22' fill='%23be2826' stroke='white' stroke-width='7'/><text x='50%25' y='65%25' text-anchor='middle' font-family='system-ui, sans-serif' font-weight='900' font-size='44' fill='white'>DB</text></g></svg>"
+        />
         {/* Preconnect so browser opens the connection before the editor canvas even loads */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

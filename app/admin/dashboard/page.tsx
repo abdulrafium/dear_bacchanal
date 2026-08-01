@@ -64,6 +64,11 @@ export default function AdminDashboard() {
   });
   const [recentUsers, setRecentUsers] = useState<RecentUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -175,48 +180,57 @@ export default function AdminDashboard() {
                     Revenue Analytics
                 </h3>
             </div>
-            <div className="h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={financials.salesChart}>
-                        <defs>
-                            <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                                <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                            </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-                        <XAxis 
-                            dataKey="date" 
-                            stroke="#ffffff30" 
-                            fontSize={10} 
-                            tickLine={false} 
-                            axisLine={false}
-                            tickFormatter={(str) => {
-                                const date = new Date(str);
-                                return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                            }}
-                        />
-                        <YAxis 
-                            stroke="#ffffff30" 
-                            fontSize={10} 
-                            tickLine={false} 
-                            axisLine={false}
-                            tickFormatter={(value) => `$${value}`}
-                        />
-                        <Tooltip 
-                            contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #ffffff10', borderRadius: '12px' }}
-                            itemStyle={{ color: '#10b981', fontWeight: 'bold' }}
-                        />
-                        <Area 
-                            type="monotone" 
-                            dataKey="revenue" 
-                            stroke="#10b981" 
-                            strokeWidth={3}
-                            fillOpacity={1} 
-                            fill="url(#colorRev)" 
-                        />
-                    </AreaChart>
-                </ResponsiveContainer>
+            <div className="h-[300px] min-h-[300px] w-full flex items-center justify-center">
+                {mounted ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={financials.salesChart}>
+                          <defs>
+                              <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                                  <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                              </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
+                          <XAxis 
+                              dataKey="date" 
+                              stroke="#ffffff30" 
+                              fontSize={10} 
+                              tickLine={false} 
+                              axisLine={false}
+                              tickFormatter={(str) => {
+                                  if (!str) return '';
+                                  const date = new Date(str);
+                                  return isNaN(date.getTime()) ? str : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                              }}
+                          />
+                          <YAxis 
+                              stroke="#ffffff30" 
+                              fontSize={10} 
+                              tickLine={false} 
+                              axisLine={false}
+                              tickFormatter={(value) => `$${value}`}
+                          />
+                          <Tooltip 
+                              contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #ffffff10', borderRadius: '12px' }}
+                              itemStyle={{ color: '#10b981', fontWeight: 'bold' }}
+                              formatter={(value: any) => [`$${value}`, 'Revenue']}
+                          />
+                          <Area 
+                              type="monotone" 
+                              dataKey="revenue" 
+                              stroke="#10b981" 
+                              strokeWidth={3}
+                              fillOpacity={1} 
+                              fill="url(#colorRev)" 
+                          />
+                      </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center gap-2 text-white/30 text-xs font-mono">
+                    <Loader2 className="w-4 h-4 animate-spin text-green-400" />
+                    <span>Loading Revenue Analytics...</span>
+                  </div>
+                )}
             </div>
         </div>
 

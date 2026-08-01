@@ -24,7 +24,11 @@ import {
   RefreshCw,
   ThumbsUp,
   Send,
-  Trash2
+  Trash2,
+  Copy,
+  ExternalLink,
+  BookOpen,
+  Check
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -48,6 +52,12 @@ interface Order {
   createdAt: string;
   approvedAt?: string | null;
   siteFlowOrderId?: string | null;
+  coverPdfUrl?: string | null;
+  textPdfUrl?: string | null;
+  pdfUrl?: string | null;
+  savedCoverPdfUrl?: string | null;
+  savedTextPdfUrl?: string | null;
+  savedPdfUrl?: string | null;
   refundRequest?: {
     reason: string;
     requestedAt: string;
@@ -68,6 +78,37 @@ export default function AdminOrdersPage() {
   const [loadingInvoice, setLoadingInvoice] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const handleCopyUrl = (url: string, label: string, fieldKey: string) => {
+    if (!url) return;
+    navigator.clipboard.writeText(url);
+    setCopiedField(fieldKey);
+    toast.success(`${label} copied to clipboard!`);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const getCoverUrl = (order: Order) => {
+    if (order.coverPdfUrl) return order.coverPdfUrl;
+    if (order.savedCoverPdfUrl) return order.savedCoverPdfUrl;
+    return null;
+  };
+
+  const getTextUrl = (order: Order) => {
+    if (order.textPdfUrl) return order.textPdfUrl;
+    if (order.savedTextPdfUrl) return order.savedTextPdfUrl;
+    return null;
+  };
+
+  const getSoftUrl = (order: Order) => {
+    if (order.pdfUrl) return order.pdfUrl;
+    if (order.savedPdfUrl) return order.savedPdfUrl;
+    if (order.textPdfUrl) return order.textPdfUrl;
+    if (order.savedTextPdfUrl) return order.savedTextPdfUrl;
+    if (order.coverPdfUrl) return order.coverPdfUrl;
+    if (order.savedCoverPdfUrl) return order.savedCoverPdfUrl;
+    return null;
+  };
   const [showFilters, setShowFilters] = useState(false);
 
   const invoiceRef = useRef<HTMLDivElement>(null);
@@ -87,7 +128,7 @@ export default function AdminOrdersPage() {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(page), search });
+      const params = new URLSearchParams({ page: String(page), limit: "7", search });
       if (typeFilter) params.set('type', typeFilter);
       if (statusFilter) params.set('status', statusFilter);
       const res = await fetch(`/api/admin/orders?${params.toString()}`);
@@ -445,9 +486,9 @@ export default function AdminOrdersPage() {
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
-        {/* Table Area */}
-        <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[calc(100vh-220px)] min-h-[400px]">
-          <div className="overflow-x-auto overflow-y-auto custom-scrollbar flex-1">
+        {/* Table Area (Equal Initial Height) */}
+        <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl overflow-hidden shadow-2xl flex flex-col h-[calc(100vh-140px)] min-h-[580px]">
+          <div className="overflow-x-auto overflow-y-auto flex-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-white/20 transition-colors">
             <table className="w-full text-left border-collapse">
               <thead className="sticky top-0 z-10 bg-[#0f0f0f]">
                 <tr className="bg-white/[0.02] border-b border-white/5">
@@ -474,61 +515,71 @@ export default function AdminOrdersPage() {
                     </td>
                   </tr>
                 ) : (
-                  orders.map((order) => (
-                    <tr 
-                        key={order.id} 
-                        className={`hover:bg-white/[0.02] transition-colors cursor-pointer ${selectedOrder?.id === order.id ? 'bg-red-500/5' : ''}`}
-                        onClick={() => setSelectedOrder(order)}
-                    >
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col">
-                          <span className="text-white font-bold text-xs truncate max-w-[120px]">#{(order.orderId || '').slice(-8).toUpperCase()}</span>
-                          <span className="text-red-500 text-[10px] font-black uppercase tracking-widest">{order.templateName || "Custom Book"}</span>
-                          <span className="text-white/30 text-[10px]">{format(new Date(order.createdAt), 'MMM dd, yyyy · HH:mm')}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-col">
-                            <span className="text-white text-xs font-medium">{order.customerName || order.email?.split('@')[0] || 'Guest'}</span>
-                            <span className="text-white/30 text-[10px] truncate max-w-[150px]">{order.email}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider ${order.type === 'hard' ? 'text-orange-400 bg-orange-400/10' : 'text-blue-400 bg-blue-400/10'}`}>
-                            {order.type === 'hard' ? <Package className="w-3 h-3" /> : <FileText className="w-3 h-3" />}
-                            {order.type}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-white font-black text-sm">
-                            ${(Number(order.amount || order.totalAmount || 0) / 100).toFixed(2)}
-                            <span className="text-[10px] text-white/20 ml-1">{(order.currency || 'USD').toUpperCase()}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border ${getStatusColor(order.status)}`}>
-                            {order.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end gap-2">
-                          <button 
-                              onClick={(e) => { e.stopPropagation(); openInvoice(order); }}
-                              className="p-2 hover:bg-white/10 rounded-lg text-white/40 hover:text-white transition-all"
-                          >
-                              <FileText className="w-4 h-4" />
-                          </button>
-                          <button 
-                              onClick={(e) => { e.stopPropagation(); deleteOrder(order.id); }}
-                              disabled={deletingOrders.has(order.id)}
-                              className="p-2 hover:bg-red-500/20 rounded-lg text-white/40 hover:text-red-400 transition-all disabled:opacity-50"
-                          >
-                              {deletingOrders.has(order.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                  <>
+                    {orders.map((order) => (
+                      <tr 
+                          key={order.id} 
+                          className={`hover:bg-white/[0.02] transition-colors cursor-pointer ${selectedOrder?.id === order.id ? 'bg-red-500/5' : ''}`}
+                          onClick={() => setSelectedOrder(order)}
+                      >
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-white font-bold text-xs truncate max-w-[120px]">#{(order.orderId || '').slice(-8).toUpperCase()}</span>
+                            <span className="text-red-500 text-[10px] font-black uppercase tracking-widest">{order.templateName || "Custom Book"}</span>
+                            <span className="text-white/30 text-[10px]">{format(new Date(order.createdAt), 'MMM dd, yyyy · HH:mm')}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                              <span className="text-white text-xs font-medium">{order.customerName || order.email?.split('@')[0] || 'Guest'}</span>
+                              <span className="text-white/30 text-[10px] truncate max-w-[150px]">{order.email}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-wider ${order.type === 'hard' ? 'text-orange-400 bg-orange-400/10' : 'text-blue-400 bg-blue-400/10'}`}>
+                              {order.type === 'hard' ? <Package className="w-3 h-3" /> : <FileText className="w-3 h-3" />}
+                              {order.type}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="text-white font-black text-sm">
+                              ${(Number(order.amount || order.totalAmount || 0) / 100).toFixed(2)}
+                              <span className="text-[10px] text-white/20 ml-1">{(order.currency || 'USD').toUpperCase()}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border ${getStatusColor(order.status)}`}>
+                              {order.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex justify-end gap-2">
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); openInvoice(order); }}
+                                className="p-2 hover:bg-white/10 rounded-lg text-white/40 hover:text-white transition-all"
+                            >
+                                <FileText className="w-4 h-4" />
+                            </button>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); deleteOrder(order.id); }}
+                                disabled={deletingOrders.has(order.id)}
+                                className="p-2 hover:bg-red-500/20 rounded-lg text-white/40 hover:text-red-400 transition-all disabled:opacity-50"
+                            >
+                                {deletingOrders.has(order.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                    {/* Placeholder slots if fewer than 7 orders on this page */}
+                    {Array.from({ length: Math.max(0, 7 - orders.length) }).map((_, slotIdx) => (
+                      <tr key={`slot-${slotIdx}`} className="border-b border-white/[0.02] opacity-15 pointer-events-none select-none h-[64px]">
+                        <td colSpan={6} className="px-6 py-4 text-[10px] text-white/10 italic text-center font-mono">
+                          — Empty Slot {orders.length + slotIdx + 1} —
+                        </td>
+                      </tr>
+                    ))}
+                  </>
                 )}
               </tbody>
             </table>
@@ -555,15 +606,15 @@ export default function AdminOrdersPage() {
           </div>
         </div>
 
-        {/* Info Area */}
-        <div className="space-y-6">
+        {/* Right Info Area (Equal Initial Height & Independent Scrollbar) */}
+        <div className="h-[calc(100vh-140px)] min-h-[580px]">
             {!selectedOrder ? (
-                <div className="bg-[#0f0f0f] border border-dashed border-white/10 rounded-3xl p-12 text-center flex flex-col items-center justify-center h-full min-h-[400px]">
+                <div className="bg-[#0f0f0f] border border-dashed border-white/10 rounded-3xl p-12 text-center flex flex-col items-center justify-center h-full">
                     <Package className="w-12 h-12 text-white/5 mb-4" />
                     <p className="text-white/20 text-sm font-bold uppercase tracking-widest">Select an order to view details</p>
                 </div>
             ) : (
-                <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-8 space-y-8 animate-in fade-in zoom-in duration-500">
+                <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 space-y-6 overflow-y-auto h-full [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-white/20 transition-colors animate-in fade-in zoom-in duration-300">
                     <div className="flex items-center justify-between">
                         <h3 className="text-xl font-bold text-white uppercase tracking-tighter">Order Details</h3>
                         <button 
@@ -603,6 +654,158 @@ export default function AdminOrdersPage() {
                                     </div>
                                 )}
                             </div>
+                        </div>
+
+                        {/* Generated PDF Files Card - Below Order Identifiers */}
+                        <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest flex items-center gap-1.5">
+                                    <FileText className="w-3.5 h-3.5 text-red-400" />
+                                    Generated PDF Files
+                                </p>
+                                <span className={`text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                                    selectedOrder.type === 'hard' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                                }`}>
+                                    {selectedOrder.type === 'hard' ? 'Hard Copy (2 PDFs)' : 'Soft Copy (Digital)'}
+                                </span>
+                            </div>
+
+                            {selectedOrder.type === 'hard' ? (
+                                /* Hard Copy Order: 2 PDFs (Cover Page & Text/Inner Pages) */
+                                <div className="space-y-3 pt-1">
+                                    {/* Cover Page PDF */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <span className="text-[10px] font-semibold text-white/60 flex items-center gap-1.5">
+                                                <BookOpen className="w-3 h-3 text-amber-400" />
+                                                Cover Page PDF
+                                            </span>
+                                            {getCoverUrl(selectedOrder) && (
+                                                <button
+                                                    onClick={() => handleCopyUrl(getCoverUrl(selectedOrder)!, "Cover Page PDF URL", "cover")}
+                                                    className="text-[10px] text-white/40 hover:text-white flex items-center gap-1 bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded transition-all"
+                                                    title="Copy Cover Page PDF URL"
+                                                >
+                                                    {copiedField === 'cover' ? (
+                                                        <Check className="w-3 h-3 text-emerald-400" />
+                                                    ) : (
+                                                        <Copy className="w-3 h-3 text-teal" />
+                                                    )}
+                                                    <span>{copiedField === 'cover' ? 'Copied' : 'Copy URL'}</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                        {getCoverUrl(selectedOrder) ? (
+                                            <div className="flex items-center gap-2 bg-black/30 p-2.5 rounded-xl border border-white/5 group hover:border-white/20 transition-all">
+                                                <span className="text-white/80 text-xs font-mono truncate flex-1 select-all">
+                                                    {getCoverUrl(selectedOrder)}
+                                                </span>
+                                                <a
+                                                    href={getCoverUrl(selectedOrder)!}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-white/60 hover:text-white transition-all shrink-0"
+                                                    title="Open Cover Page PDF in new tab"
+                                                >
+                                                    <ExternalLink className="w-3.5 h-3.5" />
+                                                </a>
+                                            </div>
+                                        ) : (
+                                            <p className="text-white/20 text-xs italic bg-black/20 p-2.5 rounded-xl border border-white/5">
+                                                Cover PDF not generated yet
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Text / Inner Pages PDF */}
+                                    <div>
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <span className="text-[10px] font-semibold text-white/60 flex items-center gap-1.5">
+                                                <FileText className="w-3 h-3 text-teal" />
+                                                Text / Inner Pages PDF
+                                            </span>
+                                            {getTextUrl(selectedOrder) && (
+                                                <button
+                                                    onClick={() => handleCopyUrl(getTextUrl(selectedOrder)!, "Text Pages PDF URL", "text")}
+                                                    className="text-[10px] text-white/40 hover:text-white flex items-center gap-1 bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded transition-all"
+                                                    title="Copy Text Pages PDF URL"
+                                                >
+                                                    {copiedField === 'text' ? (
+                                                        <Check className="w-3 h-3 text-emerald-400" />
+                                                    ) : (
+                                                        <Copy className="w-3 h-3 text-teal" />
+                                                    )}
+                                                    <span>{copiedField === 'text' ? 'Copied' : 'Copy URL'}</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                        {getTextUrl(selectedOrder) ? (
+                                            <div className="flex items-center gap-2 bg-black/30 p-2.5 rounded-xl border border-white/5 group hover:border-white/20 transition-all">
+                                                <span className="text-white/80 text-xs font-mono truncate flex-1 select-all">
+                                                    {getTextUrl(selectedOrder)}
+                                                </span>
+                                                <a
+                                                    href={getTextUrl(selectedOrder)!}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-white/60 hover:text-white transition-all shrink-0"
+                                                    title="Open Text Pages PDF in new tab"
+                                                >
+                                                    <ExternalLink className="w-3.5 h-3.5" />
+                                                </a>
+                                            </div>
+                                        ) : (
+                                            <p className="text-white/20 text-xs italic bg-black/20 p-2.5 rounded-xl border border-white/5">
+                                                Text PDF not generated yet
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : (
+                                /* Soft Copy Order: 1 Digital Book PDF URL */
+                                <div className="space-y-2 pt-1">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <span className="text-[10px] font-semibold text-white/60 flex items-center gap-1.5">
+                                            <Download className="w-3 h-3 text-blue-400" />
+                                            Digital Book PDF URL
+                                        </span>
+                                        {getSoftUrl(selectedOrder) && (
+                                            <button
+                                                onClick={() => handleCopyUrl(getSoftUrl(selectedOrder)!, "Digital Book PDF URL", "soft")}
+                                                className="text-[10px] text-white/40 hover:text-white flex items-center gap-1 bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded transition-all"
+                                                title="Copy PDF URL"
+                                            >
+                                                {copiedField === 'soft' ? (
+                                                    <Check className="w-3 h-3 text-emerald-400" />
+                                                ) : (
+                                                    <Copy className="w-3 h-3 text-teal" />
+                                                )}
+                                                <span>{copiedField === 'soft' ? 'Copied' : 'Copy URL'}</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                    {getSoftUrl(selectedOrder) ? (
+                                        <div className="flex items-center gap-2 bg-black/30 p-2.5 rounded-xl border border-white/5 group hover:border-white/20 transition-all">
+                                            <span className="text-white/80 text-xs font-mono truncate flex-1 select-all">
+                                                {getSoftUrl(selectedOrder)}
+                                            </span>
+                                            <a
+                                                href={getSoftUrl(selectedOrder)!}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-white/60 hover:text-white transition-all shrink-0"
+                                                title="Open Digital Book PDF in new tab"
+                                            >
+                                                <ExternalLink className="w-3.5 h-3.5" />
+                                            </a>
+                                        </div>
+                                    ) : (
+                                        <p className="text-white/20 text-xs italic bg-black/20 p-2.5 rounded-xl border border-white/5">
+                                            No stored URL (Generated on-demand at checkout)
+                                        </p>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5">
@@ -791,142 +994,192 @@ export default function AdminOrdersPage() {
                             <Loader2 className="w-8 h-8 text-gray-300 animate-spin" />
                         </div>
                     ) : invoiceData ? (
-                        <div ref={invoiceRef} className="bg-white text-gray-900 font-sans border-8 border-gray-50 shadow-2xl max-w-[800px] mx-auto overflow-hidden">
-                            {/* Decorative Header */}
-                            <div className="bg-gradient-to-r from-[#9f2e2b] via-[#be2826] to-[#ecb52b] h-3 w-full" />
-                            
-                            <div className="p-8 sm:p-12">
-                                <div className="flex justify-between items-start mb-16">
-                                    <div className="flex items-center gap-6">
-                                        <div className="w-20 h-20 bg-[#be2826] rounded-3xl flex items-center justify-center text-white font-black text-3xl shadow-xl transform -rotate-3 border-4 border-white">DB</div>
-                                        <div>
-                                            <h1 className="text-3xl font-black tracking-tighter uppercase italic text-gray-900 leading-[0.8]">DEAR <br/>BACCHANAL</h1>
-                                            <p className="text-[10px] font-black uppercase tracking-[5px] text-[#be2826] mt-2">Premium Keepsakes</p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <h2 className="text-5xl font-black text-gray-100 uppercase tracking-tighter mb-2 leading-none">INVOICE</h2>
-                                        <p className="text-sm font-black text-gray-900">{invoiceData.invoiceNumber}</p>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-[#be2826] mt-1">{format(new Date(invoiceData.date), 'MMMM dd, yyyy')}</p>
-                                    </div>
-                                </div>
+                        <>
+                          <style jsx global>{`
+                            @media print {
+                              @page {
+                                size: A4 portrait;
+                                margin: 0 !important;
+                              }
+                              html, body {
+                                width: 210mm !important;
+                                height: 297mm !important;
+                                margin: 0 !important;
+                                padding: 0 !important;
+                                background: white !important;
+                                color: #000000 !important;
+                                -webkit-print-color-adjust: exact !important;
+                                print-color-adjust: exact !important;
+                              }
+                              .print-a4-fit {
+                                box-sizing: border-box !important;
+                                width: 210mm !important;
+                                max-width: 210mm !important;
+                                height: 297mm !important;
+                                max-height: 297mm !important;
+                                padding: 12mm 15mm !important;
+                                margin: 0 auto !important;
+                                border: none !important;
+                                box-shadow: none !important;
+                                border-radius: 0 !important;
+                                overflow: hidden !important;
+                                display: flex !important;
+                                flex-direction: column !important;
+                                justify-content: space-between !important;
+                              }
+                            }
+                          `}</style>
+                          <div ref={invoiceRef} className="print-a4-fit bg-white text-gray-900 font-sans border-4 border-gray-50 shadow-2xl max-w-[800px] mx-auto overflow-hidden">
+                              {/* Decorative Header */}
+                              <div className="bg-gradient-to-r from-[#9f2e2b] via-[#be2826] to-[#ecb52b] h-2.5 w-full shrink-0" />
+                              
+                              <div className="p-6 sm:p-8 print:p-0 flex-1 flex flex-col justify-between">
+                                  <div>
+                                      <div className="flex justify-between items-start mb-6 print:mb-5">
+                                          <div className="flex items-center gap-4">
+                                              <div className="w-16 h-16 bg-[#be2826] rounded-2xl flex items-center justify-center text-white font-black text-2xl shadow-xl transform -rotate-3 border-4 border-white shrink-0">DB</div>
+                                              <div>
+                                                  <h1 className="text-2xl font-black tracking-tighter uppercase italic text-gray-900 leading-[0.8]">DEAR <br/>BACCHANAL</h1>
+                                                  <p className="text-[9px] font-black uppercase tracking-[4px] text-[#be2826] mt-1.5">Premium Keepsakes</p>
+                                              </div>
+                                          </div>
+                                          <div className="text-right">
+                                              <h2 className="text-4xl font-black text-[#be2826] uppercase tracking-tighter mb-1 leading-none">INVOICE</h2>
+                                              <p className="text-xs font-black text-gray-900">{invoiceData.invoiceNumber}</p>
+                                              <p className="text-[9px] font-black uppercase tracking-widest text-gray-600 mt-0.5">{format(new Date(invoiceData.date), 'MMMM dd, yyyy')}</p>
+                                          </div>
+                                      </div>
 
-                                <div className="grid grid-cols-2 gap-12 mb-16 relative">
-                                    <div className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-100 hidden sm:block" />
-                                    <div>
-                                        <div className="text-[10px] font-black uppercase tracking-[4px] text-gray-300 mb-6 flex items-center gap-2">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-[#be2826]" />
-                                            Billed To
-                                        </div>
-                                        <div className="text-xl font-black text-gray-900">{invoiceData.customer.name}</div>
-                                        <p className="text-sm font-bold text-[#be2826] mt-1">{invoiceData.customer.email}</p>
-                                        <div className="text-xs text-gray-500 mt-4 leading-relaxed font-medium">
-                                            <p>{invoiceData.customer.address.line1}</p>
-                                            {invoiceData.customer.address.line2 && <p>{invoiceData.customer.address.line2}</p>}
-                                            <p>{invoiceData.customer.address.city}, {invoiceData.customer.address.state} {invoiceData.customer.address.postal_code}</p>
-                                            <p className="font-black text-gray-900 uppercase tracking-wider mt-1">{invoiceData.customer.address.country}</p>
-                                        </div>
-                                    </div>
-                                    <div className="sm:pl-12">
-                                        <div className="text-[10px] font-black uppercase tracking-[4px] text-gray-300 mb-6 flex items-center gap-2">
-                                            <div className="w-1.5 h-1.5 rounded-full bg-[#ecb52b]" />
-                                            From
-                                        </div>
-                                        <div className="text-xl font-black text-gray-900">Dear Bacchanal Ltd.</div>
-                                        <div className="text-sm font-bold text-gray-500 mt-1">billing@dearbacchanal.com</div>
-                                        <div className="text-xs text-gray-400 mt-4 leading-relaxed font-medium">
-                                            <p>123 Carnival Way</p>
-                                            <p>Port of Spain, Trinidad & Tobago</p>
-                                            <p className="mt-2 text-[10px] font-black text-[#be2826] uppercase">Tax ID: DB-TR-2026-X</p>
-                                        </div>
-                                    </div>
-                                </div>
+                                      <div className="grid grid-cols-2 gap-8 mb-6 print:mb-5 relative">
+                                          <div className="absolute top-0 bottom-0 left-1/2 w-px bg-gray-200 hidden sm:block" />
+                                          <div>
+                                              <div className="text-[9px] font-black uppercase tracking-[3px] text-gray-700 mb-3 flex items-center gap-2">
+                                                  <div className="w-1.5 h-1.5 rounded-full bg-[#be2826]" />
+                                                  Billed To
+                                              </div>
+                                              <div className="text-base font-black text-gray-900">{invoiceData.customer.name}</div>
+                                              <p className="text-xs font-bold text-[#be2826] mt-0.5">{invoiceData.customer.email}</p>
+                                              <div className="text-xs text-gray-600 mt-2 leading-relaxed font-medium">
+                                                  <p>{invoiceData.customer.address.line1}</p>
+                                                  {invoiceData.customer.address.line2 && <p>{invoiceData.customer.address.line2}</p>}
+                                                  <p>{invoiceData.customer.address.city}, {invoiceData.customer.address.state} {invoiceData.customer.address.postal_code}</p>
+                                                  <p className="font-black text-gray-900 uppercase tracking-wider mt-0.5">{invoiceData.customer.address.country}</p>
+                                              </div>
+                                          </div>
+                                          <div className="sm:pl-8">
+                                              <div className="text-[9px] font-black uppercase tracking-[3px] text-gray-700 mb-3 flex items-center gap-2">
+                                                  <div className="w-1.5 h-1.5 rounded-full bg-[#ecb52b]" />
+                                                  From
+                                              </div>
+                                              <div className="text-base font-black text-gray-900">Dear Bacchanal Ltd.</div>
+                                              <div className="text-xs font-bold text-gray-600 mt-0.5">billing@dearbacchanal.com</div>
+                                              <div className="text-xs text-gray-600 mt-2 leading-relaxed font-medium">
+                                                  <p>123 Carnival Way</p>
+                                                  <p>Port of Spain, Trinidad & Tobago</p>
+                                                  <p className="mt-1 text-[9px] font-black text-[#be2826] uppercase">Tax ID: DB-TR-2026-X</p>
+                                              </div>
+                                          </div>
+                                      </div>
 
-                                <div className="bg-gray-50 rounded-3xl p-8 mb-16">
-                                    <table className="w-full">
-                                        <thead>
-                                            <tr className="border-b-2 border-gray-900/10">
-                                                <th className="pb-4 text-left text-[10px] font-black uppercase tracking-widest text-gray-400">Description</th>
-                                                <th className="pb-4 text-center text-[10px] font-black uppercase tracking-widest text-gray-400">Qty</th>
-                                                <th className="pb-4 text-right text-[10px] font-black uppercase tracking-widest text-gray-400">Amount</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-200/50">
-                                            {invoiceData.items.map((item: any, idx: number) => (
-                                                <tr key={idx}>
-                                                    <td className="py-8">
-                                                        <p className="font-black text-lg text-gray-900">{item.description}</p>
-                                                        <div className="flex gap-2 mt-2">
-                                                            <span className="text-[9px] font-black bg-[#be2826] text-white px-2 py-0.5 rounded uppercase tracking-widest">
-                                                                {selectedOrder?.templateName || "Custom Template"}
-                                                            </span>
-                                                            <span className="text-[9px] font-black bg-gray-900 text-white px-2 py-0.5 rounded uppercase tracking-widest">
-                                                                {selectedOrder?.type === 'hard' ? 'Hardcover' : 'Softcopy'}
-                                                            </span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="py-8 text-center font-black text-gray-900">{item.quantity}</td>
-                                                    <td className="py-8 text-right font-black text-xl text-gray-900">${item.total.toFixed(2)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                      <div className="bg-gray-50 rounded-2xl p-5 mb-6 print:mb-5 border border-gray-200/60">
+                                          <table className="w-full">
+                                              <thead>
+                                                  <tr className="border-b-2 border-gray-900/10">
+                                                      <th className="pb-2 text-left text-[9px] font-black uppercase tracking-widest text-gray-700">Description</th>
+                                                      <th className="pb-2 text-center text-[9px] font-black uppercase tracking-widest text-gray-700">Qty</th>
+                                                      <th className="pb-2 text-right text-[9px] font-black uppercase tracking-widest text-gray-700">Amount</th>
+                                                  </tr>
+                                              </thead>
+                                              <tbody className="divide-y divide-gray-200/50">
+                                                  {invoiceData.items.map((item: any, idx: number) => (
+                                                      <tr key={idx}>
+                                                          <td className="py-3">
+                                                              <p className="font-black text-sm text-gray-900">{item.description}</p>
+                                                              <div className="flex gap-2 mt-1">
+                                                                  <span className="text-[8px] font-black bg-[#be2826] text-white px-2 py-0.5 rounded uppercase tracking-widest">
+                                                                      {invoiceData.templateName || selectedOrder?.templateName || "Custom Template"}
+                                                                  </span>
+                                                                  <span className="text-[8px] font-black bg-gray-900 text-white px-2 py-0.5 rounded uppercase tracking-widest">
+                                                                      {(invoiceData.type || selectedOrder?.type) === 'hard' ? 'Hardcover' : 'Digital PDF'}
+                                                                  </span>
+                                                              </div>
+                                                          </td>
+                                                          <td className="py-3 text-center font-black text-gray-900 text-sm">{item.quantity}</td>
+                                                          <td className="py-3 text-right font-black text-base text-gray-900">${item.total.toFixed(2)}</td>
+                                                      </tr>
+                                                  ))}
+                                              </tbody>
+                                          </table>
+                                      </div>
 
-                                <div className="flex flex-col sm:flex-row justify-between items-end gap-12">
-                                    <div className="flex-1">
-                                        <div className="p-6 rounded-2xl border-2 border-dashed border-gray-100 flex items-center gap-4">
-                                            <CheckCircle className="w-8 h-8 text-green-500" />
-                                            <div>
-                                                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Payment Verified</p>
-                                                <p className="font-black text-sm text-gray-900">Transaction ID: {(selectedOrder?.orderId || selectedOrder?.id || '').slice(0, 16)}...</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="w-full sm:w-[250px] space-y-4">
-                                        <div className="flex justify-between items-center text-sm">
-                                            <span className="text-gray-400 font-black uppercase tracking-widest">Subtotal</span>
-                                            <span className="font-black text-gray-900">${invoiceData.subtotal.toFixed(2)}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-sm">
-                                            <span className="text-gray-400 font-black uppercase tracking-widest">Processing</span>
-                                            <span className="font-black text-gray-900">$0.00</span>
-                                        </div>
-                                        <div className="pt-6 border-t-4 border-gray-900">
-                                            <div className="flex justify-between items-center mb-1">
-                                                <span className="text-[10px] font-black uppercase tracking-[4px] text-[#be2826]">Grand Total</span>
-                                                <span className="text-3xl font-black text-gray-900">${invoiceData.total.toFixed(2)}</span>
-                                            </div>
-                                            <p className="text-[8px] font-black text-gray-300 uppercase italic text-right">Paid via {invoiceData.paymentMethod} Gateway</p>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                                <div className="mt-24 pt-12 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-6 opacity-60 grayscale hover:grayscale-0 transition-all duration-700">
-                                    <div className="text-[8px] text-gray-400 font-black uppercase tracking-[6px] text-center sm:text-left">
-                                        Keep the spirit alive. <br/>Bacchanal never ends.
-                                    </div>
-                                    <div className="flex items-center gap-6">
-                                        <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                            Authentic <CheckCircle className="w-3 h-3" />
-                                        </div>
-                                        <div className="text-[8px] font-black bg-gray-900 text-white px-4 py-2 rounded-full uppercase tracking-widest">
-                                            OFFICIAL PROPERTY OF DEAR BACCHANAL
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            {/* Decorative Footer */}
-                            <div className="grid grid-cols-6 h-2 w-full">
-                                <div className="bg-[#be2826]" />
-                                <div className="bg-[#ecb52b]" />
-                                <div className="bg-[#000000]" />
-                                <div className="bg-[#be2826]" />
-                                <div className="bg-[#ecb52b]" />
-                                <div className="bg-[#000000]" />
-                            </div>
-                        </div>
+                                      <div className="flex flex-col sm:flex-row justify-between items-end gap-6 print:gap-4">
+                                          <div className="flex-1">
+                                              <div className="p-4 rounded-xl border-2 border-dashed border-gray-200 flex items-center gap-3 bg-gray-50/50">
+                                                  <CheckCircle className="w-6 h-6 text-green-600 shrink-0" />
+                                                  <div>
+                                                      <p className="text-[9px] font-black uppercase tracking-widest text-gray-700">Payment Verified</p>
+                                                      <p className="font-black text-xs text-gray-900">Transaction ID: {(selectedOrder?.orderId || selectedOrder?.id || '').slice(0, 16)}...</p>
+                                                  </div>
+                                              </div>
+                                          </div>
+                                          <div className="w-full sm:w-[230px] space-y-2">
+                                              <div className="flex justify-between items-center text-xs">
+                                                  <span className="text-gray-700 font-bold uppercase tracking-wider">Book Price</span>
+                                                  <span className="font-bold text-gray-900">${invoiceData.subtotal.toFixed(2)}</span>
+                                              </div>
+                                              <div className="flex justify-between items-center text-xs">
+                                                  <span className="text-gray-700 font-bold uppercase tracking-wider">Processing & Delivery</span>
+                                                  <span className="font-bold text-gray-900">${(invoiceData.shippingFee || invoiceData.processing || 0).toFixed(2)}</span>
+                                              </div>
+                                              <div className="pt-3 border-t-2 border-gray-900">
+                                                  <div className="flex justify-between items-center mb-0.5">
+                                                      <span className="text-[9px] font-black uppercase tracking-[3px] text-[#be2826]">Grand Total</span>
+                                                      <span className="text-2xl font-black text-gray-900">${invoiceData.total.toFixed(2)}</span>
+                                                  </div>
+                                                  <p className="text-[8px] font-black text-gray-500 uppercase italic text-right">Paid via {invoiceData.paymentMethod} Gateway</p>
+                                              </div>
+                                          </div>
+                                      </div>
+
+                                      {/* Big Rotated Green Official PAID Stamp */}
+                                      <div className="flex justify-center my-6 print:my-8 pointer-events-none select-none">
+                                          <div className="inline-flex flex-col items-center justify-center border-4 border-double border-emerald-600/80 rounded-2xl px-10 py-2.5 transform -rotate-12 bg-emerald-500/5 shadow-sm">
+                                              <span className="text-4xl sm:text-5xl font-black text-emerald-600 uppercase tracking-[14px] leading-none font-mono">
+                                                  PAID
+                                              </span>
+                                              <span className="text-[9px] font-black text-emerald-600/90 uppercase tracking-[4px] mt-1.5 border-t border-emerald-600/40 pt-0.5">
+                                                  OFFICIAL VERIFIED RECEIPT
+                                              </span>
+                                          </div>
+                                      </div>
+                                  </div>
+
+                                  <div className="mt-6 pt-4 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                                      <div className="text-[8px] text-gray-500 font-black uppercase tracking-[4px] text-center sm:text-left">
+                                          Keep the spirit alive. <br/>Bacchanal never ends.
+                                      </div>
+                                      <div className="flex items-center gap-4">
+                                          <div className="text-[8px] font-black text-gray-600 uppercase tracking-widest flex items-center gap-1.5">
+                                              Authentic <CheckCircle className="w-3 h-3 text-green-600" />
+                                          </div>
+                                          <div className="text-[8px] font-black bg-gray-900 text-white px-3 py-1 rounded-full uppercase tracking-widest">
+                                              OFFICIAL PROPERTY OF DEAR BACCHANAL
+                                          </div>
+                                      </div>
+                                  </div>
+                              </div>
+                              
+                              {/* Decorative Footer */}
+                              <div className="grid grid-cols-6 h-2 w-full shrink-0">
+                                  <div className="bg-[#be2826]" />
+                                  <div className="bg-[#ecb52b]" />
+                                  <div className="bg-[#000000]" />
+                                  <div className="bg-[#be2826]" />
+                                  <div className="bg-[#ecb52b]" />
+                                  <div className="bg-[#000000]" />
+                              </div>
+                          </div>
+                        </>
                     ) : null}
                   </div>
               </div>

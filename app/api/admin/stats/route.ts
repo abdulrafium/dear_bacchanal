@@ -59,32 +59,43 @@ export async function GET(req: NextRequest) {
       .limit(5)
       .toArray();
 
-    // Prepare chart data (last 7 days)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    
-    const salesOverTime = await ordersCollection.aggregate([
-      { $match: { createdAt: { $gte: sevenDaysAgo } } },
-      {
-        $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-          revenue: { $sum: "$amount" },
-          count: { $sum: 1 }
+    // Prepare continuous 7-day chart data (today and past 6 days)
+    const chartMap: Record<string, { revenue: number; count: number }> = {};
+    const todayDate = new Date();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(todayDate.getDate() - i);
+      const dateStr = d.toISOString().split("T")[0];
+      chartMap[dateStr] = { revenue: 0, count: 0 };
+    }
+
+    // Populate chart buckets from orders
+    const allOrders = await ordersCollection.find({}).toArray();
+    allOrders.forEach((order: any) => {
+      if (order.createdAt) {
+        const dateObj = new Date(order.createdAt);
+        if (!isNaN(dateObj.getTime())) {
+          const dateStr = dateObj.toISOString().split("T")[0];
+          if (chartMap[dateStr] !== undefined) {
+            chartMap[dateStr].revenue += (order.amount || 0);
+            chartMap[dateStr].count += 1;
+          }
         }
-      },
-      { $sort: { "_id": 1 } }
-    ]).toArray();
+      }
+    });
+
+    const salesChart = Object.keys(chartMap).map((date) => ({
+      date,
+      revenue: chartMap[date].revenue / 100,
+      count: chartMap[date].count,
+    }));
 
     return NextResponse.json({
       totalRevenue,
       totalProfit,
       totalOrders,
       markup,
-      salesChart: salesOverTime.map(s => ({
-        date: s._id,
-        revenue: s.revenue / 100,
-        count: s.count
-      })),
+      salesChart,
       recentPayments: recentPayments.map(p => ({
         id: p._id.toString(),
         email: p.email,

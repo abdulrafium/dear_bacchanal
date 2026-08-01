@@ -27,12 +27,41 @@ export async function GET(
        return NextResponse.json({ error: "Unauthorized access to this receipt" }, { status: 403 });
     }
 
+    const settings = await db.collection("settings").findOne({ id: "platform_settings" });
+    const hardBaseCents = settings?.pricing?.hardCopyPrice || 5000;
+
+    let bookAmountCents = order.amount;
+    let shippingAmountCents = 0;
+
+    if (order.type === 'hard') {
+      if (order.shippingFee) {
+        shippingAmountCents = order.shippingFee;
+        bookAmountCents = Math.max(0, order.amount - shippingAmountCents);
+      } else if (order.amount > hardBaseCents) {
+        shippingAmountCents = order.amount - hardBaseCents;
+        bookAmountCents = hardBaseCents;
+      } else {
+        const countryCode = order.shippingDetails?.address?.country;
+        const countryObj = settings?.countries?.find((c: any) => c.code?.toUpperCase() === countryCode?.toUpperCase());
+        if (countryObj && countryObj.shippingRate) {
+          shippingAmountCents = countryObj.shippingRate;
+          bookAmountCents = Math.max(0, order.amount - shippingAmountCents);
+        }
+      }
+    }
+
+    const subtotal = bookAmountCents / 100;
+    const shippingFee = shippingAmountCents / 100;
+    const total = order.amount / 100;
+
     // Return structured data for the invoice UI
     const invoiceData = {
       invoiceNumber: `INV-${order.orderId?.slice(-6).toUpperCase() || order._id.toString().slice(-6).toUpperCase()}`,
       date: order.createdAt,
+      type: order.type || "soft",
+      templateName: order.templateName || "Custom Template",
       customer: {
-        name: order.shippingDetails?.name || order.email || "Valued Customer",
+        name: order.customerName || order.shippingDetails?.name || order.email?.split('@')[0] || "Valued Customer",
         email: order.email,
         address: order.shippingDetails?.address || {
             line1: "Digital Delivery",
@@ -46,16 +75,18 @@ export async function GET(
         {
           description: `Dear Bacchanal - ${order.type === 'hard' ? 'Hardcover Heirloom Edition' : 'Digital PDF Edition'}`,
           quantity: 1,
-          unitPrice: order.amount / 100,
-          total: order.amount / 100
+          unitPrice: subtotal,
+          total: subtotal
         }
       ],
-      subtotal: order.amount / 100,
+      subtotal: subtotal,
+      shippingFee: shippingFee,
+      processing: shippingFee,
       tax: 0,
-      total: order.amount / 100,
+      total: total,
       currency: order.currency?.toUpperCase() || "USD",
       status: order.status,
-      paymentMethod: order.paymentMethod
+      paymentMethod: order.paymentMethod || "card"
     };
 
     return NextResponse.json(invoiceData);

@@ -279,6 +279,18 @@ export default function AdminSettingsPage() {
                   onChange={(v) => setSettings({ ...settings, pricing: { ...settings.pricing, extraStickerPrice: Math.round(v * 100) } })}
                   type="number"
                 />
+                <InputGroup 
+                  label="Refund Deadline (Days)" 
+                  value={settings.general.refundDeadlineDays} 
+                  onChange={(v) => setSettings({ ...settings, general: { ...settings.general, refundDeadlineDays: v } })}
+                  type="number"
+                />
+                <InputGroup 
+                  label="GBP to USD Exchange Rate" 
+                  value={settings.general.exchangeRateGbpToUsd} 
+                  onChange={(v) => setSettings({ ...settings, general: { ...settings.general, exchangeRateGbpToUsd: v } })}
+                  type="number"
+                />
               </div>
             </div>
           )}
@@ -345,20 +357,17 @@ export default function AdminSettingsPage() {
                         setSettings({ ...settings, countries: newCountries });
                       }}
                     />
-                    <select
-                      className="bg-transparent border border-white/5 text-white/40 text-xs w-[120px] hidden sm:block focus:ring-0 cursor-pointer rounded-lg px-2 py-1 hover:bg-white/5"
-                      value={country.zone}
-                      onChange={(e) => {
-                        const newCountries = [...settings.countries];
-                        newCountries[idx].zone = e.target.value as any;
-                        setSettings({ ...settings, countries: newCountries });
-                      }}
-                    >
-                      <option value="Clear EU" className="bg-[#0a0a0a]">Clear EU</option>
-                      <option value="Clear Non EU" className="bg-[#0a0a0a]">Clear Non EU</option>
-                      <option value="Tracked Non EU" className="bg-[#0a0a0a]">Tracked Non EU</option>
-                      <option value="Other" className="bg-[#0a0a0a]">Other</option>
-                    </select>
+                    <span className={`text-[10px] font-mono font-bold uppercase py-1 px-1.5 rounded-lg border hidden sm:inline-flex items-center justify-center w-[105px] shrink-0 text-center tracking-tight ${
+                      country.zone === "Clear EU"
+                        ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
+                        : country.zone === "Clear Non EU"
+                        ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                        : country.zone === "Tracked Non EU"
+                        ? "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                        : "bg-white/5 text-white/50 border-white/10"
+                    }`}>
+                      {country.zone}
+                    </span>
                     <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-xl border border-white/5">
                       <span className="text-white/30 text-xs">£</span>
                       <input 
@@ -471,18 +480,6 @@ export default function AdminSettingsPage() {
                     onChange={(v) => setSettings({ ...settings, general: { ...settings.general, adminNotificationEmail: v } })}
                   />
                 </div>
-                <InputGroup 
-                  label="Refund Deadline (Days)" 
-                  value={settings.general.refundDeadlineDays} 
-                  onChange={(v) => setSettings({ ...settings, general: { ...settings.general, refundDeadlineDays: v } })}
-                  type="number"
-                />
-                <InputGroup 
-                  label="GBP to USD Exchange Rate" 
-                  value={settings.general.exchangeRateGbpToUsd} 
-                  onChange={(v) => setSettings({ ...settings, general: { ...settings.general, exchangeRateGbpToUsd: v } })}
-                  type="number"
-                />
               </div>
               
               {/* Danger Zone: Clear Revenue */}

@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const db = await getDatabase();
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "20");
+    const limit = parseInt(searchParams.get("limit") || "7");
     const search = searchParams.get("search") || "";
     const typeFilter = searchParams.get("type") || "";
     const statusFilter = searchParams.get("status") || "";
@@ -47,29 +47,57 @@ export async function GET(req: NextRequest) {
       .limit(limit)
       .toArray();
 
+    // Fetch matching user_books to populate PDF URLs if not directly stored on order
+    const bookIds = orders
+      .map(o => o.bookId)
+      .filter(Boolean)
+      .map(id => {
+        try {
+          return ObjectId.isValid(id) && id.length === 24 ? new ObjectId(id) : null;
+        } catch {
+          return null;
+        }
+      })
+      .filter((id): id is ObjectId => id !== null);
+
+    const books = bookIds.length > 0
+      ? await db.collection("user_books").find({ _id: { $in: bookIds } }).toArray()
+      : [];
+
+    const bookMap = new Map();
+    books.forEach(b => {
+      bookMap.set(b._id.toString(), b);
+    });
+
     return NextResponse.json({
-      orders: orders.map(o => ({
-        id: o._id.toString(),
-        userId: o.userId?.toString(),
-        email: o.email,
-        orderId: o.orderId,
-        amount: o.amount,
-        currency: o.currency,
-        type: o.type,
-        templateName: o.templateName,
-        bookId: o.bookId,
-        status: o.status,
-        shippingDetails: o.shippingDetails,
-        paymentMethod: o.paymentMethod,
-        refundReason: o.refundReason,
-        refundRequestedAt: o.refundRequestedAt,
-        refundRequest: o.refundRequest,
-        customerName: o.customerName || o.shippingDetails?.name || '',
-        approvedAt: o.approvedAt || null,
-        siteFlowOrderId: o.siteFlowOrderId || null,
-        createdAt: o.createdAt,
-        updatedAt: o.updatedAt,
-      })),
+      orders: orders.map(o => {
+        const book = o.bookId ? bookMap.get(o.bookId.toString()) : null;
+        return {
+          id: o._id.toString(),
+          userId: o.userId?.toString(),
+          email: o.email,
+          orderId: o.orderId,
+          amount: o.amount,
+          currency: o.currency,
+          type: o.type,
+          templateName: o.templateName,
+          bookId: o.bookId,
+          status: o.status,
+          shippingDetails: o.shippingDetails,
+          paymentMethod: o.paymentMethod,
+          refundReason: o.refundReason,
+          refundRequestedAt: o.refundRequestedAt,
+          refundRequest: o.refundRequest,
+          customerName: o.customerName || o.shippingDetails?.name || '',
+          approvedAt: o.approvedAt || null,
+          siteFlowOrderId: o.siteFlowOrderId || null,
+          coverPdfUrl: o.coverPdfUrl || o.savedCoverPdfUrl || book?.savedCoverPdfUrl || null,
+          textPdfUrl: o.textPdfUrl || o.savedTextPdfUrl || book?.savedTextPdfUrl || null,
+          pdfUrl: o.pdfUrl || o.savedPdfUrl || book?.savedPdfUrl || null,
+          createdAt: o.createdAt,
+          updatedAt: o.updatedAt,
+        };
+      }),
       total,
       page,
       totalPages: Math.ceil(total / limit),

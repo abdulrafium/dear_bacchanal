@@ -77,12 +77,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-[#0f0f0f] border-r border-white/5 flex flex-col transition-transform duration-300 ${
+        className={`fixed inset-y-0 left-0 h-screen z-50 w-64 bg-[#0f0f0f] border-r border-white/5 flex flex-col justify-between transition-transform duration-300 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         }`}
       >
         {/* Logo */}
-        <div className="p-6 border-b border-white/5">
+        <div className="p-6 border-b border-white/5 shrink-0">
           <Link href="/admin/dashboard" className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-600 to-orange-600 flex items-center justify-center text-white font-display text-lg">
               DB
@@ -95,7 +95,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full">
           {navItems.map((item, index) => {
             if (item.isSeparator) {
               return <div key={`sep-${index}`} className="h-px bg-white/10 my-4 mx-4" />;
@@ -123,7 +123,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </nav>
 
         {/* Logout */}
-        <div className="p-4 border-t border-white/5 bg-black/20">
+        <div className="p-4 border-t border-white/5 bg-black/20 shrink-0 mt-auto">
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-black text-red-500/60 hover:text-red-400 hover:bg-red-500/10 transition-all w-full group"
@@ -135,7 +135,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-h-screen w-full overflow-x-hidden min-w-0">
+      <div className="flex-1 flex flex-col min-h-screen w-full overflow-x-hidden min-w-0 lg:pl-64">
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-[#0a0a0a]/80 backdrop-blur-xl border-b border-white/5 px-6 py-4 flex items-center justify-between">
           <button
