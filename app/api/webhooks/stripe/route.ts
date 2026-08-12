@@ -9,6 +9,7 @@ import {
   markBookAsOrdered,
   sendOrderConfirmationEmailIfNeeded,
   getCustomerEmail,
+  syncUserPurchasedState,
 } from "@/lib/checkout-fulfillment";
 
 export async function POST(req: NextRequest) {
@@ -185,6 +186,7 @@ export async function POST(req: NextRequest) {
                     );
 
                     if (order && order.email) {
+                        await syncUserPurchasedState(order.email);
                         await sendEmail({
                             to: order.email,
                             subject: "Your Refund has been Processed",

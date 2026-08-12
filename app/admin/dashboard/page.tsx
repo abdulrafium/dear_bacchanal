@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { 
   Users, 
   ShoppingCart, 
@@ -268,15 +269,15 @@ export default function AdminDashboard() {
                 </div>
                 
                 <div className="mt-12 space-y-4">
-                    <div className="bg-white/5 p-4 rounded-2xl border border-white/5 group hover:bg-white/[0.08] transition-all">
+                    <Link href="/admin/users" className="block bg-white/5 p-4 rounded-2xl border border-white/5 group hover:bg-white/[0.08] hover:border-white/20 transition-all cursor-pointer">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-3">
                                 <Users className="w-4 h-4 text-green-400" />
-                                <span className="text-white/60 text-xs font-black uppercase">Paid Users</span>
+                                <span className="text-white/60 text-xs font-black uppercase group-hover:text-white transition-colors">Paid Users</span>
                             </div>
                             <span className="text-white text-xl font-black">{stats.purchasedUsers}</span>
                         </div>
-                    </div>
+                    </Link>
                     </div>
             </div>
           </div>
@@ -289,7 +290,13 @@ export default function AdminDashboard() {
                 <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-orange-400 flex-shrink-0" />
                 <span className="leading-none">Live User Activity</span>
             </h3>
-            <button className="text-[10px] font-black uppercase text-white/40 hover:text-white transition-colors tracking-widest text-left sm:text-right self-start sm:self-auto">View All Users</button>
+            <Link 
+              href="/admin/users" 
+              className="text-[10px] font-black uppercase text-white/40 hover:text-white transition-colors tracking-widest text-left sm:text-right self-start sm:self-auto flex items-center gap-1.5 group cursor-pointer"
+            >
+              <span>View All Users</span>
+              <span className="group-hover:translate-x-0.5 transition-transform">→</span>
+            </Link>
           </div>
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

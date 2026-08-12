@@ -18,6 +18,7 @@ const DEFAULT_SETTINGS: PlatformSettings = {
     extraSpreadPrice: 500,
     extraStickerPrice: 500,
     markupPercentage: 20,
+    refundDeductionPercentage: 20,
   },
   countries: [
     { code: "US", name: "United States", zone: "Clear Non EU", shippingRate: 1383, enabled: true },

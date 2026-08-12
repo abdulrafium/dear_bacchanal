@@ -5,6 +5,7 @@ export interface PricingSettings {
   extraSpreadPrice: number;
   extraStickerPrice: number;
   markupPercentage: number;
+  refundDeductionPercentage?: number;
 }
 
 export interface CountrySetting {

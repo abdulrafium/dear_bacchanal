@@ -5,6 +5,7 @@ import { ObjectId } from "mongodb";
 import { stripe } from "@/lib/stripe";
 import { sendEmail } from "@/lib/mail-service";
 import { getRefundEmail } from "@/lib/email-templates";
+import { syncUserPurchasedState } from "@/lib/checkout-fulfillment";
 
 export async function POST(req: NextRequest) {
   try {
@@ -53,6 +54,7 @@ export async function POST(req: NextRequest) {
         );
 
         if (updatedOrder && updatedOrder.email) {
+            await syncUserPurchasedState(updatedOrder.email);
             await sendEmail({
                 to: updatedOrder.email,
                 subject: "Your Refund has been Processed",
@@ -70,9 +72,11 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Payment Intent not found for this session" }, { status: 400 });
     }
 
-    // 2. CALCULATE 80% NET REFUND (20% DEDUCTION)
-    // order.amount is stored in cents (e.g., 10000 = $100.00)
-    const refundAmount = Math.floor(order.amount * 0.8);
+    // 2. CALCULATE NET REFUND AFTER TAX/FEE DEDUCTION (Default 20% tax/admin deduction retained)
+    const settings = await db.collection("settings").findOne({ id: "platform_settings" });
+    const taxPercentage = settings?.pricing?.taxPercentage ?? settings?.pricing?.refundDeductionPercentage ?? 20;
+    const refundPercentage = (100 - taxPercentage) / 100;
+    const refundAmount = Math.floor(order.amount * refundPercentage);
 
     // 3. TRIGGER STRIPE PARTIAL REFUND
     try {
@@ -81,7 +85,8 @@ export async function POST(req: NextRequest) {
             amount: refundAmount,
             reason: 'requested_by_customer',
             metadata: {
-                orderId: orderId.toString()
+                orderId: orderId.toString(),
+                taxDeductedCents: String(order.amount - refundAmount)
             }
         });
 
@@ -99,6 +104,7 @@ export async function POST(req: NextRequest) {
             );
 
             if (updatedOrder && updatedOrder.email) {
+                await syncUserPurchasedState(updatedOrder.email);
                 await sendEmail({
                     to: updatedOrder.email,
                     subject: "Your Refund has been Processed",
@@ -125,6 +131,7 @@ export async function POST(req: NextRequest) {
             );
 
             if (updatedOrder && updatedOrder.email) {
+                await syncUserPurchasedState(updatedOrder.email);
                 await sendEmail({
                     to: updatedOrder.email,
                     subject: "Your Refund has been Processed",

@@ -268,6 +268,13 @@ export default function AdminSettingsPage() {
                   type="number"
                 />
                 <InputGroup 
+                  label="Refund Deduction (%)" 
+                  value={settings.pricing.refundDeductionPercentage ?? 20} 
+                  onChange={(v) => setSettings({ ...settings, pricing: { ...settings.pricing, refundDeductionPercentage: v } })}
+                  type="number"
+                  step="0.1"
+                />
+                <InputGroup 
                   label="Extra Spread Price ($)" 
                   value={settings.pricing.extraSpreadPrice / 100} 
                   onChange={(v) => setSettings({ ...settings, pricing: { ...settings.pricing, extraSpreadPrice: Math.round(v * 100) } })}
@@ -680,17 +687,17 @@ function SectionHeader({ title, description }: { title: string; description: str
   );
 }
 
-function InputGroup({ label, value, onChange, type = "text" }: { label: string; value: any; onChange: (v: any) => void; type?: string }) {
+function InputGroup({ label, value, onChange, type = "text", step }: { label: string; value: any; onChange: (v: any) => void; type?: string; step?: string }) {
   return (
     <div className="space-y-2">
       <label className="text-white/30 text-[10px] uppercase font-bold tracking-widest ml-1">{label}</label>
       <input
         type={type}
+        step={step}
         value={value}
         onChange={(e) => onChange(type === "number" ? parseFloat(e.target.value || "0") : e.target.value)}
-        className="w-full bg-white/[0.03] border border-white/5 rounded-2xl px-5 py-4 text-white focus:outline-none focus:border-red-500/50 focus:bg-white/[0.05] transition-all placeholder:text-white/10"
+        className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:border-red-500 transition-all font-mono"
       />
     </div>
   );
 }
-

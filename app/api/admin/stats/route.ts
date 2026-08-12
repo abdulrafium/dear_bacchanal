@@ -19,16 +19,34 @@ export async function GET(req: NextRequest) {
     const totalUsers = await db.collection("users").countDocuments();
     const credentialUsers = await db.collection("users").countDocuments({ provider: "credentials" });
     const googleUsers = await db.collection("users").countDocuments({ provider: "google" });
-    const purchasedUsers = await db.collection("users").countDocuments({ isPurchased: true });
+
+    // Paid users count: unique emails of customers with active/paid orders
+    const paidUserEmailsFromOrders = await db.collection("orders").distinct("email", { 
+      status: { $in: ["paid", "processing", "shipped", "delivered", "pending_approval", "approved"] }
+    });
+    const purchasedUsers = paidUserEmailsFromOrders.filter(Boolean).length;
 
     // Get financial stats from orders collection
     const ordersCollection = db.collection("orders");
     const totalOrders = await ordersCollection.countDocuments();
     const settings = await db.collection("settings").findOne({ id: "platform_settings" });
     const markup = settings?.pricing?.markupPercentage || 15;
+    const taxPercentage = settings?.pricing?.taxPercentage ?? settings?.pricing?.refundDeductionPercentage ?? 20;
+    const retainedTaxRatio = taxPercentage / 100;
     
     const revenueAggregation = await ordersCollection.aggregate([
-      { $group: { _id: null, total: { $sum: "$amount" } } }
+      {
+        $project: {
+          netAmount: {
+            $cond: {
+              if: { $eq: ["$status", "refunded"] },
+              then: { $multiply: ["$amount", retainedTaxRatio] }, // Retain tax/fee deduction for refunded orders
+              else: "$amount" // 100% full checkout amount for active paid orders
+            }
+          }
+        }
+      },
+      { $group: { _id: null, total: { $sum: "$netAmount" } } }
     ]).toArray();
     
     const totalRevenueCents = revenueAggregation[0]?.total || 0;

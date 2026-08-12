@@ -31,6 +31,11 @@ function PaymentStatusContent() {
     const verifyPayment = async () => {
       try {
         const res = await fetch(`/api/check-payment?session_id=${sessionId}`);
+        if (!res.ok) {
+          console.error("Payment verification failed with status:", res.status);
+          setStatus("failed");
+          return;
+        }
         const data = await res.json();
 
         if (data.success) {

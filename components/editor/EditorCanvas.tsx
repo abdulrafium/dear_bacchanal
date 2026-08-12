@@ -1101,7 +1101,19 @@ function CalendarElement({
           const note = settings.data[dateKey] || "";
 
           const isCarnivalDays = settings.month === 1 && (day === 16 || day === 17);
-          const displayText = isCarnivalDays ? `${note.trim().toUpperCase()}\n${dayName}` : note.trim().toUpperCase();
+
+          // Format note text: If 2 words, split into 2 rows (1 word on row 1, 2nd word on row 2)
+          let rawNote = note.trim();
+          let formattedNote = rawNote;
+          if (rawNote) {
+            const words = rawNote.split(/\s+/);
+            if (words.length === 2) {
+              formattedNote = `${words[0]}\n${words[1]}`;
+            }
+          }
+
+          const displayText = isCarnivalDays ? `${formattedNote.toUpperCase()}\n${dayName}` : formattedNote.toUpperCase();
+          const hasNote = Boolean(rawNote || isCarnivalDays);
 
           return (
             <Group
@@ -1120,18 +1132,23 @@ function CalendarElement({
               }}
             >
               <Rect width={cellWidth} height={cellHeight} fill="rgba(0,0,0,0)" hitStrokeWidth={10} />
-              <Text
-                text={day.toString()}
-                width={cellWidth}
-                y={6}
-                align="center"
-                fontSize={16}
-                fontStyle="bold"
-                fill="#000"
-                opacity={0.6}
-                listening={false}
-              />
-              {note && (
+              
+              {/* Hide background date number when a note is present so note completely covers date */}
+              {!hasNote && (
+                <Text
+                  text={day.toString()}
+                  width={cellWidth}
+                  y={6}
+                  align="center"
+                  fontSize={16}
+                  fontStyle="bold"
+                  fill="#000"
+                  opacity={0.6}
+                  listening={false}
+                />
+              )}
+
+              {hasNote && (
                 <Group y={4} x={cellWidth / 2} rotation={-8} listening={false}>
                   <Text
                     text={displayText}
@@ -1144,7 +1161,7 @@ function CalendarElement({
                     strokeWidth={3}
                     lineJoin="round"
                     fontFamily="Luckiest Guy"
-                    lineHeight={1}
+                    lineHeight={1.1}
                   />
                   <Text
                     text={displayText}
@@ -1154,7 +1171,7 @@ function CalendarElement({
                     fontSize={11}
                     fill="#fff"
                     fontFamily="Luckiest Guy"
-                    lineHeight={1}
+                    lineHeight={1.1}
                   />
                 </Group>
               )}

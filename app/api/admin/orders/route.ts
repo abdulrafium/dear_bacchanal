@@ -6,6 +6,7 @@ import { adminAuthMiddleware } from "@/lib/admin-auth";
 import { ObjectId } from "mongodb";
 import { sendEmail } from "@/lib/mail-service";
 import { getOrderCompletedEmail, getRefundEmail } from "@/lib/email-templates";
+import { syncUserPurchasedState } from "@/lib/checkout-fulfillment";
 import { HPSiteFlowClient } from "@/lib/hp-site-flow";
 import { UTApi } from "uploadthing/server";
 
@@ -128,6 +129,9 @@ export async function PATCH(req: NextRequest) {
 
     if (result) {
         const order = result;
+        if (order.email) {
+            await syncUserPurchasedState(order.email);
+        }
         // SEND EMAILS BASED ON NEW STATUS
         if (status === 'shipped' || status === 'completed') {
             await sendEmail({
