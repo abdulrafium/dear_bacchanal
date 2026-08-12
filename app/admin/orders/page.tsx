@@ -53,6 +53,8 @@ interface Order {
   approvedAt?: string | null;
   siteFlowOrderId?: string | null;
   siteFlowError?: string | null;
+  trackingNumber?: string | null;
+  carrier?: string | null;
   coverPdfUrl?: string | null;
   textPdfUrl?: string | null;
   pdfUrl?: string | null;
@@ -126,8 +128,8 @@ export default function AdminOrdersPage() {
     setPage(1);
   }, [search, typeFilter, statusFilter]);
 
-  const fetchOrders = async () => {
-    setLoading(true);
+  const fetchOrders = async (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page), limit: "7", search });
       if (typeFilter) params.set('type', typeFilter);
@@ -138,13 +140,29 @@ export default function AdminOrdersPage() {
         setOrders(data.orders);
         setTotalPages(data.totalPages);
         setTotalOrders(data.total);
+
+        // Keep open drawer order in sync with updated server record (e.g., PurePrint webhooks & status updates)
+        if (selectedOrder) {
+          const updated = data.orders.find((o: Order) => o.id === selectedOrder.id);
+          if (updated) {
+            setSelectedOrder(updated);
+          }
+        }
       }
     } catch (error) {
-      toast.error("Failed to load orders");
+      if (!isSilent) toast.error("Failed to load orders");
     } finally {
-      setLoading(false);
+      if (!isSilent) setLoading(false);
     }
   };
+
+  // Auto-poll orders every 10 seconds to reflect PurePrint webhooks & status changes in real time
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchOrders(true);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [page, search, typeFilter, statusFilter, selectedOrder?.id]);
 
   const activeFilterCount = (typeFilter ? 1 : 0) + (statusFilter ? 1 : 0);
 
@@ -155,6 +173,12 @@ export default function AdminOrdersPage() {
   };
 
   const updateStatus = async (orderId: string, status: string) => {
+    // Optimistic real-time UI update
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: status as any } : o));
+    if (selectedOrder?.id === orderId) {
+      setSelectedOrder({ ...selectedOrder, status: status as any });
+    }
+
     try {
       const res = await fetch("/api/admin/orders", {
         method: "PATCH",
@@ -163,13 +187,14 @@ export default function AdminOrdersPage() {
       });
       if (res.ok) {
         toast.success(`Status updated to ${status}`);
+        fetchOrders(true);
+      } else {
+        toast.error("Failed to update status");
         fetchOrders();
-        if (selectedOrder?.id === orderId) {
-            setSelectedOrder({ ...selectedOrder, status } as Order);
-        }
       }
     } catch (error) {
       toast.error("Update failed");
+      fetchOrders();
     }
   };
 
@@ -952,6 +977,53 @@ export default function AdminOrdersPage() {
                                 </div>
                             </div>
                         </div>
+
+                        {/* Tracking Information Card */}
+                        {selectedOrder.type !== 'soft' && (
+                            <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest flex items-center gap-1.5">
+                                        <Truck className="w-3.5 h-3.5 text-blue-400" />
+                                        Tracking Information
+                                    </p>
+                                    {(selectedOrder.trackingNumber || selectedOrder.shippingDetails?.tracking_number) && (
+                                        <span className="text-[9px] font-black bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded uppercase tracking-wider">
+                                            ATTACHED
+                                        </span>
+                                    )}
+                                </div>
+
+                                {(selectedOrder.trackingNumber || selectedOrder.shippingDetails?.tracking_number) ? (
+                                    <div className="bg-blue-500/10 p-3 rounded-xl border border-blue-500/20 space-y-2">
+                                        {(selectedOrder.carrier || selectedOrder.shippingDetails?.carrier) && (
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-[10px] text-white/40 uppercase font-bold">Carrier</span>
+                                                <span className="text-xs text-white font-bold">{selectedOrder.carrier || selectedOrder.shippingDetails?.carrier}</span>
+                                            </div>
+                                        )}
+                                        <div>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-[10px] text-white/40 uppercase font-bold">Tracking Number</span>
+                                                <button
+                                                    onClick={() => handleCopyUrl(selectedOrder.trackingNumber || selectedOrder.shippingDetails?.tracking_number, "Tracking Number", "tracking")}
+                                                    className="text-[9px] text-blue-400/80 hover:text-blue-300 flex items-center gap-1 bg-blue-500/20 px-2 py-0.5 rounded transition-all cursor-pointer"
+                                                >
+                                                    {copiedField === 'tracking' ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
+                                                    <span>{copiedField === 'tracking' ? 'Copied' : 'Copy'}</span>
+                                                </button>
+                                            </div>
+                                            <p className="text-blue-400 text-xs font-mono font-bold break-all bg-black/40 p-2 rounded-lg border border-blue-500/20 select-all">
+                                                {selectedOrder.trackingNumber || selectedOrder.shippingDetails?.tracking_number}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <p className="text-white/30 text-xs italic bg-black/20 p-2.5 rounded-xl border border-white/5">
+                                        No tracking number attached yet (Will be attached automatically when PurePrint ships order)
+                                    </p>
+                                )}
+                            </div>
+                        )}
 
                         <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5">
                             <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mb-2">Shipping Address</p>

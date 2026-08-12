@@ -93,6 +93,8 @@ export async function GET(req: NextRequest) {
           approvedAt: o.approvedAt || null,
           siteFlowOrderId: o.siteFlowOrderId || null,
           siteFlowError: o.siteFlowError || null,
+          trackingNumber: o.trackingNumber || o.shippingDetails?.tracking_number || null,
+          carrier: o.carrier || o.shippingDetails?.carrier || null,
           coverPdfUrl: o.coverPdfUrl || o.savedCoverPdfUrl || book?.savedCoverPdfUrl || null,
           textPdfUrl: o.textPdfUrl || o.savedTextPdfUrl || book?.savedTextPdfUrl || null,
           pdfUrl: o.pdfUrl || o.savedPdfUrl || book?.savedPdfUrl || null,
@@ -109,22 +111,34 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// PATCH - Update order status
+// PATCH - Update order status & tracking info
 export async function PATCH(req: NextRequest) {
   const authError = await adminAuthMiddleware();
   if (authError) return authError;
 
   try {
-    const { orderId, status } = await req.json();
+    const { orderId, status, trackingNumber, carrier } = await req.json();
 
-    if (!orderId || !status) {
-      return NextResponse.json({ error: "orderId and status required" }, { status: 400 });
+    if (!orderId) {
+      return NextResponse.json({ error: "orderId is required" }, { status: 400 });
     }
 
     const db = await getDatabase();
+    const updateFields: any = { updatedAt: new Date() };
+
+    if (status) updateFields.status = status;
+    if (trackingNumber !== undefined) {
+      updateFields.trackingNumber = trackingNumber;
+      updateFields["shippingDetails.tracking_number"] = trackingNumber;
+    }
+    if (carrier !== undefined) {
+      updateFields.carrier = carrier;
+      updateFields["shippingDetails.carrier"] = carrier;
+    }
+
     const result = await db.collection("orders").findOneAndUpdate(
       { _id: new ObjectId(orderId) },
-      { $set: { status, updatedAt: new Date() } },
+      { $set: updateFields },
       { returnDocument: 'after' }
     );
 
