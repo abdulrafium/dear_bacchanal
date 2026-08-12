@@ -148,10 +148,7 @@ export async function POST(req: NextRequest) {
     // ─── 4. Submit to Site Flow / PurePrint ───────────────────────────────────
     let siteFlowOrderId: string | null = null;
     try {
-      const sku = process.env.HP_BOOK_SKU;
-      if (!sku) {
-        throw new Error("Missing HP_BOOK_SKU in environment variables");
-      }
+      const sku = process.env.HP_BOOK_SKU || "saffatrinidad_hardback_10x10";
 
       const client = new HPSiteFlowClient();
 

@@ -92,6 +92,7 @@ export async function GET(req: NextRequest) {
           customerName: o.customerName || o.shippingDetails?.name || '',
           approvedAt: o.approvedAt || null,
           siteFlowOrderId: o.siteFlowOrderId || null,
+          siteFlowError: o.siteFlowError || null,
           coverPdfUrl: o.coverPdfUrl || o.savedCoverPdfUrl || book?.savedCoverPdfUrl || null,
           textPdfUrl: o.textPdfUrl || o.savedTextPdfUrl || book?.savedTextPdfUrl || null,
           pdfUrl: o.pdfUrl || o.savedPdfUrl || book?.savedPdfUrl || null,

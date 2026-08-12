@@ -52,6 +52,7 @@ interface Order {
   createdAt: string;
   approvedAt?: string | null;
   siteFlowOrderId?: string | null;
+  siteFlowError?: string | null;
   coverPdfUrl?: string | null;
   textPdfUrl?: string | null;
   pdfUrl?: string | null;
@@ -307,7 +308,7 @@ export default function AdminOrdersPage() {
         toast.success(`Order ${orderId} approved. Status set to 'processing'`);
         fetchOrders();
         if (selectedOrder?.id === orderId) {
-          setSelectedOrder({ ...selectedOrder, status: 'processing', approvedAt: data.approvedAt });
+          setSelectedOrder({ ...selectedOrder, status: 'processing', approvedAt: data.approvedAt, siteFlowOrderId: data.siteFlowOrderId } as Order);
         }
       } else {
         toast.error(`Approval failed: ${data.error}`);
@@ -316,6 +317,37 @@ export default function AdminOrdersPage() {
       toast.error("Approval request failed");
     } finally {
       setApprovingOrder(false);
+    }
+  };
+
+  const [resubmittingSiteFlow, setResubmittingSiteFlow] = useState<string | null>(null);
+
+  const resubmitToSiteFlow = async (orderId: string) => {
+    setResubmittingSiteFlow(orderId);
+    try {
+      const res = await fetch("/api/admin/orders/resubmit-siteflow", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success("Order submitted to PurePrint!");
+        fetchOrders();
+        if (selectedOrder?.id === orderId) {
+          setSelectedOrder({
+            ...selectedOrder,
+            siteFlowOrderId: data.siteFlowOrderId,
+            siteFlowError: null,
+          } as Order);
+        }
+      } else {
+        toast.error(`PurePrint submission failed: ${data.error}`);
+      }
+    } catch (e) {
+      toast.error("Resubmission failed");
+    } finally {
+      setResubmittingSiteFlow(null);
     }
   };
 
@@ -630,28 +662,128 @@ export default function AdminOrdersPage() {
                             <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mb-2">Order Identifiers</p>
                             <div className="space-y-3">
                                 <div>
-                                    <p className="text-[10px] font-semibold text-white/40 mb-1">Order ID</p>
-                                    <p className="text-white/90 text-xs font-mono bg-black/20 p-2 rounded border border-white/5 truncate">
+                                    <div className="flex items-center justify-between mb-1">
+                                        <p className="text-[10px] font-semibold text-white/40">Order ID</p>
+                                        {selectedOrder.id && (
+                                            <button
+                                                onClick={() => handleCopyUrl(selectedOrder.id, "Order ID", "orderId")}
+                                                className="text-[9px] text-white/40 hover:text-white flex items-center gap-1 bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded transition-all cursor-pointer"
+                                                title="Copy Order ID"
+                                            >
+                                                {copiedField === 'orderId' ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
+                                                <span>{copiedField === 'orderId' ? 'Copied' : 'Copy'}</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                    <p className="text-white/90 text-xs font-mono font-bold break-all bg-black/20 p-2 rounded border border-white/5 select-all">
                                         {selectedOrder.id || 'N/A'}
                                     </p>
                                 </div>
                                 <div>
-                                    <p className="text-[10px] font-semibold text-white/40 mb-1">Book ID</p>
-                                    <p className="text-white/90 text-xs font-mono bg-black/20 p-2 rounded border border-white/5 truncate">
+                                    <div className="flex items-center justify-between mb-1">
+                                        <p className="text-[10px] font-semibold text-white/40">Book ID</p>
+                                        {selectedOrder.bookId && (
+                                            <button
+                                                onClick={() => handleCopyUrl(selectedOrder.bookId!, "Book ID", "bookId")}
+                                                className="text-[9px] text-white/40 hover:text-white flex items-center gap-1 bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded transition-all cursor-pointer"
+                                                title="Copy Book ID"
+                                            >
+                                                {copiedField === 'bookId' ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
+                                                <span>{copiedField === 'bookId' ? 'Copied' : 'Copy'}</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                    <p className="text-white/90 text-xs font-mono font-bold break-all bg-black/20 p-2 rounded border border-white/5 select-all">
                                         {selectedOrder.bookId || 'N/A'}
                                     </p>
                                 </div>
                                 {selectedOrder.type !== 'soft' && (
-                                    <div>
-                                        <p className="text-[10px] font-semibold text-white/40 mb-1">Source Order ID (18 chars for SiteFlow)</p>
-                                        <p className="text-white/90 text-xs font-mono bg-black/20 p-2 rounded border border-white/5 truncate">
-                                            {selectedOrder.id 
-                                                ? (selectedOrder.id.length > 18 
-                                                    ? selectedOrder.id.substring(selectedOrder.id.length - 18) 
-                                                    : selectedOrder.id) 
-                                                : 'N/A'}
-                                        </p>
-                                    </div>
+                                    <>
+                                        <div>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <p className="text-[10px] font-semibold text-white/40">Source Order ID (18 chars for SiteFlow)</p>
+                                                {selectedOrder.id && (
+                                                    <button
+                                                        onClick={() => {
+                                                            const sourceId = selectedOrder.id.length > 18 ? selectedOrder.id.substring(selectedOrder.id.length - 18) : selectedOrder.id;
+                                                            handleCopyUrl(sourceId, "Source Order ID", "sourceOrderId");
+                                                        }}
+                                                        className="text-[9px] text-white/40 hover:text-white flex items-center gap-1 bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded transition-all cursor-pointer"
+                                                        title="Copy Source Order ID"
+                                                    >
+                                                        {copiedField === 'sourceOrderId' ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
+                                                        <span>{copiedField === 'sourceOrderId' ? 'Copied' : 'Copy'}</span>
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <p className="text-white/90 text-xs font-mono font-bold break-all bg-black/20 p-2 rounded border border-white/5 select-all">
+                                                {selectedOrder.id 
+                                                    ? (selectedOrder.id.length > 18 
+                                                        ? selectedOrder.id.substring(selectedOrder.id.length - 18) 
+                                                        : selectedOrder.id) 
+                                                    : 'N/A'}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-bold text-emerald-400/90 uppercase tracking-wider mb-1.5">
+                                                SiteFlow Order ID (Returned by PurePrint)
+                                            </p>
+                                            {selectedOrder.siteFlowOrderId ? (
+                                                <div className="bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20 space-y-1.5">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-[10px] font-black text-emerald-400/80 uppercase tracking-widest flex items-center gap-1">
+                                                            <CheckCircle className="w-3 h-3 text-emerald-400" />
+                                                            Status: Active in Print Queue
+                                                        </span>
+                                                        <button
+                                                            onClick={() => handleCopyUrl(selectedOrder.siteFlowOrderId!, "SiteFlow Order ID", "siteFlowId")}
+                                                            className="text-[9px] text-emerald-400/60 hover:text-emerald-300 flex items-center gap-1 bg-emerald-500/20 px-2 py-0.5 rounded transition-all"
+                                                        >
+                                                            {copiedField === 'siteFlowId' ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
+                                                            <span>{copiedField === 'siteFlowId' ? 'Copied' : 'Copy'}</span>
+                                                        </button>
+                                                    </div>
+                                                    <p className="text-emerald-400 text-xs font-mono font-bold break-all bg-black/40 p-2 rounded-lg border border-emerald-500/20 select-all">
+                                                        {selectedOrder.siteFlowOrderId}
+                                                    </p>
+                                                </div>
+                                            ) : selectedOrder.status === 'pending_approval' ? (
+                                                <div className="bg-amber-500/10 p-2.5 rounded-xl border border-amber-500/20">
+                                                    <p className="text-amber-400 text-xs font-bold flex items-center gap-1.5 leading-snug">
+                                                        <Clock className="w-3.5 h-3.5 shrink-0" />
+                                                        Awaiting Admin Approval (Will be generated upon approval)
+                                                    </p>
+                                                </div>
+                                            ) : selectedOrder.siteFlowError ? (
+                                                <div className="bg-red-500/10 p-3.5 rounded-xl border-2 border-red-500/30 space-y-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                                                        <span className="text-xs font-bold text-red-400 uppercase tracking-wider">
+                                                            Print Submission Issue
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-red-300/80 text-[11px] bg-black/40 p-2.5 rounded-lg border border-red-500/20 font-mono break-all leading-relaxed">
+                                                        {selectedOrder.siteFlowError}
+                                                    </p>
+                                                    <button
+                                                        onClick={() => resubmitToSiteFlow(selectedOrder.id)}
+                                                        disabled={resubmittingSiteFlow === selectedOrder.id}
+                                                        className="w-full py-3 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-black text-xs rounded-xl transition-all shadow-lg shadow-red-600/30 flex items-center justify-center gap-2 cursor-pointer border border-red-400/30"
+                                                    >
+                                                        {resubmittingSiteFlow === selectedOrder.id ? (
+                                                            <><Loader2 className="w-4 h-4 animate-spin" /> SUBMITTING TO PUREPRINT...</>
+                                                        ) : (
+                                                            <><RefreshCw className="w-4 h-4" /> RE-SUBMIT ORDER TO PUREPRINT</>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <p className="text-white/40 text-xs font-mono bg-black/20 p-2 rounded border border-white/5 italic">
+                                                    Not submitted yet
+                                                </p>
+                                            )}
+                                        </div>
+                                    </>
                                 )}
                             </div>
                         </div>
