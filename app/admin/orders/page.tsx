@@ -47,6 +47,9 @@ interface Order {
   bookId?: string;
   status: 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refund_pending' | 'refunded' | 'pending_approval' | 'approved';
   shippingDetails?: any;
+  shippingAddress?: any;
+  phone?: string | null;
+  paymentIntentId?: string | null;  // Stripe pi_... (real payment transaction ID)
   paymentMethod: string;
   customerName?: string;
   createdAt: string;
@@ -1027,14 +1030,29 @@ export default function AdminOrdersPage() {
 
                         <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5">
                             <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mb-2">Shipping Address</p>
-                            {selectedOrder.shippingDetails?.address ? (
-                                <div className="text-white/60 text-xs leading-relaxed">
-                                    <p>{selectedOrder.shippingDetails.address.line1}</p>
-                                    {selectedOrder.shippingDetails.address.line2 && <p>{selectedOrder.shippingDetails.address.line2}</p>}
-                                    <p>{selectedOrder.shippingDetails.address.city}, {selectedOrder.shippingDetails.address.state} {selectedOrder.shippingDetails.address.postal_code}</p>
-                                    <p className="font-bold text-white/80">{selectedOrder.shippingDetails.address.country}</p>
-                                </div>
-                            ) : (
+                            {selectedOrder.shippingDetails?.address || selectedOrder.shippingAddress ? (() => {
+                                const addr = selectedOrder.shippingDetails?.address;
+                                const meta = (() => {
+                                    try { return typeof selectedOrder.shippingAddress === 'string' ? JSON.parse(selectedOrder.shippingAddress) : (selectedOrder.shippingAddress || {}); }
+                                    catch { return {}; }
+                                })();
+                                const phone = meta?.phone || selectedOrder.phone || null;
+                                const postalCode = meta?.postalCode || addr?.postal_code || meta?.postal_code || null;
+                                return (
+                                    <div className="text-white/60 text-xs leading-relaxed space-y-1">
+                                        {addr?.line1 && <p>{addr.line1}</p>}
+                                        {addr?.line2 && <p>{addr.line2}</p>}
+                                        <p>{[addr?.city || meta?.city, addr?.state || meta?.state, postalCode].filter(Boolean).join(', ')}</p>
+                                        <p className="font-bold text-white/80">{addr?.country || meta?.country}</p>
+                                        {phone && (
+                                            <p className="flex items-center gap-1.5 mt-1 text-white/50">
+                                                <span className="text-[9px] font-bold text-white/30 uppercase tracking-wider">Phone:</span>
+                                                <span className="font-bold text-white/70">{phone}</span>
+                                            </p>
+                                        )}
+                                    </div>
+                                );
+                            })() : (
                                 <p className="text-white/20 text-xs italic">No shipping address (Digital product)</p>
                             )}
                         </div>
@@ -1263,6 +1281,9 @@ export default function AdminOrdersPage() {
                                               </div>
                                               <div className="text-base font-black text-gray-900">{invoiceData.customer.name}</div>
                                               <p className="text-xs font-bold text-[#be2826] mt-0.5">{invoiceData.customer.email}</p>
+                                              {invoiceData.customer.phone && (
+                                                  <p className="text-xs font-bold text-gray-600 mt-0.5">📞 {invoiceData.customer.phone}</p>
+                                              )}
                                               <div className="text-xs text-gray-600 mt-2 leading-relaxed font-medium">
                                                   <p>{invoiceData.customer.address.line1}</p>
                                                   {invoiceData.customer.address.line2 && <p>{invoiceData.customer.address.line2}</p>}
@@ -1320,9 +1341,12 @@ export default function AdminOrdersPage() {
                                           <div className="flex-1">
                                               <div className="p-4 rounded-xl border-2 border-dashed border-gray-200 flex items-center gap-3 bg-gray-50/50">
                                                   <CheckCircle className="w-6 h-6 text-green-600 shrink-0" />
-                                                  <div>
+                                                  <div className="min-w-0">
                                                       <p className="text-[9px] font-black uppercase tracking-widest text-gray-700">Payment Verified</p>
-                                                      <p className="font-black text-xs text-gray-900">Transaction ID: {(selectedOrder?.orderId || selectedOrder?.id || '').slice(0, 16)}...</p>
+                                                      <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mt-0.5">Transaction ID</p>
+                                                      <p className="font-black text-[13px] text-gray-900 tracking-widest font-mono mt-0.5">
+                                                          {invoiceData.transactionRef || invoiceData.transactionId?.slice(-12) || 'N/A'}
+                                                      </p>
                                                   </div>
                                               </div>
                                           </div>

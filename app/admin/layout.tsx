@@ -18,6 +18,7 @@ import {
   Ticket,
   Undo2,
   Home,
+  DollarSign,
 } from "lucide-react";
 import { UserAvatar } from "@/components/auth/UserAvatar";
 import { useSession, signOut } from "next-auth/react";
@@ -26,6 +27,7 @@ const navItems: Array<{ href?: string; label?: string; icon?: any; isSeparator?:
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/", label: "Home", icon: Home },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart },
+  { href: "/admin/payments", label: "Payments", icon: DollarSign },
   { href: "/admin/refunds", label: "Refunds", icon: Undo2 },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/stickers", label: "Stickers", icon: Palette },

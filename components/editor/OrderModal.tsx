@@ -143,6 +143,8 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
     if (!shippingInfo.country) errors.push("country");
     if (!shippingInfo.line1) errors.push("line1");
     if (!shippingInfo.city) errors.push("city");
+    if (!shippingInfo.postalCode) errors.push("postalCode");
+    if (!shippingInfo.phone) errors.push("phone");
 
     if (errors.length > 0) {
       setShippingErrors(errors);
@@ -382,10 +384,9 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
                                 }}
                                 className={`bg-white/5 border ${shippingErrors.includes("line1") ? "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]" : "border-white/10"} rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500 placeholder-white/30 transition-all`}
                             />
-                            
                             <div className="grid grid-cols-2 gap-2">
                                 <input 
-                                    placeholder="City"
+                                    placeholder="City *"
                                     value={shippingInfo.city}
                                     onChange={e => {
                                         setShippingInfo({...shippingInfo, city: e.target.value});
@@ -395,12 +396,26 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
                                 />
                                 
                                 <input 
-                                    placeholder="Postcode / ZIP"
+                                    placeholder="Postcode / ZIP *"
                                     value={shippingInfo.postalCode}
-                                    onChange={e => setShippingInfo({...shippingInfo, postalCode: e.target.value})}
-                                    className="bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500 placeholder-white/30"
+                                    onChange={e => {
+                                        setShippingInfo({...shippingInfo, postalCode: e.target.value});
+                                        setShippingErrors(prev => prev.filter(err => err !== "postalCode"));
+                                    }}
+                                    className={`bg-white/5 border ${shippingErrors.includes("postalCode") ? "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]" : "border-white/10"} rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500 placeholder-white/30 transition-all`}
                                 />
                             </div>
+
+                            <input 
+                                placeholder="Phone Number *"
+                                type="tel"
+                                value={shippingInfo.phone}
+                                onChange={e => {
+                                    setShippingInfo({...shippingInfo, phone: e.target.value});
+                                    setShippingErrors(prev => prev.filter(err => err !== "phone"));
+                                }}
+                                className={`bg-white/5 border ${shippingErrors.includes("phone") ? "border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]" : "border-white/10"} rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-red-500 placeholder-white/30 transition-all`}
+                            />
                          </div>
                     </div>
                 )}

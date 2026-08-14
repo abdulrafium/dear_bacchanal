@@ -1033,7 +1033,10 @@ const CustomizeRitual = () => {
                           <CheckCircle className="w-8 h-8 text-green-500" />
                           <div>
                             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Payment Verified</p>
-                            <p className="font-black text-sm text-gray-900">Transaction ID: {(invoiceData.orderId || '').slice(0, 16)}...</p>
+                            <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mt-0.5">Transaction ID</p>
+                            <p className="font-black text-base text-gray-900 tracking-widest font-mono mt-0.5">
+                              {invoiceData.transactionRef || (invoiceData.orderId || '').slice(-12) || 'N/A'}
+                            </p>
                           </div>
                         </div>
                       </div>

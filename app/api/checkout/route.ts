@@ -116,14 +116,9 @@ export async function POST(req: NextRequest) {
                   }),
         };
 
-        if (orderType === 'hard') {
-            const allowedCountries = countries
-                .filter(c => c.enabled && c.code && c.code.length === 2)
-                .map(c => c.code);
-            checkoutSessionOptions.shipping_address_collection = {
-                allowed_countries: allowedCountries.length > 0 ? allowedCountries : ["US", "CA", "GB"],
-            };
-        }
+        // NOTE: Shipping address is collected in our OrderModal form and stored in
+        // session metadata as `shippingAddress` (JSON). We do NOT use Stripe's
+        // built-in shipping_address_collection to avoid asking the user twice.
 
 
         const checkoutSession = await stripe.checkout.sessions.create(checkoutSessionOptions);

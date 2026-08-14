@@ -17,6 +17,7 @@ export type StripeCheckoutSession = {
   amount_total?: number | null;
   currency?: string | null;
   payment_method_types?: string[] | null;
+  payment_intent?: string | { id: string } | null;  // Stripe payment intent (pi_...)
   created?: number;
 };
 
@@ -49,6 +50,10 @@ export function buildOrderRecord(
       : null,
     email: email || "",
     orderId: session.id,
+    // The actual payment transaction ID (pi_...) — different from the checkout session ID
+    paymentIntentId: typeof session.payment_intent === "string"
+      ? session.payment_intent
+      : (session.payment_intent as any)?.id || null,
     amount: session.amount_total || 0,
     currency: session.currency || "usd",
     type: orderType,
@@ -146,6 +151,10 @@ export async function upsertOrderFromCheckoutSession(
     if (orderRecord.type === "hard" && existing.status === "processing") {
       updates.status = "pending_approval";
     }
+    // Backfill paymentIntentId if missing on existing order
+    if (!existing.paymentIntentId && orderRecord.paymentIntentId) {
+      updates.paymentIntentId = orderRecord.paymentIntentId;
+    }
 
     if (Object.keys(updates).length > 1) {
       await ordersCollection.updateOne({ orderId: session.id }, { $set: updates });
@@ -180,6 +189,46 @@ export async function upsertOrderFromCheckoutSession(
         },
       }
     );
+  }
+
+  // ── Write to payments ledger (only for new orders) ───────────────────────
+  if (!existing && orderRecord.amount && orderRecord.amount > 0) {
+    try {
+      const paymentsCollection = db.collection("payments");
+
+      // Calculate running balance: sum all previous payment amounts
+      const aggResult = await paymentsCollection
+        .aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }])
+        .toArray();
+      const previousBalance = aggResult[0]?.total || 0;
+      const afterBalance = previousBalance + orderRecord.amount;
+
+      const insertedOrder = await ordersCollection.findOne({ orderId: session.id });
+      const objectIdHex = insertedOrder?._id?.toString() || '';
+      const tsSeconds = objectIdHex ? parseInt(objectIdHex.slice(0, 8), 16) : Math.floor(Date.now() / 1000);
+      const counterPart = objectIdHex ? parseInt(objectIdHex.slice(-6), 16) % 1000000 : 0;
+      const transactionRef = `${tsSeconds}${String(counterPart).padStart(6, '0')}`;
+
+      await paymentsCollection.insertOne({
+        orderId: session.id,
+        paymentIntentId: orderRecord.paymentIntentId || null,
+        transactionRef,
+        orderDbId: insertedOrder?._id?.toString() || null,
+        userId: orderRecord.userId || null,
+        email: orderRecord.email,
+        customerName: orderRecord.customerName,
+        amount: orderRecord.amount,          // in cents
+        currency: orderRecord.currency,
+        type: orderRecord.type,
+        templateName: orderRecord.templateName,
+        status: 'paid',
+        previousBalance,   // cumulative total before this payment (cents)
+        afterBalance,      // cumulative total after this payment (cents)
+        createdAt: new Date(),
+      });
+    } catch (paymentErr) {
+      console.error("[payments] Failed to write payment ledger record:", paymentErr);
+    }
   }
 }
 
@@ -266,6 +315,27 @@ export async function sendOrderConfirmationEmailIfNeeded(
     "Dear Bacchanal Edition";
 
   try {
+    const amountTotal = session.amount_total ?? order.amount ?? 0;
+    
+    // Always generate PDF invoice
+    const pdfBuffer = await generateInvoicePDF({
+      orderId: session.id,
+      date: new Date(),
+      customerName,
+      customerEmail: email,
+      amount: amountTotal / 100,
+      type: orderType,
+      bookTitle,
+    });
+
+    const attachments = [
+      {
+        filename: `Invoice-${session.id.slice(-8).toUpperCase()}.pdf`,
+        content: pdfBuffer,
+        contentType: "application/pdf",
+      },
+    ];
+
     if (orderType === "hard") {
       const emailHtml = getHardCopyOrderReceivedEmail({
         customerName,
@@ -275,23 +345,14 @@ export async function sendOrderConfirmationEmailIfNeeded(
       });
       const result = await sendEmail({
         to: email,
-        subject: "Hard Copy Order Received",
+        subject: `Hard Copy Order Received - ${orderNumber}`,
         html: emailHtml,
+        attachments,
       });
       if (!result.success) {
         throw result.error || new Error("Hard copy email send failed");
       }
     } else {
-      const amountTotal = session.amount_total ?? order.amount ?? 0;
-      const pdfBuffer = await generateInvoicePDF({
-        orderId: session.id,
-        date: new Date(),
-        customerName,
-        customerEmail: email,
-        amount: amountTotal / 100,
-        type: orderType,
-        bookTitle,
-      });
       const emailHtml = getOrderConfirmationEmail({
         orderId: session.id,
         amount: amountTotal / 100,
@@ -305,13 +366,7 @@ export async function sendOrderConfirmationEmailIfNeeded(
         to: email,
         subject: `Your Dear Bacchanal Order Confirmation - ${orderNumber}`,
         html: emailHtml,
-        attachments: [
-          {
-            filename: `Invoice-${session.id.slice(-8).toUpperCase()}.pdf`,
-            content: pdfBuffer,
-            contentType: "application/pdf",
-          },
-        ],
+        attachments,
       });
       if (!result.success) {
         throw result.error || new Error("Soft copy email send failed");

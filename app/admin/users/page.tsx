@@ -59,18 +59,22 @@ export default function AdminUsersPage() {
   });
   const [cardForm, setCardForm] = useState({
     cardNumber: '',
+    last4: '',
     expDate: '',
     cvc: '',
     cardholderName: '',
     country: '',
     brand: ''
   });
+  const [showCardNumber, setShowCardNumber] = useState(false);
+  const [showCvc, setShowCvc] = useState(false);
 
   const openCardModal = (user: User) => {
     const info = user.cardInfo;
     const expDateStr = info?.expDate || (info?.expMonth && info?.expYear ? `${info.expMonth} / ${info.expYear}` : '');
     setCardForm({
       cardNumber: info?.cardNumber || '',
+      last4: info?.last4 || '',
       expDate: expDateStr,
       cvc: info?.cvc || '',
       cardholderName: info?.cardholderName || (user.cardInfo ? (user.name || '') : ''),
@@ -78,6 +82,8 @@ export default function AdminUsersPage() {
       brand: info?.brand || ''
     });
     setCardModal({ open: true, user });
+    setShowCardNumber(false);
+    setShowCvc(false);
   };
 
   const openConfirm = (title: string, description: string, onConfirm: () => Promise<void>) => {
@@ -596,47 +602,65 @@ export default function AdminUsersPage() {
               {/* 1. Card Information */}
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-white/60">Card information</label>
-                
-                <div className="border border-white/10 rounded-xl bg-black/40 overflow-hidden transition-all">
-                  {/* Card Number Input (Read Only) */}
-                  <div className="flex items-center justify-between px-3.5 py-2 border-b border-white/10">
-                    <input
-                      type="text"
-                      readOnly
-                      value={cardForm.cardNumber}
-                      placeholder="1234 1234 1234 1234"
-                      className="bg-transparent text-white font-mono text-xs focus:outline-none w-full tracking-wider cursor-default"
-                    />
-                    <div className="flex items-center gap-1 shrink-0 opacity-80">
+
+                <div className="border border-white/10 rounded-xl bg-black/40 overflow-hidden">
+                  {/* Card Number row */}
+                  <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-white/10 gap-3">
+                    <span className="font-mono text-sm tracking-[0.2em] flex-1 select-none text-white">
+                      {showCardNumber && cardForm.last4 ? (
+                        // Revealed: show **** **** **** with last-4 highlighted
+                        <span>
+                          <span className="text-white/40">**** **** **** </span>
+                          <span className="text-emerald-400 font-bold text-base">{cardForm.last4}</span>
+                        </span>
+                      ) : showCardNumber && cardForm.cardNumber ? (
+                        // Revealed but no last4 separately — show raw stored value
+                        <span className="text-white/70">{cardForm.cardNumber}</span>
+                      ) : cardForm.last4 || cardForm.cardNumber ? (
+                        // Hidden state
+                        <span className="text-white/50 tracking-[0.25em]">**** **** **** ****</span>
+                      ) : (
+                        <span className="text-white/20 text-xs tracking-normal">No card on file</span>
+                      )}
+                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {(cardForm.last4 || cardForm.cardNumber) && (
+                        <button
+                          type="button"
+                          onClick={() => setShowCardNumber(v => !v)}
+                          className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/40 hover:text-white transition-all"
+                          title={showCardNumber ? 'Hide' : 'Reveal last 4 digits'}
+                        >
+                          {showCardNumber ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
                       <span className="text-[9px] font-black text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20">VISA</span>
                       <span className="text-[9px] font-black text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">MC</span>
-                      <span className="text-[9px] font-black text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20">AMEX</span>
                     </div>
                   </div>
 
-                  {/* Grid for Exp Date and CVC (Read Only) */}
+                  {/* Exp Date + CVC row */}
                   <div className="grid grid-cols-2 divide-x divide-white/10">
-                    <div className="px-3.5 py-2">
-                      <input
-                        type="text"
-                        readOnly
-                        value={cardForm.expDate}
-                        placeholder="MM / YY"
-                        className="bg-transparent text-white font-mono text-xs focus:outline-none w-full cursor-default"
-                      />
+                    <div className="px-3.5 py-2.5">
+                      <p className="text-[9px] text-white/30 font-semibold uppercase tracking-wider mb-0.5">Expires</p>
+                      <span className="font-mono text-sm text-white tracking-wider">
+                        {cardForm.expDate || <span className="text-white/20">—</span>}
+                      </span>
                     </div>
-                    <div className="px-3.5 py-2 flex items-center justify-between">
-                      <input
-                        type="text"
-                        readOnly
-                        value={cardForm.cvc}
-                        placeholder="CVC"
-                        className="bg-transparent text-white font-mono text-xs focus:outline-none w-full cursor-default"
-                      />
-                      <CreditCard className="w-3.5 h-3.5 text-white/30 shrink-0" />
+                    <div className="px-3.5 py-2.5">
+                      <p className="text-[9px] text-white/30 font-semibold uppercase tracking-wider mb-0.5">CVC</p>
+                      <span className="font-mono text-sm text-white/30 tracking-widest italic text-xs">
+                        Not stored
+                      </span>
                     </div>
                   </div>
                 </div>
+
+                {/* Stripe PCI note */}
+                <p className="text-[10px] text-white/25 pt-0.5 flex items-center gap-1">
+                  <span>🔒</span>
+                  Stripe only shares last 4 digits. Full card &amp; CVC are never accessible to merchants.
+                </p>
               </div>
 
               {/* 2. Cardholder Name (Read Only) */}

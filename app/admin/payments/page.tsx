@@ -1,177 +1,283 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { 
-  DollarSign, 
-  TrendingUp, 
-  Users, 
-  CreditCard, 
-  ArrowUpRight, 
-  ArrowDownRight,
-  Calendar,
-  Loader2,
-  PieChart,
-  Activity
+import { useEffect, useState, useCallback } from "react";
+import {
+  Search, Trash2, Loader2, RefreshCw, DollarSign,
+  ChevronLeft, ChevronRight, X, TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
-interface Stats {
-  totalRevenue: number;
-  totalOrders: number;
-  averageOrderValue: number;
-  recentPayments: any[];
+interface Payment {
+  id: string;
+  orderId: string;
+  orderDbId: string | null;
+  paymentIntentId: string | null;
+  transactionRef: string;
+  userId: string | null;
+  email: string;
+  customerName: string;
+  amount: number;
+  currency: string;
+  type: "soft" | "hard";
+  templateName: string;
+  status: string;
+  previousBalance: number;
+  afterBalance: number;
+  createdAt: string;
+}
+
+function fmt(cents: number, currency = "usd") {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency.toUpperCase(),
+    minimumFractionDigits: 2,
+  }).format(cents / 100);
+}
+
+function fmtDate(d: string) {
+  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+function fmtTime(d: string) {
+  return new Date(d).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 }
 
 export default function AdminPaymentsPage() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [payments, setPayments]       = useState<Payment[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [search, setSearch]           = useState("");
+  const [page, setPage]               = useState(1);
+  const [totalPages, setTotalPages]   = useState(1);
+  const [total, setTotal]             = useState(0);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [deletingAll, setDeletingAll] = useState(false);
 
-  useEffect(() => {
-    fetchStats();
-  }, []);
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean; title: string; description: string; onConfirm: () => Promise<void>;
+  }>({ open: false, title: "", description: "", onConfirm: async () => {} });
 
-  const fetchStats = async () => {
+  const closeConfirm = () => setConfirmModal(m => ({ ...m, open: false }));
+
+  const fetchPayments = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await fetch("/api/admin/stats");
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data);
-      }
-    } catch (error) {
-      toast.error("Failed to load payment stats");
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: "10",
+        ...(search ? { search } : {}),
+      });
+      const res = await fetch(`/api/admin/payments?${params}`);
+      const data = await res.json();
+      setPayments(data.payments || []);
+      setTotal(data.total || 0);
+      setTotalPages(data.totalPages || 1);
+    } catch {
+      toast.error("Failed to fetch payments");
     } finally {
       setLoading(false);
     }
+  }, [page, search]);
+
+  useEffect(() => { fetchPayments(); }, [fetchPayments]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setPage(1), 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const handleDelete = (payment: Payment) => {
+    setConfirmModal({
+      open: true,
+      title: "Delete Payment Record",
+      description: `Remove ledger entry for ${payment.customerName} (${fmt(payment.amount, payment.currency)})? This only removes the record — it does NOT refund the customer.`,
+      onConfirm: async () => {
+        setDeletingIds(prev => new Set(prev).add(payment.id));
+        setConfirmModal(m => ({ ...m, open: false }));
+        try {
+          const res = await fetch(`/api/admin/payments?id=${payment.id}`, { method: "DELETE" });
+          if (res.ok) { toast.success("Deleted"); fetchPayments(); }
+          else toast.error("Failed to delete");
+        } finally {
+          setDeletingIds(prev => { const s = new Set(prev); s.delete(payment.id); return s; });
+        }
+      },
+    });
   };
 
-  if (loading) {
-    return (
-      <div className="h-[600px] flex items-center justify-center">
-        <Loader2 className="w-12 h-12 text-red-500 animate-spin" />
-      </div>
-    );
-  }
+  const handleDeleteAll = () => {
+    setConfirmModal({
+      open: true,
+      title: "Delete ALL Payment Records",
+      description: `Permanently remove all ${total} ledger entries. Actual Stripe charges are NOT affected.`,
+      onConfirm: async () => {
+        setDeletingAll(true);
+        setConfirmModal(m => ({ ...m, open: false }));
+        try {
+          const res = await fetch(`/api/admin/payments?all=true`, { method: "DELETE" });
+          if (res.ok) { toast.success("All records deleted"); fetchPayments(); }
+          else toast.error("Failed");
+        } finally { setDeletingAll(false); }
+      },
+    });
+  };
+
+  const grandTotal = payments.length > 0 ? payments[0].afterBalance : 0;
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div>
-        <h1 className="text-3xl font-display font-black text-white tracking-tight uppercase">Financial Overview</h1>
-        <p className="text-white/40 text-sm">Monitor revenue, transactions, and payment health</p>
-      </div>
-
-      {/* Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <MetricCard 
-          title="Total Revenue" 
-          value={`$${((stats?.totalRevenue || 0) / 100).toLocaleString()}`} 
-          trend="+12.5%" 
-          trendUp={true} 
-          icon={DollarSign}
-          color="text-green-400"
-          bg="bg-green-400/10"
-        />
-        <MetricCard 
-          title="Total Orders" 
-          value={stats?.totalOrders || 0} 
-          trend="+8.2%" 
-          trendUp={true} 
-          icon={CreditCard}
-          color="text-blue-400"
-          bg="bg-blue-400/10"
-        />
-        <MetricCard 
-          title="Avg. Order Value" 
-          value={`$${((stats?.averageOrderValue || 0) / 100).toFixed(2)}`} 
-          trend="-2.4%" 
-          trendUp={false} 
-          icon={TrendingUp}
-          color="text-purple-400"
-          bg="bg-purple-400/10"
-        />
-        <MetricCard 
-          title="Conversion Rate" 
-          value="3.2%" 
-          trend="+0.6%" 
-          trendUp={true} 
-          icon={Activity}
-          color="text-orange-400"
-          bg="bg-orange-400/10"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        {/* Recent Transactions */}
-        <div className="xl:col-span-2 bg-[#0f0f0f] border border-white/5 rounded-3xl p-8 shadow-2xl">
-          <div className="flex items-center justify-between mb-8">
-            <h3 className="text-xl font-bold text-white uppercase tracking-tighter">Recent Transactions</h3>
-            <button className="text-[10px] font-black text-red-500 hover:text-red-400 uppercase tracking-widest transition-all">View All</button>
+    <div className="min-h-screen bg-[#0a0a0a] text-white">
+      <div className="mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+              <DollarSign className="w-6 h-6 text-emerald-400" />
+              Payments
+            </h1>
+            <p className="text-white/40 text-sm mt-0.5">{total} payment{total !== 1 ? "s" : ""} recorded</p>
           </div>
-          
-          <div className="space-y-4">
-            {stats?.recentPayments?.map((payment: any, idx: number) => (
-              <div key={idx} className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all cursor-pointer group">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-white/40 group-hover:text-white transition-all">
-                    <DollarSign className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold text-white">{payment.email}</p>
-                    <p className="text-[10px] text-white/20 uppercase font-black">{format(new Date(payment.createdAt), 'MMM dd, yyyy · HH:mm')}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-black text-white">${(payment.amount / 100).toFixed(2)}</p>
-                  <p className="text-[9px] text-green-400 font-black uppercase tracking-widest">Successful</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Payment Methods */}
-        <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-8 shadow-2xl">
-          <h3 className="text-xl font-bold text-white uppercase tracking-tighter mb-8 text-center">Revenue Distribution</h3>
-          <div className="relative h-64 flex items-center justify-center">
-            <div className="w-48 h-48 rounded-full border-[12px] border-white/5 flex items-center justify-center">
-              <div className="text-center">
-                <PieChart className="w-8 h-8 text-red-500 mx-auto mb-2" />
-                <p className="text-xs font-black text-white/40 uppercase">Stripe</p>
-                <p className="text-xl font-black text-white">100%</p>
-              </div>
+          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-2 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-emerald-400" />
+            <div>
+              <p className="text-[10px] text-emerald-400/70 uppercase tracking-wider font-semibold">Running Total</p>
+              <p className="text-emerald-400 font-black text-sm">{fmt(grandTotal, "usd")}</p>
             </div>
           </div>
-          <div className="mt-8 space-y-3">
-             <div className="flex items-center justify-between text-sm">
-                <span className="text-white/40 font-bold uppercase tracking-wider text-[10px]">Stripe Checkout</span>
-                <span className="text-white font-black">$...</span>
-             </div>
-             <div className="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                <div className="h-full bg-red-600 w-full" />
-             </div>
-          </div>
         </div>
-      </div>
-    </div>
-  );
-}
 
-function MetricCard({ title, value, trend, trendUp, icon: Icon, color, bg }: any) {
-  return (
-    <div className="bg-[#0f0f0f] border border-white/5 rounded-3xl p-6 hover:border-white/10 transition-all group">
-      <div className="flex items-start justify-between mb-4">
-        <div className={`p-3 rounded-2xl ${bg} ${color} transition-transform group-hover:scale-110 duration-500`}>
-          <Icon className="w-6 h-6" />
-        </div>
-        <div className={`flex items-center gap-1 text-[10px] font-black px-2 py-1 rounded-lg ${trendUp ? 'text-green-400 bg-green-400/10' : 'text-red-400 bg-red-400/10'}`}>
-          {trendUp ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-          {trend}
+        <div className="flex flex-col sm:flex-row gap-3 mt-5">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search by name, email or transaction ID..."
+              className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/20 transition-all"
+            />
+            {search && (
+              <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <button onClick={fetchPayments} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/60 hover:text-white text-sm font-medium transition-all">
+            <RefreshCw className="w-4 h-4" /> Refresh
+          </button>
+          {total > 0 && (
+            <button onClick={handleDeleteAll} disabled={deletingAll} className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 hover:text-red-300 text-sm font-medium transition-all disabled:opacity-50">
+              {deletingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              Delete All
+            </button>
+          )}
         </div>
       </div>
-      <div>
-        <p className="text-white/30 text-[10px] uppercase font-black tracking-[2px] mb-1">{title}</p>
-        <p className="text-2xl font-black text-white">{value}</p>
+
+      <div className="bg-[#111] border border-white/5 rounded-2xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[1000px]">
+            <thead>
+              <tr className="border-b border-white/5 bg-white/[0.02]">
+                {["Order / Date","Customer","Type","Amount","Prev Balance","After Balance","Status","Transaction ID","Action"].map(h => (
+                  <th key={h} className={`px-5 py-3.5 text-[11px] font-black uppercase tracking-widest text-white/30 whitespace-nowrap ${
+                    ["Amount","Prev Balance","After Balance"].includes(h) ? "text-right" : h === "Action" ? "text-center" : "text-left"
+                  }`}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={9} className="py-20 text-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-white/20 mx-auto" />
+                </td></tr>
+              ) : payments.length === 0 ? (
+                <tr><td colSpan={9} className="py-20 text-center">
+                  <div className="flex flex-col items-center gap-3 text-white/20">
+                    <DollarSign className="w-10 h-10" />
+                    <p className="text-sm font-medium">{search ? "No payments match your search" : "No payments recorded yet"}</p>
+                    {!search && <p className="text-xs">Payments appear automatically after each checkout.</p>}
+                  </div>
+                </td></tr>
+              ) : payments.map((p, i) => (
+                <tr key={p.id} className={`border-b border-white/5 hover:bg-white/[0.03] transition-colors ${i === 0 ? "bg-emerald-500/[0.025]" : ""}`}>
+                  <td className="px-5 py-4 whitespace-nowrap">
+                    <p className="font-mono text-xs text-white/80 font-bold">#{p.orderId.slice(-8).toUpperCase()}</p>
+                    <p className="text-[11px] text-white/35 mt-0.5">{fmtDate(p.createdAt)}</p>
+                    <p className="text-[10px] text-white/20">{fmtTime(p.createdAt)}</p>
+                  </td>
+                  <td className="px-5 py-4">
+                    <p className="font-semibold text-white text-sm">{p.customerName || "—"}</p>
+                    <p className="text-[11px] text-white/35">{p.email}</p>
+                  </td>
+                  <td className="px-5 py-4">
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
+                      p.type === "hard" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" : "bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                    }`}>
+                      {p.type === "hard" ? "Hard" : "Digital"}
+                    </span>
+                  </td>
+                  <td className="px-5 py-4 text-right whitespace-nowrap">
+                    <p className="font-black text-emerald-400 text-sm">{fmt(p.amount, p.currency)}</p>
+                    <p className="text-[10px] text-white/20 uppercase">{p.currency}</p>
+                  </td>
+                  <td className="px-5 py-4 text-right whitespace-nowrap">
+                    <p className="font-mono text-sm text-white/40">{fmt(p.previousBalance, p.currency)}</p>
+                  </td>
+                  <td className="px-5 py-4 text-right whitespace-nowrap">
+                    <p className="font-mono text-sm font-bold text-white">{fmt(p.afterBalance, p.currency)}</p>
+                    <p className="text-[10px] text-emerald-400/60">+{fmt(p.amount, p.currency)}</p>
+                  </td>
+                  <td className="px-5 py-4">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      PAID
+                    </span>
+                  </td>
+                  <td className="px-5 py-4">
+                    <p className="font-mono text-xs text-white/80 font-bold tracking-wider">{p.transactionRef}</p>
+                    {p.paymentIntentId && (
+                      <p className="text-[9px] text-white/20 mt-0.5 font-mono truncate max-w-[140px]" title={p.paymentIntentId}>
+                        {p.paymentIntentId.slice(0, 20)}...
+                      </p>
+                    )}
+                  </td>
+                  <td className="px-5 py-4 text-center">
+                    <button
+                      onClick={() => handleDelete(p)}
+                      disabled={deletingIds.has(p.id)}
+                      className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/20 transition-all disabled:opacity-50"
+                      title="Delete record"
+                    >
+                      {deletingIds.has(p.id) ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-5 py-4 border-t border-white/5">
+            <p className="text-xs text-white/30">Page {page} of {totalPages} · {total} total</p>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 transition-all">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 disabled:opacity-30 transition-all">
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      <ConfirmModal
+        isOpen={confirmModal.open}
+        onClose={closeConfirm}
+        title={confirmModal.title}
+        description={confirmModal.description}
+        onConfirm={confirmModal.onConfirm}
+        confirmLabel="Delete"
+        isDestructive
+      />
     </div>
   );
 }
