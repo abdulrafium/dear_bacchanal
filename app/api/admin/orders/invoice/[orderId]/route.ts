@@ -90,13 +90,14 @@ export async function GET(
     const phone = order.phone || parsedShippingAddress?.phone || order.shippingDetails?.phone || null;
     const postalCode = parsedShippingAddress?.postalCode || order.shippingDetails?.address?.postal_code || parsedShippingAddress?.postal_code || null;
 
-    // Generate a clean numeric transaction reference from the MongoDB ObjectId.
-    // ObjectId encodes creation timestamp in its first 4 bytes — gives us a
-    // deterministic, unique, purely-numeric ID like a bank slip reference.
+    // Use stored transactionRef if available (written at checkout time).
+    // For legacy orders, compute it deterministically from the MongoDB ObjectId —
+    // ObjectId encodes creation timestamp in first 4 bytes, so it's always the same.
     const objectIdHex = order._id.toString(); // 24-char hex
-    const tsSeconds = parseInt(objectIdHex.slice(0, 8), 16);          // unix timestamp (secs)
-    const counterPart = parseInt(objectIdHex.slice(-6), 16) % 1000000; // 0-999999
-    const transactionRef = `${tsSeconds}${String(counterPart).padStart(6, '0')}`; // e.g. "172365123400042"
+    const tsSeconds = parseInt(objectIdHex.slice(0, 8), 16);
+    const counterPart = parseInt(objectIdHex.slice(-6), 16) % 1000000;
+    const transactionRef: string = order.transactionRef ||
+      `${tsSeconds}${String(counterPart).padStart(6, '0')}`;
 
     // Return structured data for the invoice UI
     const invoiceData = {

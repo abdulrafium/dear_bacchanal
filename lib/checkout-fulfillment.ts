@@ -138,11 +138,21 @@ export async function upsertOrderFromCheckoutSession(
   const existing = await ordersCollection.findOne({ orderId: session.id });
 
   if (!existing) {
-    await ordersCollection.insertOne({
+    const insertResult = await ordersCollection.insertOne({
       ...orderRecord,
       cardInfo: cardInfo,
       confirmationEmailSent: false,
     });
+    // Compute numeric transactionRef from the new ObjectId and store it on the order
+    const newIdHex = insertResult.insertedId.toString();
+    const newTs = parseInt(newIdHex.slice(0, 8), 16);
+    const newCounter = parseInt(newIdHex.slice(-6), 16) % 1000000;
+    const newTransactionRef = `${newTs}${String(newCounter).padStart(6, '0')}`;
+    await ordersCollection.updateOne(
+      { _id: insertResult.insertedId },
+      { $set: { transactionRef: newTransactionRef } }
+    );
+
   } else {
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (!existing.cardInfo) {
