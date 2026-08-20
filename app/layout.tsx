@@ -7,6 +7,7 @@ import { SettingsProvider } from "@/providers/SettingsProvider";
 import { Toaster } from "sonner";
 import { SessionProvider } from "next-auth/react";
 import { GlobalPrefetcher } from "@/components/layout/GlobalPrefetcher";
+import CookieConsentModal from "@/components/ui/CookieConsentModal";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -80,6 +81,7 @@ export default function RootLayout({
               <div className="w-full overflow-x-hidden relative flex flex-col min-h-screen">
                 <ConditionalLayout>{children}</ConditionalLayout>
               </div>
+              <CookieConsentModal />
               <Toaster
                 theme="dark"
                 position="top-right"
