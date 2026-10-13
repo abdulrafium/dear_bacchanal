@@ -12,8 +12,11 @@ export async function POST(req: NextRequest) {
 
         const { orderId, reason } = await req.json();
 
-        if (!orderId || !reason) {
-            return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+        if (!orderId || !reason || typeof reason !== "string" || !reason.trim()) {
+            return NextResponse.json({ error: "Please provide a mandatory refund reason." }, { status: 400 });
+        }
+        if (reason.trim().length > 50) {
+            return NextResponse.json({ error: "Refund reason must be a short message of maximum 50 characters." }, { status: 400 });
         }
 
         const db = await getDatabase();
@@ -47,6 +50,28 @@ export async function POST(req: NextRequest) {
 
         if (order.status === 'refund_pending' || order.status === 'refunded') {
             return NextResponse.json({ error: "Refund already requested or processed" }, { status: 400 });
+        }
+
+        // 1. Hard Copy print check: Only allowed while pending_approval before admin approval
+        const isHardCopy = (order.type?.toLowerCase() === 'hard' || order.orderType?.toLowerCase() === 'hard');
+        if (isHardCopy && order.status !== 'pending_approval') {
+            return NextResponse.json({
+                error: "This order has already been approved and sent to PurePrint for printing and binding. According to our policy, hard copy orders cannot be refunded once printing has commenced."
+            }, { status: 400 });
+        }
+
+        // 2. Refund deadline check from platform settings
+        const settings = await db.collection("settings").findOne({ id: "platform_settings" });
+        const refundDeadlineDays = settings?.general?.refundDeadlineDays ?? 14;
+        if (order.createdAt) {
+            const orderDate = new Date(order.createdAt).getTime();
+            const now = Date.now();
+            const diffDays = (now - orderDate) / (1000 * 60 * 60 * 24);
+            if (diffDays > refundDeadlineDays) {
+                return NextResponse.json({
+                    error: `Sorry, you cannot request a refund. The ${refundDeadlineDays}-day refund window for this order has expired according to our refund policy.`
+                }, { status: 400 });
+            }
         }
 
         await ordersCollection.updateOne(

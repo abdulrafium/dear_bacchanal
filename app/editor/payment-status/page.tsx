@@ -2,14 +2,15 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, CheckCircle2, Download, Check, ArrowRight } from "lucide-react";
+import { getCleanPdfFromCache } from "@/lib/pdf-cache";
 
 export default function PaymentStatusPage() {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-screen bg-black text-white">
-        <Loader2 className="w-8 h-8 animate-spin" />
-        <p className="ml-3 text-lg">Loading...</p>
+        <Loader2 className="w-8 h-8 animate-spin text-[#9f2e2b]" />
+        <p className="ml-3 text-lg font-medium">Loading...</p>
       </div>
     }>
       <PaymentStatusContent />
@@ -28,6 +29,10 @@ function PaymentStatusContent() {
   );
   const [reason, setReason] = useState<string | null>(null);
   const [orderInfo, setOrderInfo] = useState<any>(null);
+
+  // Download state for soft copy
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloaded, setIsDownloaded] = useState(false);
 
   useEffect(() => {
     if (!sessionId || canceled) return;
@@ -68,119 +73,253 @@ function PaymentStatusContent() {
     verifyPayment();
   }, [sessionId, canceled]);
 
+  // Background upload of pre-rendered Hard Copy or Soft Copy PDFs to UploadThing & Database
   useEffect(() => {
-    if (status === "success") {
-      const timer = setTimeout(() => {
+    if (status !== "success") return;
+
+    const uploadFilesToCloud = async () => {
+      try {
+        const bookId = orderInfo?.bookId || orderInfo?.templateName || "Dear_Bacchanal";
+        const tmplName = orderInfo?.templateName || "Dear Bacchanal";
+        const cleanName = tmplName.replace(/\s+/g, "_");
+
+        const cached = await getCleanPdfFromCache(bookId);
+
+        if (orderInfo?.orderType === "hard") {
+          if (cached?.coverPdfBlob && cached?.textPdfBlob) {
+            const { uploadFiles } = await import("@/lib/uploadthing-client");
+            const coverFile = new File([cached.coverPdfBlob], `${cleanName}_Cover.pdf`, { type: "application/pdf" });
+            const textFile = new File([cached.textPdfBlob], `${cleanName}_Text.pdf`, { type: "application/pdf" });
+
+            const uploadResult = await uploadFiles("bookPdfUploader", {
+              files: [coverFile, textFile]
+            });
+
+            if (uploadResult && uploadResult.length === 2) {
+              const coverUrl = uploadResult.find(r => r.name.includes("_Cover"))?.url || uploadResult[0].url;
+              const textUrl = uploadResult.find(r => r.name.includes("_Text"))?.url || uploadResult[1].url;
+
+              await fetch("/api/editor/upload-pdf", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  coverUrl,
+                  textUrl,
+                  bookId,
+                  templateName: tmplName
+                }),
+              });
+              console.log("[payment-status] Hard copy print files uploaded to factory successfully!");
+            }
+          }
+        } else {
+          // Soft Copy (Digital PDF)
+          if (cached?.softPdfBlob) {
+            const { uploadFiles } = await import("@/lib/uploadthing-client");
+            const softFile = new File([cached.softPdfBlob], `${cleanName}_Digital.pdf`, { type: "application/pdf" });
+
+            const uploadResult = await uploadFiles("bookPdfUploader", {
+              files: [softFile]
+            });
+
+            if (uploadResult && uploadResult.length > 0) {
+              const softUrl = uploadResult[0].url;
+
+              await fetch("/api/editor/upload-pdf", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  softUrl,
+                  bookId,
+                  templateName: tmplName
+                }),
+              });
+              console.log("[payment-status] Soft copy digital PDF uploaded to cloud successfully!", softUrl);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("[payment-status] Background upload failed:", e);
+      }
+    };
+
+    uploadFilesToCloud();
+  }, [status, orderInfo]);
+
+  const handleDownloadSoftCopy = async () => {
+    if (isDownloading) return;
+    setIsDownloading(true);
+
+    try {
+      const bookId = orderInfo?.bookId || orderInfo?.templateName || "Dear_Bacchanal";
+      const cached = await getCleanPdfFromCache(bookId);
+      let blob = cached?.softPdfBlob;
+
+      // Fallback: check remote URL if available
+      if (!blob && (orderInfo?.savedSoftPdfUrl || orderInfo?.softUrl)) {
+        try {
+          const downloadRes = await fetch(orderInfo.savedSoftPdfUrl || orderInfo.softUrl);
+          if (downloadRes.ok) {
+            blob = await downloadRes.blob();
+          }
+        } catch (e) {
+          console.warn("Could not fetch remote soft PDF:", e);
+        }
+      }
+
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        const cleanName = (orderInfo?.templateName || "Dear_Bacchanal").replace(/\s+/g, "_");
+        a.download = `${cleanName}_Soft_Copy.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        setIsDownloaded(true);
+      } else {
+        // Fallback if cache cleared: redirect to editor to export
         const tplName = orderInfo?.templateName ? `&templateName=${encodeURIComponent(orderInfo.templateName)}` : '';
         const bId = orderInfo?.bookId ? `&bookId=${orderInfo.bookId}` : '';
-        const paymentType = orderInfo?.orderType === 'hard' ? 'success_hard' : 'success';
-        router.replace(`/editor?payment=${paymentType}${tplName}${bId}`);
-      }, 5000);
-      return () => clearTimeout(timer);
+        window.location.href = `/editor?payment=success${tplName}${bId}`;
+        return;
+      }
+    } catch (err) {
+      console.error("Soft copy download error:", err);
+    } finally {
+      setIsDownloading(false);
     }
-  }, [status, router, orderInfo]);
+  };
 
-  useEffect(() => {
-    if (status === "canceled") {
-      const timer = setTimeout(() => {
-        router.replace("/editor");
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [status, router]);
+  const handleGoToOrders = () => {
+    window.location.href = "/customize?tab=orders";
+  };
+
+  const isHardCopy = orderInfo?.orderType === "hard";
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-black text-white px-4">
-      <div className="text-center max-w-lg w-full">
-        {status === "loading" && (
-           <div className="space-y-4">
-             <Loader2 className="w-12 h-12 animate-spin mx-auto text-[#9f2e2b]" />
-             <p className="text-xl font-medium tracking-tight">Verifying your legacy...</p>
-           </div>
-        )}
+    <div className="flex items-center justify-center min-h-screen bg-black text-white px-4 select-none">
+      {/* ── 1. LOADING STATE (Verifying legacy...) ── */}
+      {status === "loading" && (
+        <div className="text-center max-w-sm w-full space-y-4 animate-in fade-in duration-300">
+          <Loader2 className="w-12 h-12 animate-spin mx-auto text-[#9f2e2b]" />
+          <p className="text-xl font-medium tracking-tight text-white/90">
+            Verifying your legacy...
+          </p>
+          <p className="text-xs text-white/40">
+            Confirming your transaction with Stripe
+          </p>
+        </div>
+      )}
 
-        {status === "success" && (
-          <div className="animate-in fade-in zoom-in duration-500">
-            <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-green-500/20">
-               <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
-            </div>
-            <h1 className="text-4xl font-black font-display mb-4 uppercase">Success!</h1>
-            
-            {orderInfo?.orderType === 'hard' ? (
-              <>
-                <p className="text-lg text-white/70 mb-8 leading-relaxed">
-                  Your physical book is now in the <span className="text-teal font-black italic">Print Queue</span>. 
-                  We are preparing your files for the printer.
-                </p>
-                <div className="flex flex-col gap-3">
-                  <button
-                    onClick={() => {
-                      const tplName = orderInfo?.templateName ? `&templateName=${encodeURIComponent(orderInfo.templateName)}` : '';
-                      const bId = orderInfo?.bookId ? `&bookId=${orderInfo.bookId}` : '';
-                      router.replace(`/editor?payment=success_hard${tplName}${bId}`);
-                    }}
-                    className="w-full py-4 bg-[#9f2e2b] text-white font-black rounded-2xl hover:bg-[#c8413d] transition-all shadow-[0_10px_40px_rgba(159,46,43,0.3)] uppercase tracking-widest text-sm"
-                  >
-                    Process Book For Print
-                  </button>
-                  <p className="text-[10px] text-white/30 uppercase font-bold tracking-[2px]">Automatic redirect in 5 seconds...</p>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="text-lg text-white/70 mb-8 leading-relaxed">
-                  Your payment is verified. Your digital carnival book is ready for generation.
-                </p>
-                <div className="flex flex-col gap-3">
-                  <button
-                    onClick={() => {
-                      const tplName = orderInfo?.templateName ? `&templateName=${encodeURIComponent(orderInfo.templateName)}` : '';
-                      const bId = orderInfo?.bookId ? `&bookId=${orderInfo.bookId}` : '';
-                      router.replace(`/editor?payment=success${tplName}${bId}`);
-                    }}
-                    className="w-full py-4 bg-[#9f2e2b] text-white font-black rounded-2xl hover:bg-[#c8413d] transition-all shadow-[0_10px_40px_rgba(159,46,43,0.3)] uppercase tracking-widest text-sm"
-                  >
-                    Download PDF Now
-                  </button>
-                  <p className="text-[10px] text-white/30 uppercase font-bold tracking-[2px]">Automatic download in 5 seconds...</p>
-                </div>
-              </>
-            )}
+      {/* ── 2. SUCCESS STATE (Exact Theme Modal Box) ── */}
+      {status === "success" && (
+        <div 
+          className="bg-[#18191c] border border-white/10 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl relative overflow-hidden text-center flex flex-col items-center animate-in zoom-in-95 duration-300 text-white"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Subtle decorative glow */}
+          <div className="absolute -top-24 -right-24 w-48 h-48 bg-[#9f2e2b]/25 rounded-full blur-3xl pointer-events-none" />
+
+          {/* Success Check Icon */}
+          <div className="w-16 h-16 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mb-5 shadow-lg shadow-emerald-500/20">
+            <CheckCircle2 className="w-8 h-8" />
           </div>
-        )}
 
-        {status === "failed" && (
-          <div className="animate-in fade-in zoom-in duration-500">
-            <div className="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-red-500/20">
-               <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
-            </div>
-            <h1 className="text-4xl font-black font-display mb-4 uppercase">Payment Incomplete</h1>
-            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-8">
-               <p className="text-red-400 font-bold text-sm tracking-tight">
-                 REASON: {reason || "The transaction could not be verified by Stripe."}
-               </p>
-            </div>
-            <p className="text-sm text-white/50 mb-8 leading-relaxed">
-              Please try again or contact support if your account was charged.
-            </p>
+          <h2 className="text-2xl font-black text-white font-sans tracking-tight mb-2 uppercase">
+            Purchase Successful!
+          </h2>
+
+          <p className="text-sm text-white/60 font-medium leading-relaxed mb-6">
+            {isHardCopy ? (
+              "Purchase Successful! Your Order is pending for Admin Approve. You will be notify soon for further process of Your Book. Thank you for Shopping with us."
+            ) : (
+              "Thank you for Shopping with us. Your custom carnival photobook digital copy is ready."
+            )}
+          </p>
+
+          <div className="w-full flex flex-col gap-2.5">
+            {/* Soft Copy: Theme-Styled Download Button */}
+            {!isHardCopy && (
+              <button
+                onClick={handleDownloadSoftCopy}
+                disabled={isDownloading}
+                className={`w-full h-12 rounded-xl font-bold text-sm tracking-wide transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer ${
+                  isDownloaded
+                    ? "bg-white/10 hover:bg-white/15 text-white border border-white/20"
+                    : "bg-gradient-to-r from-[#9f2e2b] via-[#b92c29] to-[#d6302c] hover:brightness-110 text-white shadow-lg shadow-[#9f2e2b]/30"
+                }`}
+              >
+                {isDownloading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Preparing Download...</span>
+                  </>
+                ) : isDownloaded ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-400" />
+                    <span>Downloaded! (Click to re-download)</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4 text-white" />
+                    <span>Download Soft Copy PDF</span>
+                  </>
+                )}
+              </button>
+            )}
+
+            {/* OK Button Styled in Theme */}
             <button
-              onClick={() => router.push("/editor")}
-              className="px-10 py-4 border border-white/20 text-white font-black rounded-2xl hover:bg-white/5 transition-all uppercase tracking-widest text-xs"
+              onClick={handleGoToOrders}
+              className="w-full h-11 rounded-xl bg-white/10 hover:bg-white/15 text-white/90 hover:text-white font-bold text-xs sm:text-sm tracking-wide transition-all border border-white/10 flex items-center justify-center gap-2 cursor-pointer"
             >
-              Back to Editor
+              <span>OK</span>
+              <ArrowRight className="w-4 h-4" />
             </button>
           </div>
-        )}
+        </div>
+      )}
 
-        {status === "canceled" && (
-          <div className="animate-in fade-in zoom-in duration-500 text-white/80">
-            <h1 className="text-4xl font-display mb-4">Payment Canceled</h1>
-            <p className="text-lg mb-8">
-              You've canceled your payment. Redirecting you back...
-            </p>
+      {/* ── 3. FAILED STATE ── */}
+      {status === "failed" && (
+        <div className="bg-[#18191c] border border-white/10 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl text-center flex flex-col items-center animate-in zoom-in-95 duration-300">
+          <div className="w-16 h-16 bg-red-500/20 border border-red-500/30 text-red-400 rounded-full flex items-center justify-center mb-5">
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </div>
-        )}
-      </div>
+          <h1 className="text-xl font-black mb-2 uppercase text-white font-sans">
+            Payment Incomplete
+          </h1>
+          <p className="text-xs text-red-400 mb-6 font-medium">
+            {reason || "The transaction could not be verified by Stripe."}
+          </p>
+          <button
+            onClick={() => router.push("/editor")}
+            className="w-full h-11 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs uppercase tracking-wider transition-all border border-white/10"
+          >
+            Back to Editor
+          </button>
+        </div>
+      )}
+
+      {/* ── 4. CANCELED STATE ── */}
+      {status === "canceled" && (
+        <div className="bg-[#18191c] border border-white/10 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl text-center flex flex-col items-center animate-in zoom-in-95 duration-300">
+          <h1 className="text-xl font-bold mb-3 text-white">Payment Canceled</h1>
+          <p className="text-xs text-white/60 mb-6">
+            You canceled your transaction. No charges were made.
+          </p>
+          <button
+            onClick={() => router.push("/editor")}
+            className="w-full h-11 rounded-xl bg-gradient-to-r from-[#9f2e2b] to-[#d6302c] text-white font-bold text-xs uppercase tracking-wider transition-all"
+          >
+            Return to Editor
+          </button>
+        </div>
+      )}
     </div>
   );
 }

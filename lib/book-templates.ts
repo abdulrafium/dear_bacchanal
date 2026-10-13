@@ -67,7 +67,17 @@ export function createBacchanaleTemplate(): BookTemplate {
       id: uuidv4(),
       leftPage: createPage("Back cover", "#b5251a", [
         {...createBgImage("/assets/layer-12.png"), isLocked: true, opacity: 0.25},
-        { ...createText("The tabanka is real\nThank you Carnival 2026", 60, PAGE_HEIGHT / 2 - 30, 22, "#ffffff", PAGE_WIDTH - 120, "left"), fontFamily: "Kalam", fontStyle: "italic" },
+        {
+          id: uuidv4(),
+          type: "sticker",
+          src: "/assets/font.png",
+          x: 132.06,
+          y: 185.21,
+          width: 262.19,
+          height: 174.79,
+          rotation: 0,
+          isLocked: true,
+        },
       ], true),
       rightPage: createPage("Front cover", "#b5251a", [
         {...createBgImage("/assets/layer-12.png"), isLocked: true},

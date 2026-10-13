@@ -27,12 +27,12 @@
             },
             {
               "id": "eb28374a-805b-4a60-8489-5cd1b39e6b77",
-              "type": "image",
+              "type": "sticker",
               "src": "/assets/font.png",
-              "x": 80,
-              "y": 180,
-              "width": 240,
-              "height": 160,
+              "x": 132.06,
+              "y": 185.20626158684638,
+              "width": 262.1907142465542,
+              "height": 174.79380949770274,
               "rotation": 0,
               "isLocked": true
             }
@@ -126,7 +126,7 @@
               "align": "right"
             }
           ],
-          "background": "#9f2d2d",
+          "background": "#a02e2d",
           "isLocked": false
         },
         "rightPage": {
@@ -1285,12 +1285,12 @@
           "label": "Page 19",
           "elements": [
             {
-              "type": "sticker",
-              "src": "https://utfs.io/f/pQ0bJId5Lc8dKdBQNehsDWHMX7otrOFG9K4AZSRNdUjBnykP",
+              "type": "image",
+              "src": "/assets/layer-10.png",
               "x": 0,
               "y": 0,
-              "width": 1200,
-              "height": 700,
+              "width": 1000,
+              "height": 500,
               "rotation": 0,
               "id": "A14UPF0NG",
               "isLocked": true,
@@ -1338,12 +1338,12 @@
           "label": "Page 20",
           "elements": [
             {
-              "type": "sticker",
-              "src": "https://utfs.io/f/pQ0bJId5Lc8dKdBQNehsDWHMX7otrOFG9K4AZSRNdUjBnykP",
+              "type": "image",
+              "src": "/assets/layer-10.png",
               "x": -500,
               "y": 0,
-              "width": 1200,
-              "height": 700,
+              "width": 1000,
+              "height": 500,
               "rotation": 0,
               "id": "8PRDIGNKU",
               "isLocked": true,
@@ -1435,18 +1435,19 @@
               "id": "8WUYKVSJZ"
             },
             {
-              "type": "sticker",
-              "src": "https://utfs.io/f/pQ0bJId5Lc8d9OPCS1yLJkPrFWvS4zmthHdeDOoyMUYs3AjT",
+              "type": "image",
+              "src": "/assets/layer-11.png",
               "x": 0,
               "y": 0,
-              "width": 1200,
-              "height": 700,
+              "width": 1000,
+              "height": 500,
               "rotation": 0,
               "id": "WW0DJWNG8",
               "shadowColor": "rgba(255, 255, 255, 1)",
               "shadowBlur": 50,
               "shadowOffsetX": 0,
-              "shadowOffsetY": 0
+              "shadowOffsetY": 0,
+              "isLocked": true
             }
           ],
           "background": "#e6a20f",
@@ -1457,12 +1458,12 @@
           "label": "Page 22",
           "elements": [
             {
-              "type": "sticker",
-              "src": "https://utfs.io/f/pQ0bJId5Lc8d9OPCS1yLJkPrFWvS4zmthHdeDOoyMUYs3AjT",
+              "type": "image",
+              "src": "/assets/layer-11.png",
               "x": -500,
               "y": 0,
-              "width": 1200,
-              "height": 700,
+              "width": 1000,
+              "height": 500,
               "rotation": 0,
               "id": "GWIAGICTK",
               "isLocked": true,
@@ -1806,12 +1807,12 @@
           "label": "Page 27",
           "elements": [
             {
-              "type": "sticker",
-              "src": "https://utfs.io/f/pQ0bJId5Lc8d0u6332eNm3Rud8rYjFlobaTCWBSE64ZKGnq7",
-              "x": -50,
-              "y": -100,
-              "width": 1292,
-              "height": 1000,
+              "type": "image",
+              "src": "/assets/eight.png",
+              "x": 0,
+              "y": 0,
+              "width": 1000,
+              "height": 500,
               "rotation": 0,
               "id": "P54ROTNKE",
               "isLocked": true
@@ -1865,12 +1866,12 @@
           "label": "Page 28",
           "elements": [
             {
-              "type": "sticker",
-              "src": "https://utfs.io/f/pQ0bJId5Lc8d0u6332eNm3Rud8rYjFlobaTCWBSE64ZKGnq7",
-              "x": -550,
-              "y": -100,
-              "width": 1292,
-              "height": 1000,
+              "type": "image",
+              "src": "/assets/eight.png",
+              "x": -500,
+              "y": 0,
+              "width": 1000,
+              "height": 500,
               "rotation": 0,
               "id": "S57JP079T",
               "isLocked": true

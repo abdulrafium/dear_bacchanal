@@ -61,11 +61,45 @@ export async function POST(req: NextRequest) {
         // Send customer email if PurePrint successfully ships or completes the order
         if ((normalizedStatus === 'shipped' || normalizedStatus === 'delivered') && matchedOrder.email) {
             if (matchedOrder.status !== 'shipped' && matchedOrder.status !== 'delivered') {
-                await sendEmail({
-                    to: matchedOrder.email,
-                    subject: TrackingNumber ? "Your Dear Bacchanal Order has Shipped!" : "Your Dear Bacchanal Order is Complete!",
-                    html: getOrderCompletedEmail(matchedOrder.orderId || matchedOrder._id.toString())
-                });
+                const customerName = matchedOrder.customerName || matchedOrder.shippingDetails?.name || matchedOrder.email.split("@")[0] || "Valued Customer";
+                const orderNumber = `#${(matchedOrder.orderId || matchedOrder._id.toString()).slice(-8).toUpperCase()}`;
+
+                let rawAddr: any = {};
+                if (matchedOrder.shippingAddress) {
+                    try {
+                        rawAddr = typeof matchedOrder.shippingAddress === 'string' ? JSON.parse(matchedOrder.shippingAddress) : matchedOrder.shippingAddress;
+                    } catch {}
+                }
+                const addr = matchedOrder.shippingDetails?.address || rawAddr;
+
+                if (TrackingNumber) {
+                    const { getOrderShippedEmail } = await import("@/lib/email-templates");
+                    await sendEmail({
+                        to: matchedOrder.email,
+                        subject: `Your Dear Bacchanal Order Has Shipped! Tracking #${TrackingNumber}`,
+                        html: getOrderShippedEmail({
+                            customerName,
+                            orderNumber,
+                            bookTemplateName: matchedOrder.templateName,
+                            carrier: Carrier || matchedOrder.carrier || "DHL Express",
+                            trackingNumber: TrackingNumber,
+                            shippingAddress: {
+                                line1: addr?.line1,
+                                line2: addr?.line2,
+                                city: addr?.city,
+                                state: addr?.state,
+                                postalCode: addr?.postal_code || rawAddr?.postalCode,
+                                country: addr?.country
+                            }
+                        })
+                    });
+                } else {
+                    await sendEmail({
+                        to: matchedOrder.email,
+                        subject: "Your Dear Bacchanal Order is Complete!",
+                        html: getOrderCompletedEmail(matchedOrder.orderId || matchedOrder._id.toString())
+                    });
+                }
             }
         }
 

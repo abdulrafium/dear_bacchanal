@@ -28,12 +28,14 @@ import {
   Copy,
   ExternalLink,
   BookOpen,
-  Check
+  Check,
+  User
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useReactToPrint } from "react-to-print";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
+import { getCarrierTrackingUrl, formatCarrierName } from "@/lib/tracking";
 
 interface Order {
   id: string;
@@ -64,6 +66,15 @@ interface Order {
   savedCoverPdfUrl?: string | null;
   savedTextPdfUrl?: string | null;
   savedPdfUrl?: string | null;
+  savedSoftPdfUrl?: string | null;
+  softUrl?: string | null;
+  refundReason?: string | null;
+  refundRequestedAt?: string | null;
+  refundStatus?: 'pending' | 'approved' | 'rejected' | null;
+  refundRejectedAt?: string | null;
+  refundRejectionReason?: string | null;
+  refundedAt?: string | null;
+  refundId?: string | null;
   refundRequest?: {
     reason: string;
     requestedAt: string;
@@ -85,6 +96,7 @@ export default function AdminOrdersPage() {
   const [typeFilter, setTypeFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [openingSoftPdf, setOpeningSoftPdf] = useState(false);
 
   const handleCopyUrl = (url: string, label: string, fieldKey: string) => {
     if (!url) return;
@@ -109,11 +121,68 @@ export default function AdminOrdersPage() {
   const getSoftUrl = (order: Order) => {
     if (order.pdfUrl) return order.pdfUrl;
     if (order.savedPdfUrl) return order.savedPdfUrl;
+    if (order.savedSoftPdfUrl) return order.savedSoftPdfUrl;
+    if (order.softUrl) return order.softUrl;
     if (order.textPdfUrl) return order.textPdfUrl;
     if (order.savedTextPdfUrl) return order.savedTextPdfUrl;
     if (order.coverPdfUrl) return order.coverPdfUrl;
     if (order.savedCoverPdfUrl) return order.savedCoverPdfUrl;
     return null;
+  };
+
+  const handleOpenSoftPdf = async (order: Order) => {
+    const existingUrl = getSoftUrl(order);
+    if (existingUrl) {
+      window.open(existingUrl, "_blank");
+      return;
+    }
+
+    setOpeningSoftPdf(true);
+    try {
+      const { getCleanPdfFromCache } = await import("@/lib/pdf-cache");
+      const bookKey = order.bookId || order.templateName || order.id;
+      const cached = await getCleanPdfFromCache(bookKey);
+
+      if (cached?.softPdfBlob) {
+        try {
+          const { uploadFiles } = await import("@/lib/uploadthing-client");
+          const cleanName = (order.templateName || "Dear_Bacchanal").replace(/\s+/g, "_");
+          const softFile = new File([cached.softPdfBlob], `${cleanName}_Digital.pdf`, { type: "application/pdf" });
+          const uploadRes = await uploadFiles("bookPdfUploader", { files: [softFile] });
+          if (uploadRes && uploadRes.length > 0) {
+            const softUrl = uploadRes[0].url;
+            await fetch("/api/editor/upload-pdf", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                softUrl,
+                bookId: order.bookId,
+                templateName: order.templateName,
+              }),
+            });
+            window.open(softUrl, "_blank");
+            fetchOrders();
+            return;
+          }
+        } catch (uploadErr) {
+          console.warn("Direct upload error:", uploadErr);
+        }
+
+        const blobUrl = URL.createObjectURL(cached.softPdfBlob);
+        window.open(blobUrl, "_blank");
+        return;
+      }
+    } catch (e) {
+      console.warn("Cache lookup error:", e);
+    } finally {
+      setOpeningSoftPdf(false);
+    }
+
+    if (order.bookId) {
+      window.open(`/api/public/export/${order.bookId}?type=soft`, "_blank");
+    } else {
+      window.open(`/editor?templateName=${encodeURIComponent(order.templateName || "Bacchanal")}&payment=success`, "_blank");
+    }
   };
   const [showFilters, setShowFilters] = useState(false);
 
@@ -258,6 +327,15 @@ export default function AdminOrdersPage() {
   const [deletingOrders, setDeletingOrders] = useState<Set<string>>(new Set());
   const [deletingAll, setDeletingAll] = useState(false);
 
+  // Refund warning modal state for approvals
+  const [refundWarningModal, setRefundWarningModal] = useState<{
+    open: boolean;
+    order: Order | null;
+  }>({
+    open: false,
+    order: null
+  });
+
   // Confirm modal state
   const [confirmModal, setConfirmModal] = useState<{ open: boolean; title: string; description: string; onConfirm: () => Promise<void> }>({
     open: false, title: '', description: '', onConfirm: async () => {}
@@ -323,20 +401,31 @@ export default function AdminOrdersPage() {
     );
   };
 
-  const approveOrder = async (orderId: string) => {
+  const approveOrder = async (orderId: string, overrideRefund = false) => {
     setApprovingOrder(true);
     try {
       const res = await fetch("/api/admin/orders/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId }),
+        body: JSON.stringify({ orderId, overrideRefund }),
       });
       const data = await res.json();
       if (res.ok) {
-        toast.success(`Order ${orderId} approved. Status set to 'processing'`);
+        toast.success(
+          overrideRefund
+            ? `Order approved & dispatched to PurePrint. Customer's refund request rejected.`
+            : `Order ${orderId} approved. Status set to 'processing'`
+        );
         fetchOrders();
         if (selectedOrder?.id === orderId) {
-          setSelectedOrder({ ...selectedOrder, status: 'processing', approvedAt: data.approvedAt, siteFlowOrderId: data.siteFlowOrderId } as Order);
+          setSelectedOrder({
+            ...selectedOrder,
+            status: 'processing',
+            approvedAt: data.approvedAt,
+            siteFlowOrderId: data.siteFlowOrderId,
+            refundStatus: 'rejected',
+            refundRejectedAt: data.approvedAt,
+          } as Order);
         }
       } else {
         toast.error(`Approval failed: ${data.error}`);
@@ -346,6 +435,31 @@ export default function AdminOrdersPage() {
     } finally {
       setApprovingOrder(false);
     }
+  };
+
+  const handleApproveInitiation = (order: Order) => {
+    const hasRefund =
+      order.status === 'refund_pending' ||
+      !!order.refundReason ||
+      !!order.refundRequestedAt ||
+      order.refundRequest?.status === 'pending';
+
+    if (hasRefund) {
+      setRefundWarningModal({ open: true, order });
+      return;
+    }
+
+    approveOrder(order.id);
+  };
+
+  const approveAnyway = async (orderId: string) => {
+    setRefundWarningModal({ open: false, order: null });
+    await approveOrder(orderId, true);
+  };
+
+  const handleJumpToRefunds = (order: Order) => {
+    setRefundWarningModal({ open: false, order: null });
+    window.location.href = `/admin/refunds?orderId=${order.id || order.orderId}`;
   };
 
   const [resubmittingSiteFlow, setResubmittingSiteFlow] = useState<string | null>(null);
@@ -608,9 +722,16 @@ export default function AdminOrdersPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border ${getStatusColor(order.status)}`}>
-                              {order.status}
-                          </span>
+                          <div className="flex flex-col gap-1 items-start">
+                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tighter border ${getStatusColor(order.status)}`}>
+                                {order.status}
+                            </span>
+                            {(order.status === 'refund_pending' || order.refundReason || order.refundRequest?.status === 'pending') && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-red-500/20 text-red-300 border border-red-500/30 animate-pulse">
+                                <AlertTriangle className="w-2.5 h-2.5" /> Refund Req
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex justify-end gap-2">
@@ -960,9 +1081,24 @@ export default function AdminOrdersPage() {
                                             </a>
                                         </div>
                                     ) : (
-                                        <p className="text-white/20 text-xs italic bg-black/20 p-2.5 rounded-xl border border-white/5">
-                                            No stored URL (Generated on-demand at checkout)
-                                        </p>
+                                        <div className="flex items-center justify-between bg-black/20 p-2.5 rounded-xl border border-white/5">
+                                            <p className="text-white/40 text-xs italic">
+                                                No stored URL
+                                            </p>
+                                            <button
+                                                onClick={() => handleOpenSoftPdf(selectedOrder)}
+                                                disabled={openingSoftPdf}
+                                                className="px-3 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 border border-sky-500/30 text-sky-300 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                                title="Open PDF in new tab"
+                                            >
+                                                {openingSoftPdf ? (
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                ) : (
+                                                    <ExternalLink className="w-3.5 h-3.5" />
+                                                )}
+                                                <span>{openingSoftPdf ? "Fetching..." : "Open PDF"}</span>
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
                             )}
@@ -996,31 +1132,56 @@ export default function AdminOrdersPage() {
                                     )}
                                 </div>
 
-                                {(selectedOrder.trackingNumber || selectedOrder.shippingDetails?.tracking_number) ? (
-                                    <div className="bg-blue-500/10 p-3 rounded-xl border border-blue-500/20 space-y-2">
-                                        {(selectedOrder.carrier || selectedOrder.shippingDetails?.carrier) && (
+                                {(selectedOrder.trackingNumber || selectedOrder.shippingDetails?.tracking_number) ? (() => {
+                                    const trackId = selectedOrder.trackingNumber || selectedOrder.shippingDetails?.tracking_number;
+                                    const carrierName = selectedOrder.carrier || selectedOrder.shippingDetails?.carrier;
+                                    const trackingUrl = getCarrierTrackingUrl(trackId, carrierName);
+                                    const formattedCarrier = formatCarrierName(carrierName);
+
+                                    return (
+                                        <div className="bg-blue-500/10 p-3.5 rounded-xl border border-blue-500/20 space-y-2.5">
                                             <div className="flex items-center justify-between">
                                                 <span className="text-[10px] text-white/40 uppercase font-bold">Carrier</span>
-                                                <span className="text-xs text-white font-bold">{selectedOrder.carrier || selectedOrder.shippingDetails?.carrier}</span>
+                                                <span className="text-xs text-blue-200 font-bold bg-blue-500/20 px-2.5 py-0.5 rounded border border-blue-500/30">
+                                                    {formattedCarrier}
+                                                </span>
                                             </div>
-                                        )}
-                                        <div>
-                                            <div className="flex items-center justify-between mb-1">
-                                                <span className="text-[10px] text-white/40 uppercase font-bold">Tracking Number</span>
-                                                <button
-                                                    onClick={() => handleCopyUrl(selectedOrder.trackingNumber || selectedOrder.shippingDetails?.tracking_number, "Tracking Number", "tracking")}
-                                                    className="text-[9px] text-blue-400/80 hover:text-blue-300 flex items-center gap-1 bg-blue-500/20 px-2 py-0.5 rounded transition-all cursor-pointer"
-                                                >
-                                                    {copiedField === 'tracking' ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
-                                                    <span>{copiedField === 'tracking' ? 'Copied' : 'Copy'}</span>
-                                                </button>
+                                            <div>
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <span className="text-[10px] text-white/40 uppercase font-bold">Tracking Number</span>
+                                                    <button
+                                                        onClick={() => handleCopyUrl(trackId, "Tracking Number", "tracking")}
+                                                        className="text-[9px] text-blue-400/80 hover:text-blue-300 flex items-center gap-1 bg-blue-500/20 px-2 py-0.5 rounded transition-all cursor-pointer"
+                                                    >
+                                                        {copiedField === 'tracking' ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
+                                                        <span>{copiedField === 'tracking' ? 'Copied' : 'Copy'}</span>
+                                                    </button>
+                                                </div>
+                                                <p className="text-blue-400 text-xs font-mono font-bold break-all bg-black/40 p-2 rounded-lg border border-blue-500/20 select-all">
+                                                    {trackId}
+                                                </p>
                                             </div>
-                                            <p className="text-blue-400 text-xs font-mono font-bold break-all bg-black/40 p-2 rounded-lg border border-blue-500/20 select-all">
-                                                {selectedOrder.trackingNumber || selectedOrder.shippingDetails?.tracking_number}
-                                            </p>
+
+                                            {/* Direct Clickable Tracking Link for Admin */}
+                                            {trackingUrl && (
+                                                <div className="pt-1">
+                                                    <a
+                                                        href={trackingUrl}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="flex items-center justify-center gap-2 w-full py-2.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md group cursor-pointer"
+                                                    >
+                                                        <span>Track on {formattedCarrier}</span>
+                                                        <ExternalLink className="w-3.5 h-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                                                    </a>
+                                                    <p className="text-[9px] text-white/30 text-center mt-1 truncate font-mono">
+                                                        {trackingUrl}
+                                                    </p>
+                                                </div>
+                                            )}
                                         </div>
-                                    </div>
-                                ) : (
+                                    );
+                                })() : (
                                     <p className="text-white/30 text-xs italic bg-black/20 p-2.5 rounded-xl border border-white/5">
                                         No tracking number attached yet (Will be attached automatically when PurePrint ships order)
                                     </p>
@@ -1028,37 +1189,40 @@ export default function AdminOrdersPage() {
                             </div>
                         )}
 
-                        <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5">
-                            <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mb-2">Shipping Address</p>
-                            {selectedOrder.shippingDetails?.address || selectedOrder.shippingAddress ? (() => {
-                                const addr = selectedOrder.shippingDetails?.address;
-                                const meta = (() => {
-                                    try { return typeof selectedOrder.shippingAddress === 'string' ? JSON.parse(selectedOrder.shippingAddress) : (selectedOrder.shippingAddress || {}); }
-                                    catch { return {}; }
-                                })();
-                                const phone = meta?.phone || selectedOrder.phone || null;
-                                const postalCode = meta?.postalCode || addr?.postal_code || meta?.postal_code || null;
-                                return (
-                                    <div className="text-white/60 text-xs leading-relaxed space-y-1">
-                                        {addr?.line1 && <p>{addr.line1}</p>}
-                                        {addr?.line2 && <p>{addr.line2}</p>}
-                                        <p>{[addr?.city || meta?.city, addr?.state || meta?.state, postalCode].filter(Boolean).join(', ')}</p>
-                                        <p className="font-bold text-white/80">{addr?.country || meta?.country}</p>
-                                        {phone && (
-                                            <p className="flex items-center gap-1.5 mt-1 text-white/50">
-                                                <span className="text-[9px] font-bold text-white/30 uppercase tracking-wider">Phone:</span>
-                                                <span className="font-bold text-white/70">{phone}</span>
-                                            </p>
-                                        )}
-                                    </div>
-                                );
-                            })() : (
-                                <p className="text-white/20 text-xs italic">No shipping address (Digital product)</p>
-                            )}
-                        </div>
+                        {/* Shipping Address Card (Hard Copy Only) */}
+                        {selectedOrder.type !== 'soft' && (
+                            <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5">
+                                <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mb-2">Shipping Address</p>
+                                {selectedOrder.shippingDetails?.address || selectedOrder.shippingAddress ? (() => {
+                                    const addr = selectedOrder.shippingDetails?.address;
+                                    const meta = (() => {
+                                        try { return typeof selectedOrder.shippingAddress === 'string' ? JSON.parse(selectedOrder.shippingAddress) : (selectedOrder.shippingAddress || {}); }
+                                        catch { return {}; }
+                                    })();
+                                    const phone = meta?.phone || selectedOrder.phone || null;
+                                    const postalCode = meta?.postalCode || addr?.postal_code || meta?.postal_code || null;
+                                    return (
+                                        <div className="text-white/60 text-xs leading-relaxed space-y-1">
+                                            {addr?.line1 && <p>{addr.line1}</p>}
+                                            {addr?.line2 && <p>{addr.line2}</p>}
+                                            <p>{[addr?.city || meta?.city, addr?.state || meta?.state, postalCode].filter(Boolean).join(', ')}</p>
+                                            <p className="font-bold text-white/80">{addr?.country || meta?.country}</p>
+                                            {phone && (
+                                                <p className="flex items-center gap-1.5 mt-1 text-white/50">
+                                                    <span className="text-[9px] font-bold text-white/30 uppercase tracking-wider">Phone:</span>
+                                                    <span className="font-bold text-white/70">{phone}</span>
+                                                </p>
+                                            )}
+                                        </div>
+                                    );
+                                })() : (
+                                    <p className="text-white/20 text-xs italic">No shipping address</p>
+                                )}
+                            </div>
+                        )}
 
-                        {/* Only show fulfillment status buttons if the order is NOT pending approval */}
-                        {selectedOrder.status !== 'pending_approval' && (
+                        {/* Fulfillment Status Buttons (Hard Copy Only - not pending approval) */}
+                        {selectedOrder.type !== 'soft' && selectedOrder.status !== 'pending_approval' && (
                             <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5">
                                 <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mb-4">Set Fulfillment Status</p>
                                 <div className="grid grid-cols-2 gap-2">
@@ -1095,12 +1259,30 @@ export default function AdminOrdersPage() {
                         )}
 
                         {/* ── Pending Approval Panel (Hard Copy) ── */}
-                        {selectedOrder.type === 'hard' && selectedOrder.status === 'pending_approval' && (
+                        {selectedOrder.type === 'hard' && (selectedOrder.status === 'pending_approval' || selectedOrder.status === 'refund_pending') && (
                             <div className="p-6 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 animate-in fade-in slide-in-from-top-4 duration-500">
                                 <div className="flex items-center gap-3 mb-4">
                                     <Package className="w-5 h-5 text-amber-400" />
                                     <h4 className="text-white font-bold text-sm uppercase">Awaiting Approval</h4>
                                 </div>
+                                {(selectedOrder.status === 'refund_pending' || selectedOrder.refundReason) && (
+                                    <div className="mb-4 p-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-200 text-xs">
+                                        <div className="flex items-center gap-2 font-bold mb-1 text-red-300">
+                                            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                                            <span>Active Refund Request Pending</span>
+                                        </div>
+                                        <p className="text-[11px] text-red-200/80 mb-2">
+                                            Customer has requested a refund for this order. Approving will reject their refund and proceed to printing.
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleJumpToRefunds(selectedOrder)}
+                                            className="px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white font-bold text-[10px] uppercase rounded-lg transition-all cursor-pointer"
+                                        >
+                                            View Refund Details →
+                                        </button>
+                                    </div>
+                                )}
                                 <p className="text-white/60 text-xs mb-6">
                                     This hard copy order is pending your approval before it is forwarded to PurePrint for printing.
                                     Approving will:
@@ -1111,9 +1293,9 @@ export default function AdminOrdersPage() {
                                     <li className="flex items-center gap-2"><Send className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" /> Submit print job to PurePrint via Site Flow</li>
                                 </ul>
                                 <button
-                                    onClick={() => approveOrder(selectedOrder.id)}
+                                    onClick={() => handleApproveInitiation(selectedOrder)}
                                     disabled={approvingOrder}
-                                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-black text-xs rounded-xl transition-all shadow-xl shadow-emerald-600/20 flex items-center justify-center gap-2"
+                                    className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white font-black text-xs rounded-xl transition-all shadow-xl shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer"
                                 >
                                     {approvingOrder ? (
                                         <><Loader2 className="w-4 h-4 animate-spin" /> APPROVING...</>
@@ -1412,6 +1594,98 @@ export default function AdminOrdersPage() {
                   </div>
               </div>
           </div>
+      )}
+
+      {/* Refund Warning Modal */}
+      {refundWarningModal.open && refundWarningModal.order && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-black/85 backdrop-blur-md"
+            onClick={() => setRefundWarningModal({ open: false, order: null })}
+          />
+          <div className="relative w-full max-w-lg bg-[#141417] border-2 border-red-500/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-red-950/50 flex flex-col space-y-5 animate-in fade-in zoom-in-95 duration-200">
+            {/* Header Badge */}
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-400 shrink-0">
+                <AlertTriangle className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <span className="text-[10px] font-black tracking-widest text-red-400 uppercase bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20">
+                  Critical Warning
+                </span>
+                <h3 className="text-xl font-black text-white mt-1">Customer Requested a Refund</h3>
+              </div>
+            </div>
+
+            {/* Explanation */}
+            <p className="text-xs text-white/70 leading-relaxed">
+              This order has an active refund request. If you approve this order now, it will be immediately dispatched to 
+              <strong className="text-white"> PurePrint for physical printing</strong> and the refund request will be marked as 
+              <strong className="text-red-400"> rejected</strong>. Once sent to print, physical costs are incurred and printing cannot be stopped.
+            </p>
+
+            {/* Details Box */}
+            <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/5 space-y-2.5 text-xs">
+              <div className="flex justify-between items-center text-white/50">
+                <span>Order ID</span>
+                <span className="font-mono text-white/80 font-bold">{refundWarningModal.order.id}</span>
+              </div>
+              <div className="flex justify-between items-center text-white/50">
+                <span>Customer</span>
+                <span className="text-white font-medium">
+                  {refundWarningModal.order.customerName || 'N/A'} ({refundWarningModal.order.email || 'N/A'})
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-white/50">
+                <span>Total Amount</span>
+                <span className="font-black text-white font-mono text-sm">
+                  ${(Number(refundWarningModal.order.amount || refundWarningModal.order.totalAmount || 0) / 100).toFixed(2)}
+                </span>
+              </div>
+              {(refundWarningModal.order.refundReason || refundWarningModal.order.refundRequest?.reason) && (
+                <div className="pt-2 border-t border-white/5">
+                  <span className="text-[10px] uppercase font-bold text-red-400/80 block mb-1">Reason for Refund:</span>
+                  <p className="italic text-white/90 bg-red-950/20 p-2.5 rounded-xl border border-red-500/20 font-sans">
+                    &ldquo;{refundWarningModal.order.refundReason || refundWarningModal.order.refundRequest?.reason}&rdquo;
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => handleJumpToRefunds(refundWarningModal.order!)}
+                className="w-full py-3.5 bg-red-600 hover:bg-red-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-red-600/30 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Undo2 className="w-4 h-4" />
+                Go to Refunds Section to Review / Refund
+              </button>
+
+              <button
+                type="button"
+                onClick={() => approveAnyway(refundWarningModal.order!.id)}
+                disabled={approvingOrder}
+                className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-amber-400 hover:text-amber-300 font-bold text-xs uppercase rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {approvingOrder ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Processing Approval...</>
+                ) : (
+                  <><ThumbsUp className="w-4 h-4" /> Override & Approve for Printing Anyway</>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setRefundWarningModal({ open: false, order: null })}
+                className="w-full py-2.5 text-white/40 hover:text-white text-xs font-semibold transition-all text-center cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

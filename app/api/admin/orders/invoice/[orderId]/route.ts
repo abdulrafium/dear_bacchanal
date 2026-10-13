@@ -18,15 +18,46 @@ export async function GET(
     const db = await getDatabase();
     const ordersCollection = db.collection("orders");
     
-    const order = await ordersCollection.findOne({ _id: new ObjectId(orderId) });
+    let order: any = null;
+    if (ObjectId.isValid(orderId) && orderId.length === 24) {
+      order = await ordersCollection.findOne({ _id: new ObjectId(orderId) });
+    }
+    if (!order) {
+      order = await ordersCollection.findOne({
+        $or: [
+          { orderId: orderId },
+          { id: orderId },
+          { bookId: orderId },
+          { transactionRef: orderId },
+        ]
+      });
+    }
     
     if (!order) {
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    // AUTH CHECK: Admin or Order Owner
-    if (!user.isAdmin && order.userId?.toString() !== user.id) {
+    // AUTH CHECK: Admin or Order Owner (matches userId or email, just like /api/orders)
+    const userEmail = user.email?.toLowerCase().trim();
+    const orderEmail = (order.email || order.userEmail || order.customerEmail || "")?.toLowerCase().trim();
+    const userIdStr = user.id ? String(user.id) : "";
+    const orderUserIdStr = order.userId ? String(order.userId) : "";
+
+    const isOwner = Boolean(
+      (userIdStr && orderUserIdStr && userIdStr === orderUserIdStr) ||
+      (userEmail && orderEmail && userEmail === orderEmail)
+    );
+
+    if (!user.isAdmin && !isOwner) {
        return NextResponse.json({ error: "Unauthorized access to this receipt" }, { status: 403 });
+    }
+
+    // If order was missing userId, associate it now with this authenticated owner
+    if (!order.userId && user.id && isOwner) {
+      await ordersCollection.updateOne(
+        { _id: order._id },
+        { $set: { userId: user.id } }
+      ).catch(() => {});
     }
 
     // ── Backfill paymentIntentId for orders that pre-date this feature ──────────
@@ -41,10 +72,10 @@ export async function GET(
         if (paymentIntentId) {
           // Persist so we never call Stripe again for this order
           await ordersCollection.updateOne(
-            { _id: new ObjectId(orderId) },
+            { _id: order._id },
             { $set: { paymentIntentId } }
           );
-          console.log(`[invoice] Backfilled paymentIntentId=${paymentIntentId} for order ${orderId}`);
+          console.log(`[invoice] Backfilled paymentIntentId=${paymentIntentId} for order ${order._id}`);
         }
       } catch (stripeErr) {
         console.warn("[invoice] Could not fetch payment intent from Stripe:", stripeErr);

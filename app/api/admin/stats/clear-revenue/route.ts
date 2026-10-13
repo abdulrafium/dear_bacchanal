@@ -12,14 +12,18 @@ export async function POST(req: NextRequest) {
 
   try {
     const db = await getDatabase();
-    const result = await db.collection("orders").updateMany(
+    // 1. Wipe permanent payments ledger so dashboard revenue and payments page reset to $0
+    const paymentsResult = await db.collection("payments").deleteMany({});
+
+    // 2. Zero out orders collection amounts
+    const ordersResult = await db.collection("orders").updateMany(
       {},
       { $set: { amount: 0, totalAmount: 0, clearedAt: new Date() } }
     );
 
     return NextResponse.json({
       success: true,
-      message: `Revenue cleared. ${result.modifiedCount} order(s) zeroed out.`,
+      message: `Revenue cleared. ${paymentsResult.deletedCount} payment record(s) wiped and ${ordersResult.modifiedCount} order(s) zeroed out.`,
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/lib/db";
 import { getServerAuth } from "@/lib/server-auth";
  
-export const revalidate = 60; // Cache for 60 seconds to scale for high traffic
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const user = await getServerAuth();
@@ -20,21 +20,31 @@ export async function GET(req: NextRequest) {
     const credentialUsers = await db.collection("users").countDocuments({ provider: "credentials" });
     const googleUsers = await db.collection("users").countDocuments({ provider: "google" });
 
-    // Paid users count: unique emails of customers with active/paid orders
+    // Paid users count: unique emails of customers across payments and active orders
     const paidUserEmailsFromOrders = await db.collection("orders").distinct("email", { 
       status: { $in: ["paid", "processing", "shipped", "delivered", "pending_approval", "approved"] }
     });
-    const purchasedUsers = paidUserEmailsFromOrders.filter(Boolean).length;
+    const paidUserEmailsFromPayments = await db.collection("payments").distinct("email");
+    const allPaidEmails = Array.from(new Set([...paidUserEmailsFromPayments, ...paidUserEmailsFromOrders])).filter(Boolean);
+    const purchasedUsers = allPaidEmails.length;
 
-    // Get financial stats from orders collection
+    // Financial stats: Use payments ledger collection so deleting operational orders does NOT reduce revenue
+    const paymentsCollection = db.collection("payments");
+    const totalPaymentsCount = await paymentsCollection.countDocuments();
     const ordersCollection = db.collection("orders");
     const totalOrders = await ordersCollection.countDocuments();
+
     const settings = await db.collection("settings").findOne({ id: "platform_settings" });
     const markup = settings?.pricing?.markupPercentage || 15;
     const taxPercentage = settings?.pricing?.taxPercentage ?? settings?.pricing?.refundDeductionPercentage ?? 20;
     const retainedTaxRatio = taxPercentage / 100;
     
-    const revenueAggregation = await ordersCollection.aggregate([
+    // Primary source for revenue is the permanent payments ledger.
+    // Fall back to ordersCollection only if payments collection is completely empty.
+    const usePayments = totalPaymentsCount > 0;
+    const primaryRevenueColl = usePayments ? paymentsCollection : ordersCollection;
+
+    const revenueAggregation = await primaryRevenueColl.aggregate([
       {
         $project: {
           netAmount: {
@@ -52,10 +62,13 @@ export async function GET(req: NextRequest) {
     const totalRevenueCents = revenueAggregation[0]?.total || 0;
     const totalRevenue = totalRevenueCents / 100; // Convert to USD
     
+    // Total transactions count
+    const totalTransactions = usePayments ? totalPaymentsCount : totalOrders;
+
     // Profit calculation: Revenue * (Markup / (100 + Markup))
-    const totalProfit = totalOrders > 0 ? (totalRevenue * (markup / (100 + markup))) : 0;
+    const totalProfit = totalTransactions > 0 ? (totalRevenue * (markup / (100 + markup))) : 0;
     
-    const recentPayments = await ordersCollection
+    const recentPayments = await (usePayments ? paymentsCollection : ordersCollection)
       .find({})
       .sort({ createdAt: -1 })
       .limit(10)
@@ -87,15 +100,15 @@ export async function GET(req: NextRequest) {
       chartMap[dateStr] = { revenue: 0, count: 0 };
     }
 
-    // Populate chart buckets from orders
-    const allOrders = await ordersCollection.find({}).toArray();
-    allOrders.forEach((order: any) => {
-      if (order.createdAt) {
-        const dateObj = new Date(order.createdAt);
+    // Populate chart buckets from permanent payments ledger (fallback to orders)
+    const sourceRecords = await (usePayments ? paymentsCollection : ordersCollection).find({}).toArray();
+    sourceRecords.forEach((item: any) => {
+      if (item.createdAt) {
+        const dateObj = new Date(item.createdAt);
         if (!isNaN(dateObj.getTime())) {
           const dateStr = dateObj.toISOString().split("T")[0];
           if (chartMap[dateStr] !== undefined) {
-            chartMap[dateStr].revenue += (order.amount || 0);
+            chartMap[dateStr].revenue += (item.amount || 0);
             chartMap[dateStr].count += 1;
           }
         }
@@ -111,7 +124,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       totalRevenue,
       totalProfit,
-      totalOrders,
+      totalOrders: totalTransactions,
       markup,
       salesChart,
       recentPayments: recentPayments.map(p => ({

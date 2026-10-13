@@ -128,7 +128,7 @@ export function EditorElementToolbar() {
     "serif"
   ];
 
-  const sizes = [12, 14, 16, 18, 20, 24, 28, 36, 48, 60, 72, 84, 96, 120, 140, 160, 180, 200, 220];
+  const sizes = [12, 14, 16, 18, 20, 24, 28, 36, 48, 60, 72, 74, 76, 78, 80, 84, 96, 120, 140, 160, 180, 200, 220];
 
   const update = (updates: Partial<typeof element>) => {
     updateElement(pageId, element.id, updates);

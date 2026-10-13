@@ -18,7 +18,13 @@ export async function POST(req: NextRequest) {
     }
 
     const db = await getDatabase();
-    const order = await db.collection("orders").findOne({ _id: new ObjectId(orderId) });
+    let order = null;
+    if (typeof orderId === 'string' && ObjectId.isValid(orderId) && orderId.length === 24) {
+      order = await db.collection("orders").findOne({ _id: new ObjectId(orderId) });
+    }
+    if (!order) {
+      order = await db.collection("orders").findOne({ orderId: String(orderId) });
+    }
 
     if (!order) {
         return NextResponse.json({ error: "Order not found" }, { status: 404 });
@@ -42,7 +48,7 @@ export async function POST(req: NextRequest) {
     // BYPASS STRIPE FOR MOCK/TEST ORDERS (e.g. NAQJ0LQU)
     if (!stripeSessionId.startsWith('cs_')) {
         const updatedOrder = await db.collection("orders").findOneAndUpdate(
-            { _id: new ObjectId(orderId) },
+            { _id: order._id },
             { 
                 $set: { 
                     status: 'refunded',
@@ -92,7 +98,7 @@ export async function POST(req: NextRequest) {
 
         if (refund.status === 'succeeded' || refund.status === 'pending') {
             const updatedOrder = await db.collection("orders").findOneAndUpdate(
-                { _id: new ObjectId(orderId) },
+                { _id: order._id },
                 { 
                     $set: { 
                         status: 'refunded',
@@ -102,6 +108,12 @@ export async function POST(req: NextRequest) {
                 },
                 { returnDocument: 'after' }
             );
+
+            // Sync refund status to permanent payments ledger
+            await db.collection("payments").updateMany(
+              { $or: [{ orderId: order.orderId }, { orderDbId: order._id.toString() }] },
+              { $set: { status: 'refunded', refundedAt: new Date(), refundAmount } }
+            ).catch(() => {});
 
             if (updatedOrder && updatedOrder.email) {
                 await syncUserPurchasedState(updatedOrder.email);
@@ -120,7 +132,7 @@ export async function POST(req: NextRequest) {
         if (stripeError.code === 'amount_too_large' || stripeError.message?.includes('greater than unrefunded amount')) {
             console.log(`Order ${orderId} already partially refunded via Stripe. Forcing DB update.`);
             const updatedOrder = await db.collection("orders").findOneAndUpdate(
-                { _id: new ObjectId(orderId) },
+                { _id: order._id },
                 { 
                     $set: { 
                         status: 'refunded',
@@ -129,6 +141,12 @@ export async function POST(req: NextRequest) {
                 },
                 { returnDocument: 'after' }
             );
+
+            // Sync refund status to permanent payments ledger
+            await db.collection("payments").updateMany(
+              { $or: [{ orderId: order.orderId }, { orderDbId: order._id.toString() }] },
+              { $set: { status: 'refunded', refundedAt: new Date(), refundAmount } }
+            ).catch(() => {});
 
             if (updatedOrder && updatedOrder.email) {
                 await syncUserPurchasedState(updatedOrder.email);

@@ -121,7 +121,7 @@ export default function AdminDashboard() {
 
   const statCards = [
     { label: "Total Users", value: stats.totalUsers, icon: Users, color: "from-blue-600 to-indigo-600" },
-    { label: "Total Revenue", value: `$${financials.totalRevenue.toLocaleString()}`, icon: DollarSign, color: "from-green-600 to-emerald-600" },
+    { label: "Total Revenue", value: `$${financials.totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, icon: DollarSign, color: "from-green-600 to-emerald-600" },
     { label: "Est. Profit", value: `$${Math.round(financials.totalProfit).toLocaleString()}`, icon: TrendingUp, color: "from-amber-600 to-orange-600" },
     { label: "Live Books", value: stats.booksCreated, icon: BookOpen, color: "from-purple-600 to-fuchsia-600" },
   ];

@@ -1,18 +1,38 @@
 import nodemailer from "nodemailer";
 
+let currentConfigKey = "";
 let transporter: any;
 
 const getTransporter = () => {
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp.hostinger.com",
-      port: parseInt(process.env.SMTP_PORT || "465"),
-      secure: true, 
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
+  const host = process.env.SMTP_HOST || "smtp.hostinger.com";
+  const port = parseInt(process.env.SMTP_PORT || "465");
+  const user = process.env.EMAIL_USER || "";
+  const pass = process.env.EMAIL_PASS || "";
+  const configKey = `${host}:${port}:${user}:${pass}`;
+
+  if (!transporter || currentConfigKey !== configKey) {
+    currentConfigKey = configKey;
+    const isGmail = host.includes("gmail") || user.endsWith("@gmail.com");
+
+    if (isGmail) {
+      transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: {
+          user: user,
+          pass: pass.replace(/\s+/g, ""),
+        },
+      });
+    } else {
+      transporter = nodemailer.createTransport({
+        host: host,
+        port: port,
+        secure: port === 465,
+        auth: {
+          user: user,
+          pass: pass,
+        },
+      });
+    }
   }
   return transporter;
 };

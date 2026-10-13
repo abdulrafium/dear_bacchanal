@@ -73,3 +73,6 @@ config.bat
 .env.backup
 .env.local
 .env*
+
+# Postman & API collections
+*.postman_collection.json

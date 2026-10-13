@@ -67,6 +67,7 @@ const PageElement = memo(function PageElement({
 
   const isPreviewMode = useEditorStore((s) => s.isPreviewMode);
   const isAdmin = useEditorStore((s) => s.isAdmin);
+  const isGeneratingPdf = useEditorStore((s) => s.isGeneratingPdf);
 
   const isDropdown = el.type === "text" && el.options && el.options.length > 0;
   const defaultPlaceholder = isDropdown ? "Select..." : "Enter Text";
@@ -150,7 +151,7 @@ const PageElement = memo(function PageElement({
             {...commonProps}
             width={isDropdown && el.width > 220 ? 220 : el.width}
             text={displayEl.text || defaultPlaceholder}
-            fontSize={isDropdown && (displayEl.fontSize || 18) > 20 ? 20 : (displayEl.fontSize || 18)}
+            fontSize={displayEl.fontSize || 18}
             fontFamily={displayEl.fontFamily || "Arial"}
             fill={displayFill}
             opacity={isPlaceholderText ? 0.75 : 1}
@@ -208,21 +209,34 @@ const PageElement = memo(function PageElement({
           e.cancelBubble = true;
           if (canInteract && onSelect) onSelect(el.id);
         };
+
+        // When generating PDF or in Preview Mode:
+        // Hide the boxes to reflect the final printed look (only show tick mark for checked items)
+        const isFinalOutputMode = isGeneratingPdf || isPreviewMode;
+
+        if (isFinalOutputMode && !displayEl.isChecked) {
+          return null;
+        }
+
         return (
           <Group
             {...commonProps}
             onClick={handleToggle}
             onTap={handleToggle}
           >
-            <Rect
-              x={0}
-              y={0}
-              width={boxSize}
-              height={boxSize}
-              stroke={displayEl.fill || "#ffffff"}
-              strokeWidth={2}
-              fill="rgba(255,255,255,0.01)" // Guaranteed hit detection
-            />
+            {/* Square box outline: ONLY rendered when in Edit mode.
+                In Preview mode and Generated PDF, the box border is hidden so only the tick mark shows. */}
+            {!isFinalOutputMode && (
+              <Rect
+                x={0}
+                y={0}
+                width={boxSize}
+                height={boxSize}
+                stroke={displayEl.fill || "#ffffff"}
+                strokeWidth={2}
+                fill="rgba(255,255,255,0.01)" // Guaranteed hit detection
+              />
+            )}
             {displayEl.isChecked && (
               <Text
                 x={0}
@@ -345,37 +359,9 @@ const PageElement = memo(function PageElement({
                     setEditValue(finalValue);
                     setIsEditing(false);
 
-                    let newFontSize = 18;
-                    if (finalValue) {
-                      newFontSize = 24; // Start from a good base size
-                      if (el.fontSize && el.fontSize > 24) newFontSize = el.fontSize;
-
-                      const span = document.createElement("span");
-                      Object.assign(span.style, {
-                        position: "fixed",
-                        visibility: "hidden",
-                        whiteSpace: "nowrap",
-                        fontFamily: el.fontFamily ? `'${el.fontFamily}', sans-serif` : "Arial",
-                        fontWeight: el.fontStyle?.includes("bold") ? "bold" : "normal",
-                        fontSize: `${newFontSize}px`
-                      });
-                      span.textContent = finalValue;
-                      document.body.appendChild(span);
-
-                      const targetWidth = el.width || 250;
-                      while (newFontSize > 12) {
-                        span.style.fontSize = `${newFontSize}px`;
-                        if (span.offsetWidth <= targetWidth) {
-                          break;
-                        }
-                        newFontSize -= 1;
-                      }
-                      document.body.removeChild(span);
-                    }
-
                     const updatePayload: any = {
                       text: finalValue,
-                      fontSize: newFontSize,
+                      fontSize: el.fontSize || 18,
                     };
                     if (!isAdmin) updatePayload.customerEdited = true;
 

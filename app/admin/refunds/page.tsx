@@ -129,6 +129,17 @@ export default function AdminRefundsPage() {
             refundRequestedAt: o.refundRequestedAt || o.refundRequest?.requestedAt
         }));
         setRefunds(mappedRefunds);
+
+        // Auto-select order if navigated from Admin Orders approval modal
+        if (typeof window !== "undefined") {
+          const urlOrderId = new URLSearchParams(window.location.search).get("orderId");
+          if (urlOrderId) {
+            const matched = mappedRefunds.find((o: any) => o.id === urlOrderId || o.orderId === urlOrderId);
+            if (matched) {
+              setSelectedRefund(matched);
+            }
+          }
+        }
       }
     } catch (error) {
       toast.error("Failed to load refunds");

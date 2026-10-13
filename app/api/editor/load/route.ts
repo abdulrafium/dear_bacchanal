@@ -11,13 +11,15 @@ export const revalidate = 0;
 const templateCache = new Map<string, { data: any; expires: number }>();
 const TEMPLATE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
-async function getCachedTemplate(name: string | null, db: any): Promise<any> {
+async function getCachedTemplate(name: string | null, db: any, bypassCache = false): Promise<any> {
   const key = name || "__default__";
-  const cached = templateCache.get(key);
-  if (cached && cached.expires > Date.now()) {
-    return cached.data;
+  if (!bypassCache) {
+    const cached = templateCache.get(key);
+    if (cached && cached.expires > Date.now()) {
+      return cached.data;
+    }
   }
-  // Cache miss — fetch from MongoDB
+  // Fetch fresh from MongoDB
   const templatesCollection = db.collection("global_templates");
   let template = null;
   if (name) {
@@ -28,7 +30,7 @@ async function getCachedTemplate(name: string | null, db: any): Promise<any> {
       templateName: { $in: ["Bacchanal 2026", "Bacchanal", "Dear Bacchanal"] }
     });
   }
-  if (template) {
+  if (template && !bypassCache) {
     templateCache.set(key, { data: template, expires: Date.now() + TEMPLATE_CACHE_TTL_MS });
   }
   return template;
@@ -76,8 +78,8 @@ export async function GET(req: NextRequest) {
         }, { status: 200 });
       }
 
-      // Admin: use cache for template fetch
-      const template = await getCachedTemplate(templateName, db);
+      // Admin: ALWAYS bypass cache to load latest data from MongoDB
+      const template = await getCachedTemplate(templateName, db, true);
       return NextResponse.json({ template }, { status: 200 });
     } else {
       const userBooksCollection = db.collection("user_books");
@@ -125,8 +127,8 @@ export async function GET(req: NextRequest) {
 
       // MASTER SMART-SYNC LOGIC: Deeply merge Admin design updates while protecting User personal content
       const templateToSync = book ? book.activeTemplateName : templateName;
-      // Use cache — avoids a full MongoDB round-trip for the global template on every editor load
-      const dbTemplate = await getCachedTemplate(templateToSync, db);
+      // Use cache — avoids a full MongoDB round-trip for the global template on every editor load (bypassed if fresh=true)
+      const dbTemplate = await getCachedTemplate(templateToSync, db, fresh);
 
       if (dbTemplate && dbTemplate.spreads) {
         // Ensure all checkboxes in the global template are unchecked by default

@@ -3,7 +3,7 @@ import { getDatabase } from "@/lib/db";
 import { adminAuthMiddleware } from "@/lib/admin-auth";
 import { ObjectId } from "mongodb";
 import { sendEmail } from "@/lib/mail-service";
-import { getHardCopyApprovalEmail } from "@/lib/email-templates";
+import { getHardCopyApprovalEmail, getPurePrintOrderDispatchEmail } from "@/lib/email-templates";
 import { generateInvoicePDF } from "@/lib/pdf-generator";
 import { HPSiteFlowClient } from "@/lib/hp-site-flow";
 
@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   if (authError) return authError;
 
   try {
-    const { orderId } = await req.json();
+    const { orderId, overrideRefund } = await req.json();
 
     if (!orderId) {
       return NextResponse.json({ error: "orderId is required" }, { status: 400 });
@@ -32,34 +32,57 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Only hard copy orders can be approved" }, { status: 400 });
     }
 
-    if (order.status !== "pending_approval") {
+    if (order.status !== "pending_approval" && order.status !== "refund_pending") {
       return NextResponse.json(
-        { error: `Cannot approve order with status '${order.status}'. Order must be in 'pending_approval' state.` },
+        { error: `Cannot approve order with status '${order.status}'. Order must be in 'pending_approval' or 'refund_pending' state.` },
         { status: 400 }
       );
     }
 
     const approvedAt = new Date();
 
-    // ─── 1. Update order status to 'processing' ────────────────────────────────
+    // ─── 1. Update order status to 'processing' and reject any pending refund ──
+    const updatePayload: any = {
+      status: "processing",
+      approvedAt,
+      updatedAt: new Date(),
+    };
+
+    if (order.status === "refund_pending" || order.refundReason || order.refundRequestedAt || order.refundRequest) {
+      updatePayload.refundStatus = "rejected";
+      updatePayload.refundRejectedAt = approvedAt;
+      updatePayload.refundRejectionReason = "Order approved by administrator and dispatched to PurePrint for physical printing.";
+      if (order.refundRequest) {
+        updatePayload["refundRequest.status"] = "rejected";
+      }
+    }
+
     await ordersCollection.updateOne(
       { _id: new ObjectId(orderId) },
       {
-        $set: {
-          status: "processing",
-          approvedAt,
-          updatedAt: new Date(),
-        },
+        $set: updatePayload,
       }
     );
 
-    console.log(`[approve] Order ${orderId} approved. Status set to 'processing'`);
+    console.log(`[approve] Order ${orderId} approved (overrideRefund: ${!!overrideRefund}). Status set to 'processing'`);
 
     // ─── 2. Generate Invoice PDF ───────────────────────────────────────────────
     let pdfBuffer: Buffer | null = null;
     try {
+      const rawAddr = order.shippingAddress || order.shippingDetails?.address || null;
+      const parsedAddr = rawAddr ? {
+        line1: rawAddr.line1 || "",
+        line2: rawAddr.line2 || "",
+        city: rawAddr.city || "",
+        state: rawAddr.state || "",
+        postal_code: rawAddr.postal_code || rawAddr.postalCode || "",
+        country: rawAddr.country || "",
+      } : undefined;
+
       pdfBuffer = await generateInvoicePDF({
         orderId: order.orderId || orderId,
+        invoiceNumber: `INV-${(order.orderId || orderId).slice(-6).toUpperCase()}`,
+        transactionRef: order.transactionRef || order.paymentIntentId || (order.orderId || orderId).slice(-12),
         date: order.createdAt || approvedAt,
         customerName:
           order.customerName ||
@@ -67,9 +90,12 @@ export async function POST(req: NextRequest) {
           order.email?.split("@")[0] ||
           "Customer",
         customerEmail: order.email || "",
+        shippingAddress: parsedAddr,
         amount: (order.amount || 0) / 100,
+        subtotal: (order.amount || 0) / 100,
         type: order.type,
         bookTitle: order.templateName || "Dear Bacchanal Edition",
+        paymentMethod: order.paymentMethod || "card",
       });
     } catch (pdfError) {
       console.error("[approve] Failed to generate invoice PDF:", pdfError);
@@ -135,10 +161,13 @@ export async function POST(req: NextRequest) {
           to: emailToSendTo,
           subject: "Your Hard Copy Order Has Been Approved",
           html: emailHtml,
-          attachments,
         });
 
         console.log(`[approve] Approval email sent to ${emailToSendTo}`);
+        await ordersCollection.updateOne(
+          { _id: new ObjectId(orderId) },
+          { $set: { approvedEmailSent: true, approvedEmailSentAt: new Date() } }
+        );
       } catch (emailError) {
         console.error("[approve] Failed to send approval email:", emailError);
         // Don't block; log and continue
@@ -261,6 +290,45 @@ export async function POST(req: NextRequest) {
           },
         }
       );
+
+      // ─── 4b. Send Order Notification Email to PurePrint ──────────────────────
+      try {
+        const purePrintEmail = process.env.PUREPRINT_EMAIL || "siteflow@pureprint.com";
+        const purePrintHtml = getPurePrintOrderDispatchEmail({
+          orderNumber: `#${(order.orderId || orderId).slice(-8).toUpperCase()}`,
+          bookTemplateName: order.templateName || "Dear Bacchanal Edition",
+          orderDate: approvedAt.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+          sku: sku,
+          quantity: 1,
+          customerName: resolvedName,
+          shippingAddress: {
+            line1: resolvedLine1,
+            line2: resolvedLine2,
+            city: resolvedCity,
+            state: resolvedState,
+            postalCode: resolvedPostal,
+            country: resolvedCountry,
+            phone: resolvedPhone,
+            email: order.email || "",
+          },
+          coverPdfUrl: `${baseUrl}/api/public/export/${order.bookId}?type=cover`,
+          textPdfUrl: `${baseUrl}/api/public/export/${order.bookId}?type=text`,
+        });
+
+        await sendEmail({
+          to: purePrintEmail,
+          subject: `[PurePrint Order] Hard Copy Print Job - #${(order.orderId || orderId).slice(-8).toUpperCase()}`,
+          html: purePrintHtml,
+          attachments: pdfBuffer ? [{
+            filename: `Invoice-${(order.orderId || orderId).slice(-8).toUpperCase()}.pdf`,
+            content: pdfBuffer,
+            contentType: "application/pdf",
+          }] : [],
+        });
+        console.log(`[approve] Dispatched order notification email to PurePrint (${purePrintEmail})`);
+      } catch (purePrintEmailErr) {
+        console.error("[approve] Failed to send PurePrint notification email:", purePrintEmailErr);
+      }
     } catch (siteFlowError) {
       console.error("[approve] Failed to submit order to Site Flow:", siteFlowError);
       // Store the error but don't fail the entire approval

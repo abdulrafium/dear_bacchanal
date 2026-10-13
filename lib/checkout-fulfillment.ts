@@ -22,7 +22,7 @@ export type StripeCheckoutSession = {
 };
 
 export function getCustomerEmail(session: StripeCheckoutSession): string | undefined {
-  const email = session.customer_email || session.customer_details?.email;
+  const email = session.metadata?.userEmail || session.customer_email || session.customer_details?.email;
   return email || undefined;
 }
 
@@ -59,6 +59,8 @@ export function buildOrderRecord(
     type: orderType,
     templateName: session.metadata?.templateName || "",
     bookId: session.metadata?.bookId || "",
+    pagesCount: Number(session.metadata?.pagesCount) || 34,
+    spreadsCount: Number(session.metadata?.spreadsCount) || 17,
     status: orderType === "hard" ? "pending_approval" : "paid",
     shippingDetails: shippingDetails || null,
     // Also save the custom form shipping address separately for SiteFlow use
@@ -201,41 +203,44 @@ export async function upsertOrderFromCheckoutSession(
     );
   }
 
-  // ── Write to payments ledger (only for new orders) ───────────────────────
-  if (!existing && orderRecord.amount && orderRecord.amount > 0) {
+  // ── Write to payments ledger (permanent financial ledger) ─────────────────
+  if (orderRecord.amount && orderRecord.amount > 0) {
     try {
       const paymentsCollection = db.collection("payments");
+      const existingPayment = await paymentsCollection.findOne({ orderId: session.id });
 
-      // Calculate running balance: sum all previous payment amounts
-      const aggResult = await paymentsCollection
-        .aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }])
-        .toArray();
-      const previousBalance = aggResult[0]?.total || 0;
-      const afterBalance = previousBalance + orderRecord.amount;
+      if (!existingPayment) {
+        // Calculate running balance: sum all previous payment amounts
+        const aggResult = await paymentsCollection
+          .aggregate([{ $group: { _id: null, total: { $sum: "$amount" } } }])
+          .toArray();
+        const previousBalance = aggResult[0]?.total || 0;
+        const afterBalance = previousBalance + orderRecord.amount;
 
-      const insertedOrder = await ordersCollection.findOne({ orderId: session.id });
-      const objectIdHex = insertedOrder?._id?.toString() || '';
-      const tsSeconds = objectIdHex ? parseInt(objectIdHex.slice(0, 8), 16) : Math.floor(Date.now() / 1000);
-      const counterPart = objectIdHex ? parseInt(objectIdHex.slice(-6), 16) % 1000000 : 0;
-      const transactionRef = `${tsSeconds}${String(counterPart).padStart(6, '0')}`;
+        const insertedOrder = await ordersCollection.findOne({ orderId: session.id });
+        const objectIdHex = insertedOrder?._id?.toString() || '';
+        const tsSeconds = objectIdHex ? parseInt(objectIdHex.slice(0, 8), 16) : Math.floor(Date.now() / 1000);
+        const counterPart = objectIdHex ? parseInt(objectIdHex.slice(-6), 16) % 1000000 : 0;
+        const transactionRef = `${tsSeconds}${String(counterPart).padStart(6, '0')}`;
 
-      await paymentsCollection.insertOne({
-        orderId: session.id,
-        paymentIntentId: orderRecord.paymentIntentId || null,
-        transactionRef,
-        orderDbId: insertedOrder?._id?.toString() || null,
-        userId: orderRecord.userId || null,
-        email: orderRecord.email,
-        customerName: orderRecord.customerName,
-        amount: orderRecord.amount,          // in cents
-        currency: orderRecord.currency,
-        type: orderRecord.type,
-        templateName: orderRecord.templateName,
-        status: 'paid',
-        previousBalance,   // cumulative total before this payment (cents)
-        afterBalance,      // cumulative total after this payment (cents)
-        createdAt: new Date(),
-      });
+        await paymentsCollection.insertOne({
+          orderId: session.id,
+          paymentIntentId: orderRecord.paymentIntentId || null,
+          transactionRef,
+          orderDbId: insertedOrder?._id?.toString() || null,
+          userId: orderRecord.userId || null,
+          email: orderRecord.email,
+          customerName: orderRecord.customerName,
+          amount: orderRecord.amount,          // in cents
+          currency: orderRecord.currency,
+          type: orderRecord.type,
+          templateName: orderRecord.templateName,
+          status: 'paid',
+          previousBalance,   // cumulative total before this payment (cents)
+          afterBalance,      // cumulative total after this payment (cents)
+          createdAt: new Date(),
+        });
+      }
     } catch (paymentErr) {
       console.error("[payments] Failed to write payment ledger record:", paymentErr);
     }
@@ -290,7 +295,15 @@ export async function sendOrderConfirmationEmailIfNeeded(
     return false;
   }
 
-  const email = getCustomerEmail(session) || order.email;
+  let email = session.metadata?.userEmail || getCustomerEmail(session) || order.email;
+  if (!email && order.userId) {
+    try {
+      const userDoc = await db.collection("users").findOne(
+        ObjectId.isValid(order.userId) ? { _id: new ObjectId(order.userId) } : { firebaseUid: order.userId }
+      );
+      if (userDoc?.email) email = userDoc.email;
+    } catch {}
+  }
   if (!email) {
     console.error(`[checkout-fulfillment] No email for session ${session.id}`);
     return false;
@@ -326,16 +339,48 @@ export async function sendOrderConfirmationEmailIfNeeded(
 
   try {
     const amountTotal = session.amount_total ?? order.amount ?? 0;
-    
-    // Always generate PDF invoice
+    const rawAddress =
+      order.shippingAddress ||
+      order.shippingDetails?.address ||
+      (session.shipping_details as any)?.address ||
+      null;
+    const resolvedAddress = rawAddress ? {
+      line1: rawAddress.line1 || "",
+      line2: rawAddress.line2 || "",
+      city: rawAddress.city || "",
+      state: rawAddress.state || "",
+      postal_code: rawAddress.postal_code || rawAddress.postalCode || "",
+      country: rawAddress.country || "",
+    } : undefined;
+
+    const invoiceNumber = `INV-${session.id.slice(-6).toUpperCase()}`;
+    const transactionRef = order.transactionRef || order.paymentIntentId || session.id.slice(-12);
+
+    const hardShipping = order.shippingFee
+      ? order.shippingFee / 100
+      : order.processing
+      ? order.processing / 100
+      : 0;
+    const subtotal =
+      hardShipping > 0 ? amountTotal / 100 - hardShipping : amountTotal / 100;
+
     const pdfBuffer = await generateInvoicePDF({
       orderId: session.id,
-      date: new Date(),
+      invoiceNumber,
+      transactionRef,
+      date: order.createdAt || new Date(),
       customerName,
       customerEmail: email,
+      customerPhone:
+        order.phone || (order.shippingDetails as any)?.phone || undefined,
+      shippingAddress: resolvedAddress,
       amount: amountTotal / 100,
+      subtotal: subtotal,
+      processing: hardShipping,
       type: orderType,
       bookTitle,
+      paymentMethod:
+        order.paymentMethod || session.payment_method_types?.[0] || "card",
     });
 
     const attachments = [

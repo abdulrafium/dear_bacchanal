@@ -14,10 +14,12 @@ import {
   Layout,
   Download,
   ChevronDown,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { CopySelectionModal } from "./CopySelectionModal";
 
 export function EditorTopToolbar() {
   const router = useRouter();
@@ -31,11 +33,15 @@ export function EditorTopToolbar() {
   const spreads = useEditorStore((s) => s.spreads);
   const isAdmin = useEditorStore((s) => s.isAdmin);
   const activeTemplateName = useEditorStore((s) => s.activeTemplateName);
+  const isRenderingPreview = useEditorStore((s) => s.isRenderingPreview);
+  const isCopySelectionModalOpen = useEditorStore((s) => s.isCopySelectionModalOpen);
+  const setIsCopySelectionModalOpen = useEditorStore((s) => s.setIsCopySelectionModalOpen);
 
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "modified">("saved");
   const [showPdfDropdown, setShowPdfDropdown] = useState(false);
   const [showEmptyFramesWarning, setShowEmptyFramesWarning] = useState(false);
   const [emptyFramesCount, setEmptyFramesCount] = useState(0);
+  const [isProceedingToPreview, setIsProceedingToPreview] = useState(false);
 
   const save = useEditorStore((s) => s.save);
 
@@ -84,7 +90,7 @@ export function EditorTopToolbar() {
       setEmptyFramesCount(count);
       setShowEmptyFramesWarning(true);
     } else {
-      useEditorStore.getState().setIsOrderModalOpen(true);
+      useEditorStore.getState().setIsCopySelectionModalOpen(true);
     }
   };
 
@@ -207,7 +213,10 @@ export function EditorTopToolbar() {
                   className="fixed inset-0 z-40"
                   onClick={() => setShowPdfDropdown(false)}
                 />
-                <div className="absolute top-full mt-2 right-0 bg-white border border-gray-200 shadow-xl rounded-lg py-1 w-48 z-50">
+                <div className="absolute top-full mt-2 right-0 bg-white border border-gray-200 shadow-xl rounded-lg py-1.5 w-64 z-50">
+                  <div className="px-4 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    Soft Copy (Digital)
+                  </div>
                   <button 
                     onClick={async () => {
                       setShowPdfDropdown(false);
@@ -242,16 +251,67 @@ export function EditorTopToolbar() {
                     onClick={async () => {
                       setShowPdfDropdown(false);
                       const { generatePdfBook } = useEditorStore.getState();
-                      toast.info("Generating Both PDFs...", { id: 'pdf-start' });
+                      toast.info("Generating Soft Copy PDF (No Bleed)...", { id: 'pdf-start' });
                       try {
                         await generatePdfBook(false, false, 'both');
                       } catch (err) {
-                        toast.error("Failed to generate PDFs");
+                        toast.error("Failed to generate Soft Copy PDF");
                       }
                     }}
                     className="w-full text-left px-4 py-2 text-xs font-bold hover:bg-red-50 text-gray-700 hover:text-red-600 transition-colors border-t border-gray-50"
                   >
-                    Generate Both (No Bleed)
+                    Soft Copy PDF (No Bleed)
+                  </button>
+
+                  <div className="border-t border-gray-100 my-1.5"></div>
+
+                  <div className="px-4 py-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    PurePrint Factory (Hard Copy)
+                  </div>
+                  <button 
+                    onClick={async () => {
+                      setShowPdfDropdown(false);
+                      const { generatePdfBook } = useEditorStore.getState();
+                      toast.info("Generating Hard Copy PDFs (PurePrint Cover & Inner)...", { id: 'pdf-start' });
+                      try {
+                        await generatePdfBook(true, false, 'both', true);
+                      } catch (err) {
+                        toast.error("Failed to generate Hard Copy PDFs");
+                      }
+                    }}
+                    className="w-full text-left px-4 py-2 text-xs font-bold hover:bg-red-50 text-gray-700 hover:text-red-600 transition-colors"
+                  >
+                    Hard Copy PDF (Cover & Inner)
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      setShowPdfDropdown(false);
+                      const { generatePdfBook } = useEditorStore.getState();
+                      toast.info("Generating Hard Copy Cover (PurePrint 570x300mm)...", { id: 'pdf-start' });
+                      try {
+                        await generatePdfBook(true, false, 'cover', true);
+                      } catch (err) {
+                        toast.error("Failed to generate Hard Copy Cover PDF");
+                      }
+                    }}
+                    className="w-full text-left px-4 py-2 text-xs font-bold hover:bg-red-50 text-gray-700 hover:text-red-600 transition-colors border-t border-gray-50"
+                  >
+                    Hard Copy Cover (PurePrint)
+                  </button>
+                  <button 
+                    onClick={async () => {
+                      setShowPdfDropdown(false);
+                      const { generatePdfBook } = useEditorStore.getState();
+                      toast.info("Generating Hard Copy Inner Pages (PurePrint 260x260mm)...", { id: 'pdf-start' });
+                      try {
+                        await generatePdfBook(true, false, 'inner', true);
+                      } catch (err) {
+                        toast.error("Failed to generate Hard Copy Inner Pages PDF");
+                      }
+                    }}
+                    className="w-full text-left px-4 py-2 text-xs font-bold hover:bg-red-50 text-gray-700 hover:text-red-600 transition-colors border-t border-gray-50"
+                  >
+                    Hard Copy Inner Pages (PurePrint)
                   </button>
                 </div>
               </>
@@ -262,10 +322,17 @@ export function EditorTopToolbar() {
         {!isAdmin && (
           <button 
             onClick={handleOrderClick}
-            className="flex items-center gap-1 sm:gap-1.5 bg-[#2d2d2d] text-white px-3 sm:px-6 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs md:text-sm font-bold hover:bg-black transition-all ml-0.5 sm:ml-2 shadow-lg shadow-black/10 group"
+            disabled={isRenderingPreview}
+            className="flex items-center gap-1 sm:gap-1.5 bg-[#2d2d2d] text-white px-3 sm:px-6 py-2 sm:py-2.5 rounded-full text-[10px] sm:text-xs md:text-sm font-bold hover:bg-black transition-all ml-0.5 sm:ml-2 shadow-lg shadow-black/10 group disabled:opacity-80"
           >
-            <ShoppingCart className="w-4 h-4 group-hover:scale-110 transition-transform" />
-            <span className="hidden xs:block uppercase tracking-tight">Order</span>
+            {isRenderingPreview ? (
+              <Loader2 className="w-4 h-4 animate-spin text-white" />
+            ) : (
+              <ShoppingCart className="w-4 h-4 group-hover:scale-110 transition-transform" />
+            )}
+            <span className="hidden xs:block uppercase tracking-tight">
+              {isRenderingPreview ? "Preparing..." : "Order"}
+            </span>
           </button>
         )}
       </div>
@@ -274,7 +341,7 @@ export function EditorTopToolbar() {
       {showEmptyFramesWarning && typeof document !== 'undefined' && createPortal(
         <div 
           className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
-          onClick={() => setShowEmptyFramesWarning(false)}
+          onClick={() => !isProceedingToPreview && setShowEmptyFramesWarning(false)}
         >
           <div 
             className="bg-white rounded-2xl shadow-2xl p-6 sm:p-8 max-w-sm w-full mx-4 animate-in zoom-in-95 duration-200 border border-gray-100 flex flex-col items-center text-center relative"
@@ -294,21 +361,35 @@ export function EditorTopToolbar() {
             
             <div className="flex flex-col gap-2 w-full">
               <button
-                onClick={(e) => {
+                disabled={isProceedingToPreview}
+                onClick={async (e) => {
                   e.stopPropagation();
+                  if (isProceedingToPreview) return;
+                  setIsProceedingToPreview(true);
+                  // Give clear visual feedback with spinning loader
+                  await new Promise((r) => setTimeout(r, 350));
                   setShowEmptyFramesWarning(false);
-                  useEditorStore.getState().setIsOrderModalOpen(true);
+                  setIsProceedingToPreview(false);
+                  useEditorStore.getState().setIsCopySelectionModalOpen(true);
                 }}
-                className="w-full bg-[#2d2d2d] text-white font-bold py-3 rounded-full hover:bg-black transition-colors"
+                className="w-full bg-[#2d2d2d] text-white font-bold py-3 rounded-full hover:bg-black transition-all flex items-center justify-center gap-2 disabled:opacity-80"
               >
-                Yes, proceed to checkout
+                {isProceedingToPreview ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Preparing...</span>
+                  </>
+                ) : (
+                  <span>Yes, proceed to format selection</span>
+                )}
               </button>
               <button
+                disabled={isProceedingToPreview}
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowEmptyFramesWarning(false);
                 }}
-                className="w-full bg-gray-100 text-gray-600 font-bold py-3 rounded-full hover:bg-gray-200 transition-colors"
+                className="w-full bg-gray-100 text-gray-600 font-bold py-3 rounded-full hover:bg-gray-200 transition-colors disabled:opacity-50"
               >
                 No, let me add photos
               </button>
@@ -317,6 +398,17 @@ export function EditorTopToolbar() {
         </div>,
         document.body
       )}
+
+      {/* Copy Format Selection Modal (Soft Copy vs Hard Copy) */}
+      <CopySelectionModal
+        isOpen={isCopySelectionModalOpen}
+        onClose={() => setIsCopySelectionModalOpen(false)}
+        onProceed={(type) => {
+          setIsCopySelectionModalOpen(false);
+          useEditorStore.getState().renderBookPreview(type);
+        }}
+        isRendering={isRenderingPreview}
+      />
     </div>
   );
 }

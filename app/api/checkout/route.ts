@@ -97,10 +97,13 @@ export async function POST(req: NextRequest) {
                 ? { 
                     customer_email: user.email, 
                     metadata: { 
-                        userId: user.id, 
+                        userId: user.id,
+                        userEmail: user.email, 
                         orderType,
                         templateName: body.templateName || "",
                         bookId: body.bookId || "",
+                        pagesCount: String(body.pagesCount || 34),
+                        spreadsCount: String(body.spreadsCount || 17),
                         shippingName: body.shippingInfo?.name || "",
                         shippingAddress: JSON.stringify(body.shippingInfo || {})
                     } 
@@ -110,6 +113,8 @@ export async function POST(req: NextRequest) {
                         orderType,
                         templateName: body.templateName || "",
                         bookId: body.bookId || "",
+                        pagesCount: String(body.pagesCount || 34),
+                        spreadsCount: String(body.spreadsCount || 17),
                         shippingName: body.shippingInfo?.name || "",
                         shippingAddress: JSON.stringify(body.shippingInfo || {})
                     } 

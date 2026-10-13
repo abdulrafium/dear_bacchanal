@@ -348,7 +348,7 @@ export const BookPDFGenerator = forwardRef<BookPDFGeneratorHandle, BookPDFGenera
 
                 const dataUrl = await toPng(pageEl, {
                     quality: 1.0,
-                    pixelRatio: 1.5,
+                    pixelRatio: 2.5,
                     cacheBust: true,
                     backgroundColor: '#FFFFFF',
                     width: targetWidth,

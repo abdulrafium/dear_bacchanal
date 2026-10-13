@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import type Konva from "konva";
 import { toast } from "sonner";
 import { uploadFiles } from "@/lib/uploadthing-client";
+import { saveCleanPdfToCache, getCleanPdfFromCache } from "@/lib/pdf-cache";
 
 // Element types that can be placed on a page
 export type ElementType = "image" | "text" | "shape" | "sticker" | "qrcode" | "calendar" | "photo-card" | "checkbox";
@@ -121,6 +122,24 @@ interface EditorState {
   stageRef: Konva.Stage | null;
   isOrderModalOpen: boolean;
 
+  // Copy Selection & Book Preview
+  selectedCopyType: 'soft' | 'hard';
+  setSelectedCopyType: (type: 'soft' | 'hard') => void;
+  isCopySelectionModalOpen: boolean;
+  setIsCopySelectionModalOpen: (open: boolean) => void;
+  isPreviewModalOpen: boolean;
+  setIsPreviewModalOpen: (open: boolean) => void;
+  previewSpreadCache: Record<number, { fingerprint: string; previewUrl: string; leftWatermarkedUrl?: string; rightWatermarkedUrl?: string }>;
+  cleanSpreadCache: Record<number, { fingerprint: string; cleanUrl: string; leftCleanUrl?: string; rightCleanUrl?: string }>;
+  isRenderingPreview: boolean;
+  previewRenderProgress: { current: number; total: number; status: string } | null;
+  renderBookPreview: (copyType?: 'soft' | 'hard', options?: { forceAll?: boolean; section?: 'all' | 'cover' | 'inner' }) => Promise<void>;
+
+  // Post Payment Modal
+  isPostPaymentModalOpen: boolean;
+  postPaymentType: 'soft' | 'hard' | null;
+  setPostPaymentModal: (open: boolean, type?: 'soft' | 'hard' | null) => void;
+
   // History
   history: HistoryEntry[];
   historyIndex: number;
@@ -193,7 +212,7 @@ interface EditorState {
     innerCurrent?: number;
     innerTotal?: number;
   } | null;
-  generatePdfBook: (isHardCopy?: boolean, keepOverlayOpen?: boolean, pdfType?: 'cover' | 'inner' | 'both') => Promise<void>;
+  generatePdfBook: (isHardCopy?: boolean, keepOverlayOpen?: boolean, pdfType?: 'cover' | 'inner' | 'both', downloadHardCopyLocally?: boolean) => Promise<void>;
 }
 
 function createDefaultPage(label: string, isLocked = false): BookPage {
@@ -235,6 +254,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   previewElement: null,
   stageRef: null,
   isOrderModalOpen: false,
+  selectedCopyType: 'soft',
+  setSelectedCopyType: (type) => set({ selectedCopyType: type }),
+  isCopySelectionModalOpen: false,
+  setIsCopySelectionModalOpen: (open) => set({ isCopySelectionModalOpen: open }),
+  isPreviewModalOpen: false,
+  setIsPreviewModalOpen: (open) => set({ isPreviewModalOpen: open }),
+  previewSpreadCache: {},
+  cleanSpreadCache: {},
+  isRenderingPreview: false,
+  previewRenderProgress: null,
+  isPostPaymentModalOpen: false,
+  postPaymentType: null,
+  setPostPaymentModal: (open, type = null) => set({ isPostPaymentModalOpen: open, postPaymentType: type }),
   userImages: [],
   isFetchingImages: false,
 
@@ -656,7 +688,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   isGeneratingPdf: false,
   pdfGenerationProgress: null,
-  generatePdfBook: async (isHardCopy = false, keepOverlayOpen = false, pdfType = 'both') => {
+  generatePdfBook: async (isHardCopy = false, keepOverlayOpen = false, pdfType: 'cover' | 'inner' | 'both' = 'both', downloadHardCopyLocally = false) => {
     const state = get();
     const { spreads, setCurrentSpread, stageRef, activeTemplateName, currentSpreadIndex, selectElement } = state;
 
@@ -671,6 +703,52 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     }
 
     set({ isGeneratingPdf: true });
+
+    const bookId = state.activeTemplateId || 'current_book';
+    const baseFileName = activeTemplateName ? activeTemplateName.replace(/[^a-zA-Z0-9_-]/g, "_") : "Dear_Bacchanal_Book";
+
+    // ── Instant Delivery / Upload from IndexedDB Cache (0s Canvas Re-render!) ──
+    try {
+      const cachedCleanPdfs = await getCleanPdfFromCache(bookId);
+
+      if (!isHardCopy && cachedCleanPdfs?.softPdfBlob) {
+        const softBlobUrl = URL.createObjectURL(cachedCleanPdfs.softPdfBlob);
+        const softLink = document.createElement('a');
+        softLink.href = softBlobUrl;
+        softLink.download = `${baseFileName}_Soft_Copy_NoBleed.pdf`;
+        document.body.appendChild(softLink);
+        softLink.click();
+        document.body.removeChild(softLink);
+        setTimeout(() => URL.revokeObjectURL(softBlobUrl), 5000);
+
+        toast.success("PDF downloaded successfully!", { duration: 5000 });
+
+        // Background cloud backup for orders
+        try {
+          const softFile = new File([cachedCleanPdfs.softPdfBlob], `${baseFileName}_Soft.pdf`, { type: "application/pdf" });
+          const uploadRes = await uploadFiles("bookPdfUploader", { files: [softFile] });
+          if (uploadRes && uploadRes.length > 0) {
+            await fetch("/api/editor/upload-pdf", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                softUrl: uploadRes[0].url,
+                bookId,
+                templateName: activeTemplateName,
+              }),
+            });
+          }
+        } catch (e) {
+          console.warn("[editor] Background soft copy cloud backup failed:", e);
+        }
+
+        set({ isGeneratingPdf: false, pdfGenerationProgress: null });
+        return;
+      }
+    } catch (cacheErr) {
+      console.warn("[editor] IndexedDB cache check skipped:", cacheErr);
+    }
+
     const originalIndex = currentSpreadIndex;
     const originalViewMode = state.viewMode;
 
@@ -794,18 +872,24 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         await embedFontIntoPdf(softPdf);
       }
 
-      // Title page: Generated ONLY for USER hard copy purchases, NOT admin PDF downloads.
-      // Admin downloads must be clean print-ready files.
-      const isAdminDownload = get().isAdmin;
-      if (!isAdminDownload && isHardCopy && textPdf && (pdfType === 'inner' || pdfType === 'both')) {
+      // Title page: Generated for hard copy exports so the printed book has the title spread.
+      if (isHardCopy && textPdf && (pdfType === 'inner' || pdfType === 'both')) {
         try {
           const titleCanvas = document.createElement('canvas');
-          const PIXEL_RATIO = 5;
+          const PIXEL_RATIO = 6.25;
           titleCanvas.width = TEXT_PAGE_WIDTH * PIXEL_RATIO;
           titleCanvas.height = TEXT_PAGE_HEIGHT * PIXEL_RATIO;
           const ctx = titleCanvas.getContext('2d');
           if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
             ctx.scale(PIXEL_RATIO, PIXEL_RATIO);
+            // Fill this page with solid color #a02e2d
+            const pageColor = '#a02e2d';
+            ctx.fillStyle = pageColor;
+            ctx.fillRect(0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
+
+            /*
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
             ctx.textAlign = 'center';
@@ -816,7 +900,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ctx.fillStyle = '#666666';
             ctx.font = 'italic 35px "Caveat", cursive';
             ctx.fillText('Trinidad Carnival 2026', TEXT_PAGE_WIDTH / 2, TEXT_PAGE_HEIGHT / 2 + 60);
-            const titleDataUrl = titleCanvas.toDataURL('image/jpeg', 0.92);
+            */
+            const titleDataUrl = titleCanvas.toDataURL('image/jpeg', 0.98);
             textPdf.addImage(titleDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
           }
         } catch (e) {
@@ -907,8 +992,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ...get().pdfGenerationProgress!,
             current: relCurrent - 1,
             status: `Preparing ${pageLabel}...`,
-            coverCurrent: i === 0 ? 0 : coverPageNum,
-            innerCurrent: i > 0 ? innerPageNum - 1 : 0,
+            coverCurrent: i === 0 ? 0.5 : 1,
+            coverTotal: 1,
+            innerCurrent: i > 0 ? innerPageNum : 0,
+            innerTotal: innerTotal,
           }
         });
         toast.info(toastLabel, { duration: 2000, id: 'pdf-progress' });
@@ -1060,7 +1147,27 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           currentStageRef.batchDraw();
           await new Promise(r => setTimeout(r, 150)); // Allow redraw to flush
 
+          // Ensure high-quality image smoothing on all Konva layers for pristine render
+          try {
+            currentStageRef.getLayers().forEach((layer: any) => {
+              const canvas = layer.getCanvas();
+              const ctx = canvas?._canvas?.getContext?.('2d') || canvas?.getContext?.('2d');
+              if (ctx) {
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+              }
+            });
+          } catch (e) {
+            // Ignore if layer context cannot be modified directly
+          }
+
           currentStageRef.batchDraw();
+
+          // 300+ DPI Commercial Print settings (PurePrint HP Indigo press standard)
+          // PAGE_WIDTH (500) * 6.25 = 3125px -> 305.3 DPI on 260mm (10.24") inner page
+          // PAGE_WIDTH*2 (1000) * 6.25 = 6250px -> 280+ DPI on 570mm cover spread
+          const PRINT_PIXEL_RATIO = 6.25;
+          const PRINT_JPEG_QUALITY = 0.98; // Highest fidelity, zero DCT compression grain
 
           if (!isHardCopy && softPdf) {
             // SOFT COPY - Unified Document, exact canvas size without bleed cropping
@@ -1082,7 +1189,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
             const spreadDataUrl = currentStageRef.toDataURL({
               x: cropX, y: cropY, width: cropW, height: cropH,
-              pixelRatio: 5, mimeType: "image/jpeg", quality: 0.92
+              pixelRatio: 4, mimeType: "image/jpeg", quality: 0.95
             });
             const isFirstIteration = (pdfType === 'inner') ? (i === 1) : (i === 0);
             if (!isFirstIteration) {
@@ -1091,12 +1198,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             // Force the cropped image to scale and perfectly fill the uniform PDF page dimensions
             softPdf.addImage(spreadDataUrl, 'JPEG', 0, 0, 988.46, 488.46);
           } else if (isHardCopy && coverPdf && textPdf) {
-            // HARD COPY - Strict layout for Pureprint factory requirements
+            // HARD COPY - Strict layout for Pureprint factory requirements (300+ DPI, zero grain)
             if (i === 0) {
               // Spread 0 is the Cover.
               const spreadDataUrl = currentStageRef.toDataURL({
                 x: 0, y: 0, width: PAGE_WIDTH * 2, height: PAGE_HEIGHT,
-                pixelRatio: 5, mimeType: "image/jpeg", quality: 0.92
+                pixelRatio: PRINT_PIXEL_RATIO, mimeType: "image/jpeg", quality: PRINT_JPEG_QUALITY
               });
               coverPdf.addImage(spreadDataUrl, 'JPEG', 0, 0, COVER_WIDTH, COVER_HEIGHT);
             } else {
@@ -1109,9 +1216,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 y: 0,
                 width: PAGE_WIDTH + bleedPx,
                 height: PAGE_HEIGHT,
-                pixelRatio: 5,
+                pixelRatio: PRINT_PIXEL_RATIO,
                 mimeType: "image/jpeg",
-                quality: 0.92
+                quality: PRINT_JPEG_QUALITY
               });
               textPdf.addPage([TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT], "portrait");
               textPdf.addImage(leftDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
@@ -1122,9 +1229,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
                 y: 0,
                 width: PAGE_WIDTH + bleedPx,
                 height: PAGE_HEIGHT,
-                pixelRatio: 5,
+                pixelRatio: PRINT_PIXEL_RATIO,
                 mimeType: "image/jpeg",
-                quality: 0.92
+                quality: PRINT_JPEG_QUALITY
               });
               textPdf.addPage([TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT], "portrait");
               textPdf.addImage(rightDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
@@ -1146,12 +1253,20 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         try {
           textPdf.addPage([TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT], "portrait");
           const endCanvas = document.createElement('canvas');
-          const PIXEL_RATIO = 5;
+          const PIXEL_RATIO = 6.25;
           endCanvas.width = TEXT_PAGE_WIDTH * PIXEL_RATIO;
           endCanvas.height = TEXT_PAGE_HEIGHT * PIXEL_RATIO;
           const ctx = endCanvas.getContext('2d');
           if (ctx) {
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
             ctx.scale(PIXEL_RATIO, PIXEL_RATIO);
+            // Fill this page with solid color #a02e2d
+            const pageColor = '#a02e2d';
+            ctx.fillStyle = pageColor;
+            ctx.fillRect(0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
+
+            /*
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
 
@@ -1161,8 +1276,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText('Created with Dear Bacchanal', TEXT_PAGE_WIDTH / 2, TEXT_PAGE_HEIGHT - 100);
+            */
 
-            const endDataUrl = endCanvas.toDataURL('image/jpeg', 0.92);
+            const endDataUrl = endCanvas.toDataURL('image/jpeg', 0.98);
             textPdf.addImage(endDataUrl, 'JPEG', 0, 0, TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT);
           }
         } catch (e) { }
@@ -1212,17 +1328,53 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       let softBlob: Blob | null = null;
 
       if (isHardCopy && coverPdf && textPdf) {
-        const rawCoverBlob = coverPdf.output('blob');
-        const rawTextBlob = textPdf.output('blob');
-        coverBlob = await embedFontWithPdfLib(rawCoverBlob);
-        textBlob = await embedFontWithPdfLib(rawTextBlob);
+        if (pdfType === 'cover' || pdfType === 'both') {
+          const rawCoverBlob = coverPdf.output('blob');
+          coverBlob = await embedFontWithPdfLib(rawCoverBlob);
+          if (!coverBlob) coverBlob = rawCoverBlob;
+        }
 
-        if (!coverBlob) coverBlob = rawCoverBlob;
-        if (!textBlob) textBlob = rawTextBlob;
+        if (pdfType === 'inner' || pdfType === 'both') {
+          const rawTextBlob = textPdf.output('blob');
+          textBlob = await embedFontWithPdfLib(rawTextBlob);
+          if (!textBlob) textBlob = rawTextBlob;
+        }
 
-        // Note: We DO NOT trigger local downloads for Hard Copies. 
-        // Hard copy files are massive and are strictly meant for the Pureprint factory,
-        // so they are only uploaded directly to the S3 bucket in the background.
+        // Local downloads for Hard Copies (when admin tests or local download is requested)
+        const shouldDownloadLocally = downloadHardCopyLocally || get().isAdmin;
+        if (shouldDownloadLocally) {
+          if (coverBlob && (pdfType === 'cover' || pdfType === 'both')) {
+            const coverBlobUrl = URL.createObjectURL(coverBlob);
+            const coverLink = document.createElement('a');
+            coverLink.href = coverBlobUrl;
+            coverLink.download = `${baseFileName}_HardCopy_Cover.pdf`;
+            document.body.appendChild(coverLink);
+            coverLink.click();
+            document.body.removeChild(coverLink);
+            setTimeout(() => URL.revokeObjectURL(coverBlobUrl), 5000);
+          }
+
+          if (textBlob && (pdfType === 'inner' || pdfType === 'both')) {
+            const delay = (pdfType === 'both' && coverBlob) ? 800 : 0;
+            setTimeout(() => {
+              const textBlobUrl = URL.createObjectURL(textBlob!);
+              const textLink = document.createElement('a');
+              textLink.href = textBlobUrl;
+              textLink.download = `${baseFileName}_HardCopy_Inner_Pages.pdf`;
+              document.body.appendChild(textLink);
+              textLink.click();
+              document.body.removeChild(textLink);
+              setTimeout(() => URL.revokeObjectURL(textBlobUrl), 5000);
+            }, delay);
+          }
+
+          toast.success(
+            pdfType === 'cover' ? "Hard Copy Cover PDF downloaded!" :
+            pdfType === 'inner' ? "Hard Copy Inner Pages PDF downloaded!" :
+            "Hard Copy Cover and Inner Pages PDFs downloaded!",
+            { duration: 5000 }
+          );
+        }
       } else if (!isHardCopy && softPdf) {
         // For soft copies, we DO NOT need to embed fonts for printer pre-flight checks!
         // This saves massive amounts of processing time at the end of the generation.
@@ -1237,7 +1389,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         } else if (pdfType === 'inner') {
           softLink.download = `${baseFileName}_Inner_NoBleed.pdf`;
         } else {
-          softLink.download = `${baseFileName}_Digital_Book.pdf`;
+          softLink.download = `${baseFileName}_Soft_Copy_NoBleed.pdf`;
         }
 
         document.body.appendChild(softLink);
@@ -1246,10 +1398,32 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         setTimeout(() => URL.revokeObjectURL(softBlobUrl), 5000);
 
         toast.success("PDF downloaded successfully!", { duration: 5000 });
+
+        // Background upload soft copy to UploadThing so URL is saved in database & admin orders
+        try {
+          const { activeTemplateId: bookId, activeTemplateName: tmplName } = get();
+          const softPdfFile = new File([softBlob], `${baseFileName}_Digital.pdf`, { type: "application/pdf" });
+          const uploadRes = await uploadFiles("bookPdfUploader", { files: [softPdfFile] });
+          if (uploadRes && uploadRes.length > 0) {
+            await fetch("/api/editor/upload-pdf", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                softUrl: uploadRes[0].url,
+                bookId,
+                templateName: tmplName,
+              }),
+            });
+            console.log("[editor] Soft copy digital PDF uploaded to cloud:", uploadRes[0].url);
+          }
+        } catch (e) {
+          console.warn("[editor] Soft copy cloud upload failed:", e);
+        }
       }
 
-      // ─── Upload to UploadThing so SiteFlow can fetch it (HARD COPY ONLY) ──────────
-      if (isHardCopy && pdfType === 'both' && coverBlob && textBlob) {
+      // ─── Upload to UploadThing so SiteFlow can fetch it (HARD COPY ONLY FOR REAL CUSTOMER PURCHASES) ──────────
+      const isRealCustomerOrder = !downloadHardCopyLocally && !get().isAdmin;
+      if (isRealCustomerOrder && isHardCopy && pdfType === 'both' && coverBlob && textBlob) {
         try {
           const { activeTemplateId: bookId, activeTemplateName: tmplName } = get();
 
@@ -1302,16 +1476,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         }
       }
 
-      // Consume purchase - MUST PAY AGAIN FOR NEXT DOWNLOAD
-      try {
-        await fetch("/api/auth/consume-purchase", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          }
-        });
-      } catch (consumeError) {
-        console.error("Failed to consume purchase:", consumeError);
+      // Consume purchase - ONLY FOR REAL CUSTOMER PURCHASES
+      if (isRealCustomerOrder) {
+        try {
+          await fetch("/api/auth/consume-purchase", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            }
+          });
+        } catch (consumeError) {
+          console.error("Failed to consume purchase:", consumeError);
+        }
       }
     } catch (err: any) {
       console.error("PDF Export Error:", err);
@@ -1337,6 +1513,459 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       }
 
       // Restore selection and view mode
+      setCurrentSpread(originalIndex, true);
+      if (originalViewMode !== get().viewMode) {
+        set({ viewMode: originalViewMode });
+      }
+    }
+  },
+
+  renderBookPreview: async (copyType?: 'soft' | 'hard', options?: { forceAll?: boolean; section?: 'all' | 'cover' | 'inner' }) => {
+    const state = get();
+    const { spreads, setCurrentSpread, selectElement } = state;
+    const targetType = copyType || state.selectedCopyType || 'soft';
+    set({ selectedCopyType: targetType });
+
+    if (spreads.length === 0) {
+      toast.error("No pages to preview.");
+      return;
+    }
+
+    const stage = get().stageRef;
+    if (!stage) {
+      toast.error("Canvas is initializing. Please wait a moment and try again.");
+      return;
+    }
+
+    // Deselect active element so bounding box isn't rendered
+    selectElement(null);
+
+    const bookId = state.activeTemplateId || 'current_book';
+
+    // Compute deterministic fingerprint of a spread to know if it actually changed
+    const computeSpreadFingerprint = (spread: BookSpread) => {
+      return JSON.stringify({
+        v: `small_wm_v2_${targetType}`,
+        lBg: spread.leftPage?.background,
+        rBg: spread.rightPage?.background,
+        lEl: spread.leftPage?.elements?.map(e => ({
+          id: e.id,
+          type: e.type,
+          x: e.x,
+          y: e.y,
+          w: e.width,
+          h: e.height,
+          r: e.rotation,
+          src: e.src,
+          text: (e as any).text,
+          fill: (e as any).fill || (e as any).color,
+          fontSize: (e as any).fontSize,
+          fontFamily: (e as any).fontFamily,
+        })),
+        rEl: spread.rightPage?.elements?.map(e => ({
+          id: e.id,
+          type: e.type,
+          x: e.x,
+          y: e.y,
+          w: e.width,
+          h: e.height,
+          r: e.rotation,
+          src: e.src,
+          text: (e as any).text,
+          fill: (e as any).fill || (e as any).color,
+          fontSize: (e as any).fontSize,
+          fontFamily: (e as any).fontFamily,
+        })),
+      });
+    };
+
+    const currentCache = { ...get().previewSpreadCache };
+    const currentCleanCache = { ...get().cleanSpreadCache };
+    let dirtyIndices: number[] = [];
+
+    if (options?.forceAll) {
+      if (targetType === 'soft' || options.section === 'all' || !options.section) {
+        dirtyIndices = spreads.map((_, i) => i);
+      } else if (options.section === 'cover') {
+        dirtyIndices = [0];
+      } else if (options.section === 'inner') {
+        dirtyIndices = spreads.slice(1).map((_, i) => i + 1);
+      }
+      dirtyIndices.forEach(idx => {
+        delete currentCache[idx];
+        delete currentCleanCache[idx];
+      });
+    } else {
+      spreads.forEach((spread, idx) => {
+        const fp = computeSpreadFingerprint(spread);
+        if (!currentCache[idx] || currentCache[idx].fingerprint !== fp || !currentCleanCache[idx]) {
+          dirtyIndices.push(idx);
+        }
+      });
+
+      // Check if clean PDF already exists in IndexedDB
+      const existingCachedPdf = await getCleanPdfFromCache(bookId);
+
+      // If zero spreads changed and clean PDF exists in cache, show preview IMMEDIATELY (0ms)!
+      if (dirtyIndices.length === 0 && Object.keys(currentCache).length >= spreads.length && existingCachedPdf) {
+        set({ isPreviewModalOpen: true });
+        return;
+      }
+    }
+
+    const pdfTypeMode: 'cover' | 'inner' | 'both' =
+      targetType === 'soft' ? 'both' :
+      options?.section === 'cover' ? 'cover' :
+      options?.section === 'inner' ? 'inner' : 'both';
+
+    set({
+      isPreviewModalOpen: false,
+      isGeneratingPdf: true,
+      isRenderingPreview: true,
+      pdfGenerationProgress: {
+        current: 0,
+        total: dirtyIndices.length,
+        status: targetType === 'soft'
+          ? "Preparing Digital PDF Generation..."
+          : options?.section === 'cover'
+            ? "Preparing Hardcover Cover Jacket (570×300mm)..."
+            : options?.section === 'inner'
+              ? "Preparing Hardcover Inner Signatures (260×260mm)..."
+              : "Preparing Hardcover Print Generation...",
+        isSoftCopy: targetType === 'soft',
+        pdfType: pdfTypeMode,
+        coverCurrent: pdfTypeMode === 'inner' ? 1 : 0,
+        coverTotal: 1,
+        innerCurrent: 0,
+        innerTotal: Math.max(1, pdfTypeMode === 'inner' ? dirtyIndices.length : (spreads.length - 1)),
+      },
+      previewRenderProgress: {
+        current: 0,
+        total: dirtyIndices.length,
+        status: `Preparing preview... (0/${dirtyIndices.length})`,
+      },
+    });
+
+    const originalIndex = state.currentSpreadIndex;
+    const originalViewMode = state.viewMode;
+
+    // Ensure spread view mode for 2-page capture
+    if (originalViewMode === 'single') {
+      set({ viewMode: 'spread' });
+      await new Promise(r => setTimeout(r, 400));
+    }
+
+    const PAGE_WIDTH = 500;
+    const PAGE_HEIGHT = 500;
+    const CAPTURE_PIXEL_RATIO = 4; // Ultra-crisp 4000x2000 resolution (identical to 10MB admin export)
+
+    try {
+      for (let d = 0; d < dirtyIndices.length; d++) {
+        const spreadIdx = dirtyIndices[d];
+        const spread = spreads[spreadIdx];
+
+        const hasCoverInQueue = dirtyIndices.includes(0);
+        const isCoverFinished = !hasCoverInQueue || (hasCoverInQueue && spreadIdx > 0);
+        const isCoverActive = spreadIdx === 0;
+
+        set({
+          pdfGenerationProgress: {
+            current: d + 1,
+            total: dirtyIndices.length,
+            status: spreadIdx === 0
+              ? (targetType === 'soft' ? 'Rendering Digital Cover Spread...' : 'Rendering 570mm Hardcover Wrap Jacket...')
+              : `Rendering Inner Signature Spread ${spreadIdx} of ${spreads.length - 1}...`,
+            isSoftCopy: targetType === 'soft',
+            pdfType: pdfTypeMode,
+            coverCurrent: isCoverFinished ? 1 : (isCoverActive ? 0.5 : 0),
+            coverTotal: 1,
+            innerCurrent: spreadIdx > 0 ? (pdfTypeMode === 'inner' ? d + 1 : spreadIdx) : 0,
+            innerTotal: Math.max(1, pdfTypeMode === 'inner' ? dirtyIndices.length : (spreads.length - 1)),
+          },
+          previewRenderProgress: {
+            current: d + 1,
+            total: dirtyIndices.length,
+            status: spreadIdx === 0
+              ? (targetType === 'soft' ? 'Rendering Digital Cover Spread...' : 'Rendering 570mm Hardcover Wrap Jacket...')
+              : `Rendering Inner Signature Spread ${spreadIdx} of ${spreads.length - 1}...`,
+          },
+        });
+
+        setCurrentSpread(spreadIdx, true);
+
+        // Preload any remote images in this spread
+        const urlsToPreload: string[] = [];
+        const isValidUrl = (url?: string) => url && (url.startsWith('http') || url.startsWith('/') || url.startsWith('data:'));
+        [spread.leftPage, spread.rightPage].forEach(page => {
+          if (!page) return;
+          if (isValidUrl(page.background)) urlsToPreload.push(page.background!);
+          page.elements.forEach(el => {
+            if (isValidUrl(el.src)) urlsToPreload.push(el.src!);
+          });
+        });
+
+        if (urlsToPreload.length > 0) {
+          await Promise.all(urlsToPreload.map(url => new Promise<void>(resolve => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+            img.src = url;
+            setTimeout(resolve, 8000);
+          })));
+        }
+
+        // Wait for React Konva DOM to flush
+        await new Promise(r => setTimeout(r, 450));
+
+        const curStage = get().stageRef;
+        if (!curStage) continue;
+
+        curStage.batchDraw();
+        await document.fonts.ready;
+        await new Promise(r => setTimeout(r, 150));
+
+        // Temporarily set stage to 1:1 scale for capture
+        const origScaleX = curStage.scaleX();
+        const origScaleY = curStage.scaleY();
+        const origW = curStage.width();
+        const origH = curStage.height();
+
+        curStage.scaleX(1);
+        curStage.scaleY(1);
+        curStage.width(PAGE_WIDTH * 2);
+        curStage.height(PAGE_HEIGHT);
+        curStage.batchDraw();
+        await new Promise(r => setTimeout(r, 100));
+
+        // Exact PDF dimensions and bleed cropping
+        let cropX = 0;
+        let cropY = 0;
+        let cropW = PAGE_WIDTH * 2;
+        let cropH = PAGE_HEIGHT;
+
+        if (targetType === 'soft') {
+          // Soft Copy PDF exact dimensions: crop out 20mm bleed on cover, 3mm bleed on inner pages
+          if (spreadIdx === 0) {
+            cropX = 35.08;
+            cropY = 33.33;
+            cropW = (PAGE_WIDTH * 2) - 70.16;
+            cropH = PAGE_HEIGHT - 66.66;
+          } else {
+            cropX = 5.77;
+            cropY = 5.77;
+            cropW = (PAGE_WIDTH * 2) - 11.54;
+            cropH = PAGE_HEIGHT - 11.54;
+          }
+        }
+
+        const cleanSpreadDataUrl = curStage.toDataURL({
+          x: cropX,
+          y: cropY,
+          width: cropW,
+          height: cropH,
+          pixelRatio: CAPTURE_PIXEL_RATIO,
+          mimeType: "image/jpeg",
+          quality: 0.95,
+        });
+
+        // Restore original stage dimensions immediately
+        curStage.scaleX(origScaleX);
+        curStage.scaleY(origScaleY);
+        curStage.width(origW);
+        curStage.height(origH);
+        curStage.batchDraw();
+
+        // Save clean image in clean cache for PDF compilation
+        const spreadFp = computeSpreadFingerprint(spread);
+        currentCleanCache[spreadIdx] = {
+          fingerprint: spreadFp,
+          cleanUrl: cleanSpreadDataUrl,
+        };
+
+        // Load the clean image to bake rotated watermarks on offscreen canvas
+        const img = new Image();
+        img.src = cleanSpreadDataUrl;
+        await new Promise(resolve => {
+          img.onload = () => resolve(null);
+          img.onerror = () => resolve(null);
+        });
+
+        const totalW = PAGE_WIDTH * 2 * CAPTURE_PIXEL_RATIO; // 2000
+        const totalH = PAGE_HEIGHT * CAPTURE_PIXEL_RATIO;     // 1000
+        const halfW = totalW / 2;                            // 1000
+
+        const canvas = document.createElement("canvas");
+        canvas.width = totalW;
+        canvas.height = totalH;
+        const ctx = canvas.getContext("2d");
+
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, totalW, totalH);
+
+          // Watermark drawing helper: Applies small subtle rotated diagonal "PREVIEW" watermarks
+          const applyPageWatermark = (startX: number, pWidth: number, pHeight: number) => {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(startX, 0, pWidth, pHeight);
+            ctx.clip();
+
+            // Repeating diagonal grid of subtle small PREVIEW text across the page
+            ctx.save();
+            ctx.translate(startX, 0);
+            ctx.font = "bold 22px sans-serif";
+            ctx.fillStyle = "rgba(255, 255, 255, 0.30)";
+            ctx.strokeStyle = "rgba(0, 0, 0, 0.22)";
+            ctx.lineWidth = 1.5;
+            for (let y = -pHeight; y < pHeight * 2; y += 130) {
+              for (let x = -pWidth; x < pWidth * 2; x += 200) {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.rotate(-35 * Math.PI / 180);
+                ctx.strokeText("PREVIEW", 0, 0);
+                ctx.fillText("PREVIEW", 0, 0);
+                ctx.restore();
+              }
+            }
+            ctx.restore();
+
+            ctx.restore();
+          };
+
+          // Apply rotated watermark on Left Page
+          applyPageWatermark(0, halfW, totalH);
+          // Apply rotated watermark on Right Page
+          applyPageWatermark(halfW, halfW, totalH);
+
+          const watermarkedSpreadUrl = canvas.toDataURL("image/jpeg", 0.9);
+
+          // Separate Left Page slice
+          const leftCanvas = document.createElement("canvas");
+          leftCanvas.width = halfW;
+          leftCanvas.height = totalH;
+          const leftCtx = leftCanvas.getContext("2d");
+          if (leftCtx) {
+            leftCtx.drawImage(canvas, 0, 0, halfW, totalH, 0, 0, halfW, totalH);
+          }
+          const leftWatermarkedUrl = leftCanvas.toDataURL("image/jpeg", 0.9);
+
+          // Separate Right Page slice
+          const rightCanvas = document.createElement("canvas");
+          rightCanvas.width = halfW;
+          rightCanvas.height = totalH;
+          const rightCtx = rightCanvas.getContext("2d");
+          if (rightCtx) {
+            rightCtx.drawImage(canvas, halfW, 0, halfW, totalH, 0, 0, halfW, totalH);
+          }
+          const rightWatermarkedUrl = rightCanvas.toDataURL("image/jpeg", 0.9);
+
+          currentCache[spreadIdx] = {
+            fingerprint: spreadFp,
+            previewUrl: watermarkedSpreadUrl,
+            leftWatermarkedUrl,
+            rightWatermarkedUrl,
+          };
+        }
+      }
+
+      // ─── Compile Clean Production PDF to IndexedDB ───
+      set({
+        previewRenderProgress: {
+          current: dirtyIndices.length,
+          total: dirtyIndices.length,
+          status: "Compiling production PDF...",
+        },
+      });
+
+      const { jsPDF } = await import("jspdf");
+
+      if (targetType === "soft") {
+        const softPdf = new jsPDF({
+          orientation: "landscape",
+          unit: "pt",
+          format: [988.46, 488.46],
+          compress: true,
+        });
+
+        for (let i = 0; i < spreads.length; i++) {
+          const cleanItem = currentCleanCache[i];
+          if (cleanItem?.cleanUrl) {
+            if (i > 0) {
+              softPdf.addPage([988.46, 488.46], "landscape");
+            }
+            softPdf.addImage(cleanItem.cleanUrl, "JPEG", 0, 0, 988.46, 488.46);
+          }
+        }
+
+        const cleanSoftBlob = softPdf.output("blob");
+        await saveCleanPdfToCache(bookId, {
+          type: "soft",
+          softPdfBlob: cleanSoftBlob,
+        });
+      } else {
+        // Hard Copy compilation
+        const COVER_WIDTH = 570 * 2.83465;
+        const COVER_HEIGHT = 300 * 2.83465;
+        const TEXT_PAGE_WIDTH = 260 * 2.83465;
+        const TEXT_PAGE_HEIGHT = 260 * 2.83465;
+
+        const coverPdf = new jsPDF({
+          orientation: "landscape",
+          unit: "pt",
+          format: [COVER_WIDTH, COVER_HEIGHT],
+          compress: true,
+        });
+
+        const textPdf = new jsPDF({
+          orientation: "portrait",
+          unit: "pt",
+          format: [TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT],
+          compress: true,
+        });
+
+        // Cover Spread (Spread 0)
+        if (currentCleanCache[0]?.cleanUrl) {
+          coverPdf.addImage(currentCleanCache[0].cleanUrl, "JPEG", 0, 0, COVER_WIDTH, COVER_HEIGHT);
+        }
+
+        // Inner Spreads (1..N)
+        for (let i = 1; i < spreads.length; i++) {
+          const cleanItem = currentCleanCache[i];
+          if (cleanItem?.cleanUrl) {
+            // Left page
+            textPdf.addPage([TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT], "portrait");
+            textPdf.addImage(cleanItem.cleanUrl, "JPEG", 0, 0, TEXT_PAGE_WIDTH * 2, TEXT_PAGE_HEIGHT);
+            // Right page
+            textPdf.addPage([TEXT_PAGE_WIDTH, TEXT_PAGE_HEIGHT], "portrait");
+            textPdf.addImage(cleanItem.cleanUrl, "JPEG", -TEXT_PAGE_WIDTH, 0, TEXT_PAGE_WIDTH * 2, TEXT_PAGE_HEIGHT);
+          }
+        }
+
+        const coverBlob = coverPdf.output("blob");
+        const textBlob = textPdf.output("blob");
+
+        await saveCleanPdfToCache(bookId, {
+          type: "hard",
+          coverPdfBlob: coverBlob,
+          textPdfBlob: textBlob,
+        });
+      }
+
+      set({
+        cleanSpreadCache: currentCleanCache,
+        previewSpreadCache: currentCache,
+        isPreviewModalOpen: true,
+      });
+    } catch (err) {
+      console.error("Preview render failed:", err);
+      toast.error("Failed to generate preview. Please try again.");
+    } finally {
+      set({
+        isGeneratingPdf: false,
+        isRenderingPreview: false,
+        pdfGenerationProgress: null,
+        previewRenderProgress: null,
+      });
       setCurrentSpread(originalIndex, true);
       if (originalViewMode !== get().viewMode) {
         set({ viewMode: originalViewMode });

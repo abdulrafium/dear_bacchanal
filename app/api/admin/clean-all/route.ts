@@ -4,6 +4,20 @@ import { getDatabase } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
+function extractUploadThingKey(url?: string | null): string | null {
+  if (!url || typeof url !== "string") return null;
+  if (url.includes("/f/")) {
+    const part = url.split("/f/")[1];
+    return part ? part.split("?")[0] : null;
+  }
+  if (url.includes("utfs.io") || url.includes("ufs.sh")) {
+    const parts = url.split("/");
+    const last = parts[parts.length - 1];
+    return last ? last.split("?")[0] : null;
+  }
+  return null;
+}
+
 export async function POST(req: NextRequest) {
   const authError = await adminAuthMiddleware();
   if (authError) return authError;
@@ -11,22 +25,42 @@ export async function POST(req: NextRequest) {
   try {
     const db = await getDatabase();
     
-    // 1. Fetch all live books to extract UploadThing URLs
+    // 1. Fetch all live books and orders to extract UploadThing URLs
     const books = await db.collection("user_books").find({}).toArray();
+    const orders = await db.collection("orders").find({}).toArray();
     const fileKeys: string[] = [];
     
     for (const book of books) {
-      if (book.savedCoverPdfUrl) {
-        const key = book.savedCoverPdfUrl.split('/f/')[1];
-        if (key) fileKeys.push(key);
+      const bookUrls = [
+        book.savedSoftPdfUrl,
+        book.savedPdfUrl,
+        book.pdfUrl,
+        book.softUrl,
+        book.savedCoverPdfUrl,
+        book.coverPdfUrl,
+        book.savedTextPdfUrl,
+        book.textPdfUrl,
+      ];
+      for (const u of bookUrls) {
+        const k = extractUploadThingKey(u);
+        if (k && !fileKeys.includes(k)) fileKeys.push(k);
       }
-      if (book.savedTextPdfUrl) {
-        const key = book.savedTextPdfUrl.split('/f/')[1];
-        if (key) fileKeys.push(key);
-      }
-      if (book.savedPdfUrl) {
-        const key = book.savedPdfUrl.split('/f/')[1];
-        if (key) fileKeys.push(key);
+    }
+
+    for (const order of orders) {
+      const orderUrls = [
+        order.pdfUrl,
+        order.savedPdfUrl,
+        order.savedSoftPdfUrl,
+        order.softUrl,
+        order.coverPdfUrl,
+        order.savedCoverPdfUrl,
+        order.textPdfUrl,
+        order.savedTextPdfUrl,
+      ];
+      for (const u of orderUrls) {
+        const k = extractUploadThingKey(u);
+        if (k && !fileKeys.includes(k)) fileKeys.push(k);
       }
     }
 

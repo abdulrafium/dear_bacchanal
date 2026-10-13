@@ -37,7 +37,7 @@ export const getBaseEmailTemplate = (content: string, previewText?: string) => `
     }
 
     .header {
-      padding: 60px 0;
+      padding: 50px 20px;
       text-align: center;
       background: radial-gradient(circle, #d92e20 0%, #000000 100%);
       border-bottom: 4px solid #ffce1a;
@@ -45,10 +45,11 @@ export const getBaseEmailTemplate = (content: string, previewText?: string) => `
 
     .logo-container {
         font-family: 'Luckiest Guy', cursive;
-        font-size: 44px;
+        font-size: 38px;
         color: #ffce1a;
         letter-spacing: 2px;
         text-shadow: 3px 3px 0px #000000;
+        line-height: 1;
     }
 
     .content {
@@ -141,15 +142,29 @@ export const getBaseEmailTemplate = (content: string, previewText?: string) => `
     }
   </style>
 </head>
-<body>
+<body style="background-color: #d92e20; margin: 0; padding: 0;">
   ${previewText ? `<div style="display: none; max-height: 0px; overflow: hidden;">${previewText}</div>` : ''}
-  <div class="wrapper">
-    <table class="main">
+  <div class="wrapper" style="background-color: #d92e20;">
+    <table class="main" bgcolor="#000000" cellpadding="0" cellspacing="0">
       <tr>
-        <td class="header">
-          <div class="logo-container">
-            DEAR BACCHANAL
-          </div>
+        <td class="header" align="center" style="padding: 45px 20px;">
+          <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin: 0 auto;">
+            <tr>
+              <td valign="middle" style="padding-right: 16px;">
+                <div style="width: 54px; height: 54px; background-color: #be2826; border: 3px solid #ffffff; border-radius: 15px; text-align: center; line-height: 50px; color: #ffffff; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 24px; font-weight: 900; box-shadow: 0 6px 16px rgba(0,0,0,0.5); transform: rotate(-3deg); display: inline-block;">
+                  DB
+                </div>
+              </td>
+              <td valign="middle" align="left">
+                <div class="logo-container" style="line-height: 1; margin: 0; font-size: 38px;">
+                  DEAR BACCHANAL
+                </div>
+                <div style="color: #ffce1a; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 10px; font-weight: 800; letter-spacing: 3px; text-transform: uppercase; margin-top: 4px;">
+                  PREMIUM KEEPSAKES
+                </div>
+              </td>
+            </tr>
+          </table>
         </td>
       </tr>
       <tr>
@@ -268,6 +283,59 @@ export const getOrderConfirmationEmail = (orderData: {
   return getBaseEmailTemplate(content, `Receipt: #${orderData.orderId.slice(-8).toUpperCase()}`);
 };
 
+import { getCarrierTrackingUrl, formatCarrierName } from "@/lib/tracking";
+
+export const getOrderShippedEmail = (data: {
+  customerName: string;
+  orderNumber: string;
+  bookTemplateName?: string;
+  carrier?: string;
+  trackingNumber: string;
+  shippingAddress?: {
+    line1?: string;
+    line2?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+  };
+}) => {
+  const carrierFormatted = formatCarrierName(data.carrier);
+  const trackingUrl = getCarrierTrackingUrl(data.trackingNumber, data.carrier);
+
+  const content = `
+    <h1 class="title">PACKAGE ON THE WAY!</h1>
+    <p>Hello ${data.customerName},</p>
+    <p>Great news! Your hard copy book for order <strong style="color: #ffce1a;">${data.orderNumber}</strong> has finished printing and has been handed over to <strong>${carrierFormatted}</strong> for delivery.</p>
+
+    <div class="order-summary" style="background-color: #111111; border: 1px solid #333333; border-radius: 16px; padding: 24px; margin: 24px 0;">
+      <div class="order-item"><span class="order-label">Order Number:</span><span class="order-value">${data.orderNumber}</span></div>
+      ${data.bookTemplateName ? `<div class="order-item"><span class="order-label">Book Edition:</span><span class="order-value">${data.bookTemplateName}</span></div>` : ''}
+      <div class="order-item"><span class="order-label">Courier:</span><span class="order-value" style="color: #ffce1a;">${carrierFormatted}</span></div>
+      <div class="order-item"><span class="order-label">Tracking Number:</span><span class="order-value" style="font-family: monospace; letter-spacing: 1px;">${data.trackingNumber}</span></div>
+    </div>
+
+    <div class="button-container" style="text-align: center; margin: 30px 0;">
+      <a href="${trackingUrl}" class="button" target="_blank" style="background: #ffce1a; color: #000000 !important; padding: 18px 36px; text-decoration: none; border-radius: 12px; font-weight: 900; font-size: 16px; display: inline-block; text-transform: uppercase; letter-spacing: 1px;">
+        TRACK ON ${carrierFormatted.toUpperCase()} &rarr;
+      </a>
+    </div>
+
+    ${data.shippingAddress?.line1 ? `
+    <div class="info-card">
+      <strong style="color: #ffce1a;">SHIPPING DESTINATION:</strong><br/>
+      ${data.shippingAddress.line1}<br/>
+      ${data.shippingAddress.line2 ? data.shippingAddress.line2 + '<br/>' : ''}
+      ${[data.shippingAddress.city, data.shippingAddress.state, data.shippingAddress.postalCode].filter(Boolean).join(', ')}<br/>
+      ${data.shippingAddress.country || ''}
+    </div>
+    ` : ''}
+
+    <p style="font-size: 13px; color: #aaa;">Tracking scans may take a few hours to update once the carrier registers the package at the sorting facility.</p>
+  `;
+  return getBaseEmailTemplate(content, `Your Dear Bacchanal Order Has Shipped - ${data.trackingNumber}`);
+};
+
 export const getOrderCompletedEmail = (orderId: string) => {
     const content = `
       <h1 class="title">CURTAIN RISES!</h1>
@@ -366,8 +434,8 @@ export const getHardCopyOrderReceivedEmail = (data: {
     </div>
 
     <div class="info-card">
-      <strong style="color:#ffce1a;">WHAT HAPPENS NEXT?</strong><br/>
-      You will receive another email once the order has been approved and forwarded for printing.
+      <strong style="color:#ffce1a;">PAYMENT CONFIRMED & INVOICE ATTACHED</strong><br/>
+      Your official payment receipt & invoice PDF is attached to this email. You will receive another notification once your order is approved by our team and forwarded for printing.
     </div>
 
     <p>Thank you.</p>
@@ -402,11 +470,68 @@ export const getHardCopyApprovalEmail = (data: {
     </div>
 
     <div class="info-card">
-      <strong style="color:#ffce1a;">INVOICE ATTACHED</strong><br/>
-      Please find your invoice attached to this email. Keep it for your records.
+      <strong style="color:#ffce1a;">ORDER IN PRODUCTION</strong><br/>
+      Your book order is now being processed by our printing team at PurePrint. You will receive tracking details once your book has been printed and dispatched.
     </div>
 
     <p>Thank you for your order!</p>
   `;
   return getBaseEmailTemplate(content, "Your Hard Copy Order Has Been Approved");
+};
+
+export const getPurePrintOrderDispatchEmail = (data: {
+  orderNumber: string;
+  bookTemplateName: string;
+  orderDate: string;
+  sku: string;
+  quantity: number;
+  customerName: string;
+  shippingAddress: {
+    line1?: string;
+    line2?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+    phone?: string;
+    email?: string;
+  };
+  coverPdfUrl?: string;
+  textPdfUrl?: string;
+}) => {
+  const content = `
+    <h1 class="title">NEW PRINT ORDER DISPATCH</h1>
+    <p>Dear PurePrint Production Team,</p>
+    <p>A new hard copy book order has been approved and dispatched for manufacturing:</p>
+
+    <div class="order-summary">
+      <div class="order-item"><span class="order-label">Order Number:</span><span class="order-value">${data.orderNumber}</span></div>
+      <div class="order-item"><span class="order-label">Book Title:</span><span class="order-value">${data.bookTemplateName}</span></div>
+      <div class="order-item"><span class="order-label">SKU:</span><span class="order-value">${data.sku}</span></div>
+      <div class="order-item"><span class="order-label">Quantity:</span><span class="order-value">${data.quantity}</span></div>
+      <div class="order-item"><span class="order-label">Date Approved:</span><span class="order-value">${data.orderDate}</span></div>
+    </div>
+
+    <p><strong>SHIPPING RECIPIENT:</strong></p>
+    <div class="info-card">
+      <strong>${data.customerName}</strong><br/>
+      ${data.shippingAddress.line1 || ''}<br/>
+      ${data.shippingAddress.line2 ? data.shippingAddress.line2 + '<br/>' : ''}
+      ${[data.shippingAddress.city, data.shippingAddress.state, data.shippingAddress.postalCode].filter(Boolean).join(', ')}<br/>
+      ${data.shippingAddress.country || ''}<br/>
+      ${data.shippingAddress.phone ? 'Phone: ' + data.shippingAddress.phone + '<br/>' : ''}
+      ${data.shippingAddress.email ? 'Email: ' + data.shippingAddress.email : ''}
+    </div>
+
+    ${data.coverPdfUrl || data.textPdfUrl ? `
+    <p><strong>PRODUCTION PRINT ASSETS:</strong></p>
+    <div style="background: #111; padding: 15px; border-radius: 8px; font-size: 13px;">
+      ${data.coverPdfUrl ? `<p style="margin: 5px 0;"><a href="${data.coverPdfUrl}" style="color: #ffce1a; text-decoration: underline;">Cover PDF File</a></p>` : ''}
+      ${data.textPdfUrl ? `<p style="margin: 5px 0;"><a href="${data.textPdfUrl}" style="color: #ffce1a; text-decoration: underline;">Text / Interior Pages PDF File</a></p>` : ''}
+    </div>
+    ` : ''}
+
+    <p style="margin-top: 20px;">The customer payment receipt & invoice PDF is also attached for reference.</p>
+  `;
+  return getBaseEmailTemplate(content, `PurePrint Order Dispatch: ${data.orderNumber}`);
 };

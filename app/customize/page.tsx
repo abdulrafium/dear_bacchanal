@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Camera,
@@ -23,8 +23,15 @@ import {
   AlertTriangle,
   CheckCircle,
   Printer,
-  X
+  X,
+  ExternalLink,
+  Copy,
+  Check,
+  Truck,
+  Clock,
+  ShieldAlert
 } from "lucide-react";
+import { getCarrierTrackingUrl, formatCarrierName } from "@/lib/tracking";
 import { format } from "date-fns";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
@@ -34,7 +41,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthModal } from "@/hooks/useAuthModal";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -72,6 +79,35 @@ const CustomizeRitual = () => {
   const [refundReason, setRefundReason] = useState("");
   const [selectedOrderForRefund, setSelectedOrderForRefund] = useState<any>(null);
   const [isSubmittingRefund, setIsSubmittingRefund] = useState(false);
+  const [refundPolicy, setRefundPolicy] = useState<{
+    taxPercentage: number;
+    refundDeductionPercentage: number;
+    refundDeadlineDays: number;
+  }>({
+    taxPercentage: 20,
+    refundDeductionPercentage: 20,
+    refundDeadlineDays: 14,
+  });
+  const [nowTime, setNowTime] = useState<number>(Date.now());
+
+  // Live ticker for countdown timer
+  useEffect(() => {
+    if (!isRefundModalOpen) return;
+    setNowTime(Date.now());
+    const timerInterval = setInterval(() => {
+      setNowTime(Date.now());
+    }, 1000);
+    return () => clearInterval(timerInterval);
+  }, [isRefundModalOpen]);
+
+  const [copiedTrackingId, setCopiedTrackingId] = useState<string | null>(null);
+
+  const handleCopyTracking = (trackingNumber: string) => {
+    navigator.clipboard.writeText(trackingNumber);
+    setCopiedTrackingId(trackingNumber);
+    toast.success("Tracking number copied to clipboard!");
+    setTimeout(() => setCopiedTrackingId(null), 2000);
+  };
 
   const invoiceRef = useRef<HTMLDivElement>(null);
 
@@ -117,6 +153,14 @@ const CustomizeRitual = () => {
   const { openModal } = useAuthModal();
   const isAdmin = user?.isAdmin;
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam === "orders" || tabParam === "saved" || tabParam === "global") {
+      setActiveTab(tabParam as any);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!isLoadingTemplates && !isAuthLoading && !isAuthenticated) {
@@ -194,6 +238,9 @@ const CustomizeRitual = () => {
       if (res.ok) {
         const data = await res.json();
         setOrders(data.orders || []);
+        if (data.refundPolicy) {
+          setRefundPolicy(data.refundPolicy);
+        }
       }
     } catch (error) {
       console.error("Error fetching orders:", error);
@@ -204,7 +251,31 @@ const CustomizeRitual = () => {
 
   const submitRefundRequest = async () => {
     if (!refundReason.trim()) {
-      toast.error("Please provide a description of the issue.");
+      toast.error("Please enter a mandatory refund reason (max 50 characters).");
+      return;
+    }
+    if (refundReason.trim().length > 50) {
+      toast.error("Refund reason cannot exceed 50 characters.");
+      return;
+    }
+
+    if (!selectedOrderForRefund) return;
+
+    // Client-side guard for deadline & hard copy printing
+    const isHardCopy = (
+      selectedOrderForRefund.type?.toLowerCase() === 'hard' || 
+      selectedOrderForRefund.orderType?.toLowerCase() === 'hard'
+    );
+    if (isHardCopy && selectedOrderForRefund.status !== 'pending_approval') {
+      toast.error("This order has already been sent to PurePrint for printing and cannot be refunded.");
+      return;
+    }
+
+    const orderCreatedAt = selectedOrderForRefund.createdAt ? new Date(selectedOrderForRefund.createdAt).getTime() : Date.now();
+    const policyDays = refundPolicy.refundDeadlineDays || 14;
+    const deadlineTimestamp = orderCreatedAt + (policyDays * 24 * 60 * 60 * 1000);
+    if (Date.now() > deadlineTimestamp) {
+      toast.error(`The ${policyDays}-day refund window for this order has expired.`);
       return;
     }
 
@@ -214,25 +285,27 @@ const CustomizeRitual = () => {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          orderId: selectedOrderForRefund._id || selectedOrderForRefund.id,
+          orderId: selectedOrderForRefund._id || selectedOrderForRefund.id || selectedOrderForRefund.orderId,
           reason: refundReason
         })
       });
 
+      const data = await res.json();
+
       if (res.ok) {
-        toast.success("Refund request submitted successfully");
+        toast.success("Refund request submitted successfully!");
         setOrders(orders.map(o =>
-          (o._id === selectedOrderForRefund._id || o.id === selectedOrderForRefund.id)
+          (o._id === selectedOrderForRefund._id || o.id === selectedOrderForRefund.id || o.orderId === selectedOrderForRefund.orderId)
             ? { ...o, status: 'refund_pending' }
             : o
         ));
         setIsRefundModalOpen(false);
         setRefundReason("");
       } else {
-        toast.error("Failed to submit refund request");
+        toast.error(data.error || "Failed to submit refund request");
       }
     } catch (error) {
-      toast.error("An error occurred");
+      toast.error("An error occurred while submitting refund request");
     } finally {
       setIsSubmittingRefund(false);
     }
@@ -582,7 +655,7 @@ const CustomizeRitual = () => {
                                 : order.status === 'processing'
                                   ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
                                   : order.status === 'paid'
-                                    ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                                    ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                                     : order.status === 'shipped'
                                       ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
                                       : order.status === 'delivered'
@@ -607,8 +680,8 @@ const CustomizeRitual = () => {
                                                 : (order.status || 'Paid').toUpperCase()}
                             </span>
                           </div>
-                          <OrderStat label="PAGES" value={order.pagesCount || '20+'} />
-                          <OrderStat label="ADD-ONS" value={order.addonsCount || '0'} />
+                          <OrderStat label="PAGES" value={order.pagesCount ? `${order.pagesCount} Pages` : (order.spreadsCount ? `${order.spreadsCount * 2} Pages` : '34 Pages')} />
+                          <OrderStat label="EDITION" value={(order.type || order.orderType) === 'hard' ? 'Hardcover Heirloom' : (order.type || order.orderType) === 'admin_test' ? 'Admin Test' : 'Digital PDF'} />
                         </div>
 
                         {/* Pending Approval info banner for hard copy orders */}
@@ -618,6 +691,45 @@ const CustomizeRitual = () => {
                             <div>
                               <p className="text-amber-300 font-black text-xs uppercase tracking-widest">Awaiting Admin Approval</p>
                               <p className="text-amber-200/60 text-[11px] mt-0.5">Your hard copy order has been received and is pending approval. You will receive an email with your invoice once approved.</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Refund Pending Info Banner */}
+                        {order.status === 'refund_pending' && (
+                          <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                            <span className="text-red-400 text-lg leading-none mt-0.5">⏳</span>
+                            <div>
+                              <p className="text-red-300 font-black text-xs uppercase tracking-widest">Refund Request Pending Admin Review</p>
+                              <p className="text-red-200/70 text-[11px] mt-0.5">
+                                Your refund request has been received and is currently under review by our administration team. Reason: &ldquo;{order.refundReason || 'Order cancellation'}&rdquo;
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Refund Rejected / Denied Info Banner */}
+                        {(order.refundStatus === 'rejected' || (order.status === 'processing' && order.refundRejectedAt)) && (
+                          <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                            <span className="text-amber-400 text-lg leading-none mt-0.5">⚠️</span>
+                            <div>
+                              <p className="text-amber-300 font-black text-xs uppercase tracking-widest">Refund Request Denied — Dispatched to Print</p>
+                              <p className="text-amber-200/70 text-[11px] mt-0.5">
+                                {order.refundRejectionReason || "Your refund request could not be approved because your order has been approved and forwarded to PurePrint for physical printing."}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Refund Processed Banner */}
+                        {order.status === 'refunded' && (
+                          <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-orange-500/10 border border-orange-500/20">
+                            <span className="text-orange-400 text-lg leading-none mt-0.5">💳</span>
+                            <div>
+                              <p className="text-orange-300 font-black text-xs uppercase tracking-widest">Refund Processed</p>
+                              <p className="text-orange-200/70 text-[11px] mt-0.5">
+                                Your refund has been approved and returned to your original payment method (minus applicable platform tax/processing deductions).
+                              </p>
                             </div>
                           </div>
                         )}
@@ -633,50 +745,159 @@ const CustomizeRitual = () => {
                           </div>
                         )}
 
-                        <div className="pt-4 flex flex-wrap gap-4">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="bg-white/5 border-white/10 text-white/80 hover:bg-white/10 rounded-xl px-6 h-12 text-xs uppercase font-bold flex gap-2"
-                            onClick={() => openInvoice(order._id || order.id)}
-                          >
-                            <FileText className="w-4 h-4" />
-                            Print Receipt
-                          </Button>
-
-
-                          {order.status === 'refunded' && (
-                            <div className="flex items-center gap-2 text-orange-500 bg-orange-500/10 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-orange-500/20">
-                              <Undo2 className="w-4 h-4" />
-                              Refund Processed
+                        {/* Shipped & Dispatched Tracking Banner */}
+                        {(order.status === 'shipped' || order.status === 'delivered' || order.trackingNumber || order.shippingDetails?.tracking_number) && (
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                            <div className="flex items-start gap-3">
+                              <span className="text-blue-400 text-lg leading-none mt-0.5">📦</span>
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="text-blue-300 font-black text-xs uppercase tracking-widest">
+                                    {order.status === 'delivered' ? 'Package Delivered' : 'Order Dispatched & Shipped'}
+                                  </p>
+                                  {(order.carrier || order.shippingDetails?.carrier) && (
+                                    <span className="text-[9px] font-bold bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded uppercase border border-blue-500/30">
+                                      {formatCarrierName(order.carrier || order.shippingDetails?.carrier)}
+                                    </span>
+                                  )}
+                                </div>
+                                {(order.trackingNumber || order.shippingDetails?.tracking_number) ? (
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <span className="text-white/60 text-[11px] font-mono">
+                                      Tracking: <span className="text-white font-bold select-all">{order.trackingNumber || order.shippingDetails?.tracking_number}</span>
+                                    </span>
+                                    <button
+                                      onClick={() => handleCopyTracking(order.trackingNumber || order.shippingDetails?.tracking_number)}
+                                      className="text-[9px] text-blue-400 hover:text-blue-300 flex items-center gap-1 bg-blue-500/20 px-2 py-0.5 rounded transition-all cursor-pointer"
+                                    >
+                                      {copiedTrackingId === (order.trackingNumber || order.shippingDetails?.tracking_number) ? (
+                                        <>
+                                          <Check className="w-2.5 h-2.5 text-emerald-400" />
+                                          <span className="text-emerald-400">Copied</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Copy className="w-2.5 h-2.5" />
+                                          <span>Copy</span>
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <p className="text-white/40 text-[11px] mt-0.5">Tracking link will update shortly.</p>
+                                )}
+                              </div>
                             </div>
-                          )}
-                          {/* Only show refund button for fully completed/paid orders — not pending/processing hard copies */}
-                          {order.status !== 'refunded'
-                            && order.status !== 'refund_pending'
-                            && order.status !== 'pending_approval'
-                            && order.status !== 'processing' && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-red-400/60 hover:text-red-400 hover:bg-red-500/10 rounded-xl px-6 h-12 text-xs uppercase font-bold flex gap-2"
-                                onClick={() => {
-                                  setSelectedOrderForRefund(order);
-                                  setRefundReason("");
-                                  setIsRefundModalOpen(true);
-                                }}
+                            {(order.trackingNumber || order.shippingDetails?.tracking_number) && (
+                              <a
+                                href={getCarrierTrackingUrl(
+                                  order.trackingNumber || order.shippingDetails?.tracking_number,
+                                  order.carrier || order.shippingDetails?.carrier
+                                )}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold uppercase tracking-wider transition-all shadow-md shrink-0 self-start sm:self-auto cursor-pointer"
                               >
+                                <span>Track on {formatCarrierName(order.carrier || order.shippingDetails?.carrier)}</span>
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="pt-4 flex flex-wrap items-center justify-between gap-4">
+                          <div className="flex flex-wrap items-center gap-3">
+                            {/* Soft Copy Download Button - STRICTLY for Soft Copy orders only */}
+                            {(() => {
+                              const isSoftCopy = 
+                                (order.type?.toLowerCase() === 'soft' || order.orderType?.toLowerCase() === 'soft') &&
+                                order.type?.toLowerCase() !== 'hard' &&
+                                order.orderType?.toLowerCase() !== 'hard';
+
+                              if (!isSoftCopy || order.status === 'refunded') return null;
+
+                              return (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="bg-sky-500/10 border-sky-500/30 text-sky-300 hover:bg-sky-500/20 rounded-xl px-6 h-12 text-xs uppercase font-bold flex gap-2 cursor-pointer"
+                                  onClick={async () => {
+                                    if (order.savedSoftPdfUrl || order.softUrl) {
+                                      window.open(order.savedSoftPdfUrl || order.softUrl, "_blank");
+                                      return;
+                                    }
+                                    try {
+                                      const { getCleanPdfFromCache } = await import("@/lib/pdf-cache");
+                                      const cached = await getCleanPdfFromCache(order.bookId || order.templateName || order._id);
+                                      if (cached?.softPdfBlob) {
+                                        const url = URL.createObjectURL(cached.softPdfBlob);
+                                        const a = document.createElement("a");
+                                        a.href = url;
+                                        a.download = `${(order.templateName || "Dear_Bacchanal").replace(/\s+/g, "_")}_Soft_Copy.pdf`;
+                                        document.body.appendChild(a);
+                                        a.click();
+                                        document.body.removeChild(a);
+                                        setTimeout(() => URL.revokeObjectURL(url), 5000);
+                                        toast.success("Download started!");
+                                        return;
+                                      }
+                                    } catch (e) {
+                                      console.warn(e);
+                                    }
+                                    window.location.href = `/editor?templateName=${encodeURIComponent(order.templateName || "Bacchanal")}&payment=success`;
+                                  }}
+                                >
+                                  <Download className="w-4 h-4" />
+                                  Download Book PDF
+                                </Button>
+                              );
+                            })()}
+
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="bg-white/5 border-white/10 text-white/80 hover:bg-white/10 rounded-xl px-6 h-12 text-xs uppercase font-bold flex gap-2"
+                              onClick={() => openInvoice(order._id || order.id)}
+                            >
+                              <FileText className="w-4 h-4" />
+                              Print Receipt
+                            </Button>
+                          </div>
+
+                          {/* Refund Button & Status - Shifted to Right Side */}
+                          <div className="flex items-center ml-auto">
+                            {order.status === 'refunded' && (
+                              <div className="flex items-center gap-2 text-orange-500 bg-orange-500/10 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border border-orange-500/20">
                                 <Undo2 className="w-4 h-4" />
-                                Request Refund
-                              </Button>
+                                Refund Processed
+                              </div>
                             )}
 
-                          {order.status === 'refund_pending' && (
-                            <span className="flex items-center gap-2 text-[10px] text-yellow uppercase font-bold tracking-widest bg-yellow/10 px-4 py-2 rounded-xl border border-yellow/20">
-                              <History className="w-3 h-3" />
-                              Refund Pending Approval
-                            </span>
-                          )}
+                            {/* Request Refund button - available for all active orders to view breakdown & policy */}
+                            {order.status !== 'refunded'
+                              && order.status !== 'refund_pending' && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-400/70 hover:text-red-400 hover:bg-red-500/10 rounded-xl px-5 h-12 text-xs uppercase font-bold flex gap-2 cursor-pointer transition-all"
+                                  onClick={() => {
+                                    setSelectedOrderForRefund(order);
+                                    setRefundReason("");
+                                    setIsRefundModalOpen(true);
+                                  }}
+                                >
+                                  <Undo2 className="w-4 h-4" />
+                                  Request Refund
+                                </Button>
+                              )}
+
+                            {order.status === 'refund_pending' && (
+                              <span className="flex items-center gap-2 text-[10px] text-yellow uppercase font-bold tracking-widest bg-yellow/10 px-4 py-2 rounded-xl border border-yellow/20">
+                                <History className="w-3 h-3" />
+                                Refund Pending Approval
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -867,43 +1088,228 @@ const CustomizeRitual = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Refund Request Modal */}
+      {/* Comprehensive Refund Request & Policy Modal */}
       <Dialog open={isRefundModalOpen} onOpenChange={(open) => !open && setIsRefundModalOpen(false)}>
-        <DialogContent className="sm:max-w-md bg-[#1a1a1a] border-white/10 shadow-2xl p-0 overflow-hidden">
-          <div className="bg-red-500/10 p-6 flex flex-col items-center text-center border-b border-white/5">
-            <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mb-4">
-              <Undo2 className="w-8 h-8 text-red-500" />
-            </div>
-            <DialogTitle className="text-2xl font-display tracking-tight text-white mb-2">Request Refund</DialogTitle>
-            <DialogDescription className="text-gray-400 font-body text-sm max-w-[280px]">
-              Please describe the legal issue or reason for your refund request. This is mandatory for approval.
-            </DialogDescription>
-          </div>
-          <div className="p-6">
-            <textarea
-              value={refundReason}
-              onChange={(e) => setRefundReason(e.target.value)}
-              placeholder="I am requesting a refund because..."
-              className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-red-500/50 resize-none min-h-[120px]"
-            />
-          </div>
-          <DialogFooter className="p-4 bg-[#111] flex gap-2 sm:justify-center border-t border-white/5">
-            <button
-              onClick={() => setIsRefundModalOpen(false)}
-              className="flex-1 px-4 py-2.5 rounded-xl font-bold text-gray-300 bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-              disabled={isSubmittingRefund}
-            >
-              Cancel
-            </button>
-            <button
-              onClick={submitRefundRequest}
-              disabled={isSubmittingRefund || !refundReason.trim()}
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isSubmittingRefund ? <Loader2 className="w-4 h-4 animate-spin" /> : <Undo2 className="w-4 h-4" />}
-              {isSubmittingRefund ? "Submitting..." : "Submit Request"}
-            </button>
-          </DialogFooter>
+        <DialogContent className="sm:max-w-xl bg-[#121212] border-white/10 text-white shadow-2xl p-0 overflow-hidden rounded-3xl">
+          {(() => {
+            const order = selectedOrderForRefund;
+            if (!order) return null;
+
+            const isHardCopy = (order.type?.toLowerCase() === 'hard' || order.orderType?.toLowerCase() === 'hard');
+            // For hard copy: only refundable while pending_approval before admin approval & pureprint dispatch
+            const isHardCopyAlreadyPrinting = isHardCopy && order.status !== 'pending_approval';
+
+            const orderCreatedAt = order.createdAt ? new Date(order.createdAt).getTime() : Date.now();
+            const policyDays = refundPolicy.refundDeadlineDays || 14;
+            const deadlineTimestamp = orderCreatedAt + (policyDays * 24 * 60 * 60 * 1000);
+            const remainingMs = Math.max(0, deadlineTimestamp - nowTime);
+            const isExpired = remainingMs <= 0;
+
+            const daysLeft = Math.floor(remainingMs / (1000 * 60 * 60 * 24));
+            const hoursLeft = Math.floor((remainingMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutesLeft = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+            const secondsLeft = Math.floor((remainingMs % (1000 * 60)) / 1000);
+            const pad = (n: number) => String(n).padStart(2, '0');
+
+            const countdownText = daysLeft > 0
+              ? `${daysLeft} Days, ${pad(hoursLeft)} H : ${pad(minutesLeft)} M : ${pad(secondsLeft)} S`
+              : `${pad(hoursLeft)} H : ${pad(minutesLeft)} M : ${pad(secondsLeft)} S`;
+
+            const paidAmount = (order.amount || 0) / 100;
+            const taxPercentage = refundPolicy.refundDeductionPercentage ?? 20;
+            const deductionAmount = (paidAmount * taxPercentage) / 100;
+            const netRefundAmount = Math.max(0, paidAmount - deductionAmount);
+
+            const canRequestRefund = !isExpired && !isHardCopyAlreadyPrinting;
+
+            return (
+              <div className="flex flex-col">
+                {/* Header */}
+                <div className="bg-gradient-to-r from-red-950/40 via-red-900/20 to-neutral-900 p-4 sm:p-5 border-b border-white/5 relative">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-500/15 text-red-400 border border-red-500/30">
+                      <Undo2 className="w-3 h-3" />
+                      Refund &amp; Cancellation
+                    </span>
+                    <span className="text-[11px] text-white/40 font-mono">
+                      Ref: #{order.transactionRef || order.orderId?.slice(-8) || order._id?.slice(-8) || "N/A"}
+                    </span>
+                  </div>
+                  <DialogTitle className="text-lg sm:text-xl font-black text-white tracking-tight uppercase">
+                    Order Refund Breakdown
+                  </DialogTitle>
+                  <DialogDescription className="text-white/50 text-[11px] mt-0.5">
+                    Review order details, tax fee deduction rate, and remaining policy time window.
+                  </DialogDescription>
+                </div>
+
+                <div className="p-4 sm:p-5 space-y-3 max-h-[58vh] overflow-y-auto">
+                  {/* Order Details Card */}
+                  <div className="bg-white/[0.03] border border-white/5 rounded-2xl p-3 sm:p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-white/40 mb-0.5">Book / Template</p>
+                      <h4 className="text-sm sm:text-base font-bold text-white">
+                        {order.templateName || "Dear Bacchanal Carnival Book"}
+                      </h4>
+                      <p className="text-[11px] text-white/50">
+                        Purchased on {order.createdAt ? format(new Date(order.createdAt), "MMMM d, yyyy") : "Recent"}
+                      </p>
+                    </div>
+                    <div className="sm:text-right">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                        isHardCopy
+                          ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
+                          : "bg-sky-500/10 text-sky-300 border-sky-500/20"
+                      }`}>
+                        {isHardCopy ? "Heirloom Hard Cover" : "Digital Soft Copy"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Financial Breakdown Card */}
+                  <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-3 sm:p-3.5 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-white/60">Actual Payment Paid ({isHardCopy ? "Hard Copy" : "Soft Copy"}):</span>
+                      <span className="font-bold text-white">${paidAmount.toFixed(2)} USD</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-white/60">Platform Deduction Fee &amp; Tax ({taxPercentage}%):</span>
+                      <span className="font-bold text-red-400">-${deductionAmount.toFixed(2)} USD</span>
+                    </div>
+                    <div className="h-px bg-white/10" />
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[11px] font-bold text-white uppercase tracking-wider">Total Payment to be Refunded:</p>
+                        <p className="text-[9px] text-white/40">Amount credited to original payment method after tax</p>
+                      </div>
+                      <span className="text-lg sm:text-xl font-black text-emerald-400">
+                        ${netRefundAmount.toFixed(2)} <span className="text-[10px] text-emerald-400/70 font-semibold">USD</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Policy & Countdown Timer Card */}
+                  {isHardCopyAlreadyPrinting ? (
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3 sm:p-3.5 text-amber-300">
+                      <div className="flex items-center gap-1.5 mb-1 font-bold text-xs sm:text-sm">
+                        <AlertTriangle className="w-4 h-4 text-amber-400" />
+                        Printing Commenced — Refund Unavailable
+                      </div>
+                      <p className="text-[11px] text-amber-200/80 leading-relaxed">
+                        This order has already been approved and sent to PurePrint for printing and binding. According to our policy, hard copy orders cannot be refunded once printing has commenced.
+                      </p>
+                    </div>
+                  ) : isExpired ? (
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-3 sm:p-3.5 text-red-300">
+                      <div className="flex items-center gap-1.5 mb-1 font-bold text-xs sm:text-sm">
+                        <Clock className="w-4 h-4 text-red-400" />
+                        Policy Window Expired
+                      </div>
+                      <p className="text-[11px] text-red-200/80 leading-relaxed">
+                        Sorry, you cannot request a refund. The {policyDays}-day return window for this order has expired according to our refund policy.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="bg-gradient-to-br from-emerald-500/10 to-teal-500/5 border border-emerald-500/25 rounded-2xl p-3 sm:p-3.5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mb-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-[11px] font-black uppercase tracking-wider text-emerald-300">
+                            {policyDays}-Day Return Policy
+                          </span>
+                        </div>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                          {daysLeft > 0 ? `${daysLeft} Day${daysLeft > 1 ? 's' : ''} Left` : "Final Day"}
+                        </span>
+                      </div>
+                      <div className="bg-black/40 border border-emerald-500/20 rounded-xl px-3 py-1.5 text-center mt-1">
+                        <p className="text-[9px] uppercase font-bold tracking-widest text-emerald-400/70">
+                          Refund Eligibility Countdown
+                        </p>
+                        <p className="text-sm sm:text-base font-mono font-black text-emerald-300 tracking-wider">
+                          {countdownText}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reason Input (Only visible if canRequestRefund) */}
+                  {canRequestRefund && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-black uppercase tracking-wider text-white/60 block">
+                          Reason for Refund (Mandatory) <span className="text-red-400">*</span>
+                        </label>
+                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md ${
+                          refundReason.trim().length > 0 && refundReason.trim().length <= 50
+                            ? "bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30" 
+                            : "bg-white/5 text-amber-400 border border-white/10"
+                        }`}>
+                          {refundReason.length} / 50 max chars
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        maxLength={50}
+                        value={refundReason}
+                        onChange={(e) => setRefundReason(e.target.value.slice(0, 50))}
+                        placeholder="Short reason (max 50 characters)..."
+                        className="w-full bg-white/[0.04] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder:text-white/30 focus:outline-none focus:border-red-500/50"
+                      />
+                      {!refundReason.trim() ? (
+                        <p className="text-[10px] text-amber-400/80 font-medium">
+                          Please enter a short reason (up to 50 characters) to enable the Refund button.
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-emerald-400/90 font-medium flex items-center gap-1">
+                          <Check className="w-3 h-3 text-emerald-400" /> Reason provided ({50 - refundReason.length} characters remaining).
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer Buttons */}
+                <DialogFooter className="p-3 sm:p-4 bg-[#0d0d0d] flex gap-2.5 sm:justify-end border-t border-white/5">
+                  <Button
+                    variant="outline"
+                    onClick={() => setIsRefundModalOpen(false)}
+                    className="flex-1 sm:flex-none px-5 py-2 rounded-xl font-bold text-white/70 bg-white/5 border-white/10 hover:bg-white/10 text-xs uppercase cursor-pointer h-10"
+                    disabled={isSubmittingRefund}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={submitRefundRequest}
+                    disabled={isSubmittingRefund || !canRequestRefund || !refundReason.trim()}
+                    className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl font-bold text-xs uppercase transition-all h-10 ${
+                      canRequestRefund && refundReason.trim()
+                        ? "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20 active:scale-95 cursor-pointer"
+                        : "bg-white/10 text-white/30 border border-white/5 cursor-not-allowed opacity-50"
+                    }`}
+                  >
+                    {isSubmittingRefund ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : isHardCopyAlreadyPrinting ? (
+                      "Printing Commenced"
+                    ) : isExpired ? (
+                      "Policy Expired"
+                    ) : !refundReason.trim() ? (
+                      "Enter Reason (Mandatory)"
+                    ) : (
+                      <>
+                        <Undo2 className="w-4 h-4" />
+                        Submit Refund Request
+                      </>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -1012,10 +1418,10 @@ const CustomizeRitual = () => {
                                 <p className="font-black text-lg text-gray-900">{item.description}</p>
                                 <div className="flex gap-2 mt-2">
                                   <span className="text-[9px] font-black bg-[#be2826] text-white px-2 py-0.5 rounded uppercase tracking-widest">
-                                    {orders.find(o => o._id === invoiceData.orderId || o.id === invoiceData.orderId)?.templateName || "Custom Template"}
+                                    {orders.find(o => String(o._id) === String(invoiceData.orderId) || o.id === invoiceData.orderId)?.templateName || invoiceData.templateName || "Custom Template"}
                                   </span>
                                   <span className="text-[9px] font-black bg-gray-900 text-white px-2 py-0.5 rounded uppercase tracking-widest">
-                                    {orders.find(o => o._id === invoiceData.orderId || o.id === invoiceData.orderId)?.type === 'hard' || orders.find(o => o._id === invoiceData.orderId || o.id === invoiceData.orderId)?.orderType === 'hard' ? 'Hardcover' : 'Softcopy'}
+                                    {(orders.find(o => String(o._id) === String(invoiceData.orderId) || o.id === invoiceData.orderId)?.type === 'hard' || orders.find(o => String(o._id) === String(invoiceData.orderId) || o.id === invoiceData.orderId)?.orderType === 'hard' || invoiceData.type === 'hard') ? 'Hardcover' : 'Softcopy'}
                                   </span>
                                 </div>
                               </td>
@@ -1059,7 +1465,19 @@ const CustomizeRitual = () => {
                       </div>
                     </div>
 
-                    <div className="mt-12 pt-8 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-6 opacity-60 grayscale hover:grayscale-0 transition-all duration-700">
+                    {/* Big Rotated Green Official PAID Stamp */}
+                    <div className="flex justify-center my-6 print:my-8 pointer-events-none select-none">
+                      <div className="inline-flex flex-col items-center justify-center border-4 border-double border-emerald-600/80 rounded-2xl px-10 py-2.5 transform -rotate-12 bg-emerald-500/5 shadow-sm">
+                        <span className="text-4xl sm:text-5xl font-black text-emerald-600 uppercase tracking-[14px] leading-none font-mono">
+                          PAID
+                        </span>
+                        <span className="text-[9px] font-black text-emerald-600/90 uppercase tracking-[4px] mt-1.5 border-t border-emerald-600/40 pt-0.5">
+                          OFFICIAL VERIFIED RECEIPT
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-8 pt-6 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-6 opacity-60 hover:opacity-100 transition-all duration-700">
                       <div className="text-[8px] text-gray-400 font-black uppercase tracking-[6px] text-center sm:text-left">
                         Keep the spirit alive. <br />Bacchanal never ends.
                       </div>
@@ -1093,7 +1511,15 @@ const CustomizeRitual = () => {
   );
 };
 
-export default CustomizeRitual;
+function CustomizeRitualPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#0c0d0e]" />}>
+      <CustomizeRitual />
+    </Suspense>
+  );
+}
+
+export default CustomizeRitualPage;
 
 function OrderStat({ label, value, color = "text-white/60" }: { label: string; value: string; color?: string }) {
   return (

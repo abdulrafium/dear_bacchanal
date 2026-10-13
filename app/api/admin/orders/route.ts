@@ -5,7 +5,8 @@ import { getDatabase } from "@/lib/db";
 import { adminAuthMiddleware } from "@/lib/admin-auth";
 import { ObjectId } from "mongodb";
 import { sendEmail } from "@/lib/mail-service";
-import { getOrderCompletedEmail, getRefundEmail } from "@/lib/email-templates";
+import { getOrderCompletedEmail, getRefundEmail, getHardCopyApprovalEmail, getPurePrintOrderDispatchEmail } from "@/lib/email-templates";
+import { generateInvoicePDF } from "@/lib/pdf-generator";
 import { syncUserPurchasedState } from "@/lib/checkout-fulfillment";
 import { HPSiteFlowClient } from "@/lib/hp-site-flow";
 import { UTApi } from "uploadthing/server";
@@ -92,6 +93,11 @@ export async function GET(req: NextRequest) {
           refundReason: o.refundReason,
           refundRequestedAt: o.refundRequestedAt,
           refundRequest: o.refundRequest,
+          refundStatus: o.refundStatus || null,
+          refundRejectedAt: o.refundRejectedAt || null,
+          refundRejectionReason: o.refundRejectionReason || null,
+          refundedAt: o.refundedAt || null,
+          refundId: o.refundId || null,
           customerName: o.customerName || o.shippingDetails?.name || '',
           approvedAt: o.approvedAt || null,
           siteFlowOrderId: o.siteFlowOrderId || null,
@@ -100,7 +106,9 @@ export async function GET(req: NextRequest) {
           carrier: o.carrier || o.shippingDetails?.carrier || null,
           coverPdfUrl: o.coverPdfUrl || o.savedCoverPdfUrl || book?.savedCoverPdfUrl || null,
           textPdfUrl: o.textPdfUrl || o.savedTextPdfUrl || book?.savedTextPdfUrl || null,
-          pdfUrl: o.pdfUrl || o.savedPdfUrl || book?.savedPdfUrl || null,
+          pdfUrl: o.pdfUrl || o.savedPdfUrl || o.savedSoftPdfUrl || book?.savedSoftPdfUrl || book?.savedPdfUrl || book?.pdfUrl || null,
+          savedSoftPdfUrl: o.savedSoftPdfUrl || o.pdfUrl || o.savedPdfUrl || book?.savedSoftPdfUrl || book?.savedPdfUrl || book?.pdfUrl || null,
+          savedPdfUrl: o.savedPdfUrl || o.savedSoftPdfUrl || o.pdfUrl || book?.savedPdfUrl || book?.savedSoftPdfUrl || null,
           createdAt: o.createdAt,
           updatedAt: o.updatedAt,
         };
@@ -152,17 +160,120 @@ export async function PATCH(req: NextRequest) {
         }
         // SEND EMAILS BASED ON NEW STATUS
         if (status === 'shipped' || status === 'completed') {
-            await sendEmail({
-                to: order.email,
-                subject: "Your Dear Bacchanal Order is Complete!",
-                html: getOrderCompletedEmail(order.orderId || order._id.toString())
-            });
+            const trackNum = order.trackingNumber || order.shippingDetails?.tracking_number;
+            if (trackNum) {
+                const { getOrderShippedEmail } = await import("@/lib/email-templates");
+                const customerName = order.customerName || order.shippingDetails?.name || order.email?.split("@")[0] || "Valued Customer";
+                const orderNumber = `#${(order.orderId || order._id.toString()).slice(-8).toUpperCase()}`;
+                await sendEmail({
+                    to: order.email,
+                    subject: `Your Dear Bacchanal Order Has Shipped! Tracking #${trackNum}`,
+                    html: getOrderShippedEmail({
+                        customerName,
+                        orderNumber,
+                        bookTemplateName: order.templateName,
+                        carrier: order.carrier || order.shippingDetails?.carrier || "DHL Express",
+                        trackingNumber: trackNum,
+                        shippingAddress: order.shippingDetails?.address
+                    })
+                });
+            } else {
+                await sendEmail({
+                    to: order.email,
+                    subject: "Your Dear Bacchanal Order is Complete!",
+                    html: getOrderCompletedEmail(order.orderId || order._id.toString())
+                });
+            }
         } else if (status === 'refunded') {
             await sendEmail({
                 to: order.email,
                 subject: "Your Refund has been Processed",
                 html: getRefundEmail(order.orderId || order._id.toString(), order.amount / 100)
             });
+        } else if ((status === 'processing' || status === 'approved') && order.type === 'hard' && !order.approvedEmailSent) {
+            try {
+                const customerName = order.customerName || order.shippingDetails?.name || order.email?.split("@")[0] || "Customer";
+                const orderDate = new Date(order.createdAt || Date.now()).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+                const orderNumber = `#${(order.orderId || order._id.toString()).slice(-8).toUpperCase()}`;
+
+                let attachments: any[] = [];
+                try {
+                    const rawAddr = order.shippingAddress || order.shippingDetails?.address || null;
+                    const parsedAddr = rawAddr ? {
+                        line1: rawAddr.line1 || "",
+                        line2: rawAddr.line2 || "",
+                        city: rawAddr.city || "",
+                        state: rawAddr.state || "",
+                        postal_code: rawAddr.postal_code || rawAddr.postalCode || "",
+                        country: rawAddr.country || "",
+                    } : undefined;
+
+                    const pdfBuffer = await generateInvoicePDF({
+                        orderId: order.orderId || order._id.toString(),
+                        invoiceNumber: `INV-${(order.orderId || order._id.toString()).slice(-6).toUpperCase()}`,
+                        transactionRef: order.transactionRef || order.paymentIntentId || (order.orderId || order._id.toString()).slice(-12),
+                        date: order.createdAt || new Date(),
+                        customerName,
+                        customerEmail: order.email,
+                        shippingAddress: parsedAddr,
+                        amount: (order.amount || 0) / 100,
+                        subtotal: (order.amount || 0) / 100,
+                        type: order.type,
+                        bookTitle: order.templateName || "Dear Bacchanal Edition",
+                        paymentMethod: order.paymentMethod || "card",
+                    });
+                    attachments = [{
+                        filename: `Invoice-${(order.orderId || order._id.toString()).slice(-8).toUpperCase()}.pdf`,
+                        content: pdfBuffer,
+                        contentType: "application/pdf",
+                    }];
+                } catch (pdfErr) {
+                    console.error("[Admin Orders] Invoice PDF generation failed:", pdfErr);
+                }
+
+                await sendEmail({
+                    to: order.email,
+                    subject: "Your Hard Copy Order Has Been Approved",
+                    html: getHardCopyApprovalEmail({
+                        customerName,
+                        orderNumber,
+                        bookTemplateName: order.templateName || "Dear Bacchanal Edition",
+                        orderDate,
+                    }),
+                });
+
+                // Also notify PurePrint
+                try {
+                    const purePrintEmail = process.env.PUREPRINT_EMAIL || "siteflow@pureprint.com";
+                    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || "https://dearbacchanal.com";
+                    const purePrintHtml = getPurePrintOrderDispatchEmail({
+                        orderNumber,
+                        bookTemplateName: order.templateName || "Dear Bacchanal Edition",
+                        orderDate,
+                        sku: process.env.HP_BOOK_SKU || "saffatrinidad_hardback_10x10",
+                        quantity: 1,
+                        customerName,
+                        shippingAddress: order.shippingAddress || order.shippingDetails || {},
+                        coverPdfUrl: `${baseUrl}/api/public/export/${order.bookId}?type=cover`,
+                        textPdfUrl: `${baseUrl}/api/public/export/${order.bookId}?type=text`,
+                    });
+                    await sendEmail({
+                        to: purePrintEmail,
+                        subject: `[PurePrint Order] Hard Copy Print Job - ${orderNumber}`,
+                        html: purePrintHtml,
+                        attachments,
+                    });
+                } catch (ppErr) {
+                    console.error("[Admin Orders] Failed to send PurePrint email:", ppErr);
+                }
+
+                await db.collection("orders").updateOne(
+                    { _id: new ObjectId(orderId) },
+                    { $set: { approvedEmailSent: true, approvedEmailSentAt: new Date() } }
+                );
+            } catch (approvalErr) {
+                console.error("[Admin Orders] Failed to send approval email:", approvalErr);
+            }
         }
 
         // TRIGGER PUREPRINT (SITEFLOW) CANCELLATION IF NEEDED
@@ -187,6 +298,20 @@ export async function PATCH(req: NextRequest) {
   }
 }
 
+function extractUploadThingKey(url?: string | null): string | null {
+  if (!url || typeof url !== "string") return null;
+  if (url.includes("/f/")) {
+    const part = url.split("/f/")[1];
+    return part ? part.split("?")[0] : null;
+  }
+  if (url.includes("utfs.io") || url.includes("ufs.sh")) {
+    const parts = url.split("/");
+    const last = parts[parts.length - 1];
+    return last ? last.split("?")[0] : null;
+  }
+  return null;
+}
+
 // DELETE - Delete order(s) and associated user_book records
 export async function DELETE(req: NextRequest) {
   const authError = await adminAuthMiddleware();
@@ -201,77 +326,126 @@ export async function DELETE(req: NextRequest) {
 
     if (deleteAll) {
       const filter = status ? { status } : {};
-      // Collect all bookIds so we can cascade-delete user_books
-      const ordersToDelete = await db.collection("orders").find(filter, { projection: { bookId: 1 } }).toArray();
+      const ordersToDelete = await db.collection("orders").find(filter).toArray();
       const bookIds = ordersToDelete.map(o => o.bookId).filter(Boolean);
-      // Delete orders
-      await db.collection("orders").deleteMany(filter);
-      // Cascade: delete matching user_books (never touches global templates)
+      const fileKeys: string[] = [];
+
+      // 1. Collect all PDF file keys directly from the orders
+      for (const o of ordersToDelete) {
+        const orderUrls = [
+          o.pdfUrl,
+          o.savedPdfUrl,
+          o.savedSoftPdfUrl,
+          o.softUrl,
+          o.coverPdfUrl,
+          o.savedCoverPdfUrl,
+          o.textPdfUrl,
+          o.savedTextPdfUrl,
+        ];
+        for (const u of orderUrls) {
+          const k = extractUploadThingKey(u);
+          if (k && !fileKeys.includes(k)) fileKeys.push(k);
+        }
+      }
+
+      // 2. Collect all PDF file keys from associated user_books
       if (bookIds.length > 0) {
         const { ObjectId: OId } = await import("mongodb");
         const validObjIds = bookIds.filter((id: string) => OId.isValid(id) && id.length === 24).map((id: string) => new OId(id));
         if (validObjIds.length > 0) {
-          // Fetch books to get their UploadThing URLs before deletion
           const books = await db.collection("user_books").find({ _id: { $in: validObjIds } }).toArray();
-          const fileKeys: string[] = [];
           for (const book of books) {
-            if (book.savedCoverPdfUrl) {
-              const key = book.savedCoverPdfUrl.split("/f/")[1];
-              if (key) fileKeys.push(key);
-            }
-            if (book.savedTextPdfUrl) {
-              const key = book.savedTextPdfUrl.split("/f/")[1];
-              if (key) fileKeys.push(key);
-            }
-            if (book.savedPdfUrl) {
-              const key = book.savedPdfUrl.split("/f/")[1];
-              if (key) fileKeys.push(key);
+            const bookUrls = [
+              book.savedSoftPdfUrl,
+              book.savedPdfUrl,
+              book.pdfUrl,
+              book.softUrl,
+              book.savedCoverPdfUrl,
+              book.coverPdfUrl,
+              book.savedTextPdfUrl,
+              book.textPdfUrl,
+            ];
+            for (const u of bookUrls) {
+              const k = extractUploadThingKey(u);
+              if (k && !fileKeys.includes(k)) fileKeys.push(k);
             }
           }
-          
-          // Delete physical files from UploadThing
-          if (fileKeys.length > 0) {
-            const { UTApi } = await import("uploadthing/server");
-            const utapi = new UTApi();
-            await utapi.deleteFiles(fileKeys).catch(err => console.error("UploadThing delete failed:", err));
-          }
-
           await db.collection("user_books").deleteMany({ _id: { $in: validObjIds } });
         }
       }
+
+      // 3. Permanently destroy files in UploadThing
+      if (fileKeys.length > 0) {
+        const { UTApi } = await import("uploadthing/server");
+        const utapi = new UTApi();
+        await utapi.deleteFiles(fileKeys).catch(err => console.error("UploadThing delete failed:", err));
+      }
+
+      await db.collection("orders").deleteMany(filter);
       return NextResponse.json({ success: true, message: "Orders, related books, and PDF files permanently deleted" });
     } else if (orderId) {
-      // Fetch bookId from order before deleting
-      const order = await db.collection("orders").findOne({ _id: new ObjectId(orderId) }, { projection: { bookId: 1 } });
-      await db.collection("orders").deleteOne({ _id: new ObjectId(orderId) });
-      
-      // Cascade: delete matching user_book and its UploadThing files
+      // Fetch full order before deleting
+      const order = await db.collection("orders").findOne({ _id: new ObjectId(orderId) });
+      if (!order) {
+        return NextResponse.json({ error: "Order not found" }, { status: 404 });
+      }
+
+      const fileKeys: string[] = [];
+
+      // 1. Extract all PDF keys directly from order (both soft and hard copy)
+      const orderUrls = [
+        order.pdfUrl,
+        order.savedPdfUrl,
+        order.savedSoftPdfUrl,
+        order.softUrl,
+        order.coverPdfUrl,
+        order.savedCoverPdfUrl,
+        order.textPdfUrl,
+        order.savedTextPdfUrl,
+      ];
+      for (const u of orderUrls) {
+        const k = extractUploadThingKey(u);
+        if (k && !fileKeys.includes(k)) fileKeys.push(k);
+      }
+
+      // 2. Extract all PDF keys from the matching user_book
+      let book: any = null;
       if (order?.bookId && ObjectId.isValid(order.bookId) && order.bookId.length === 24) {
-        const book = await db.collection("user_books").findOne({ _id: new ObjectId(order.bookId) });
-        if (book) {
-          const fileKeys: string[] = [];
-          if (book.savedCoverPdfUrl) {
-            const key = book.savedCoverPdfUrl.split("/f/")[1];
-            if (key) fileKeys.push(key);
-          }
-          if (book.savedTextPdfUrl) {
-            const key = book.savedTextPdfUrl.split("/f/")[1];
-            if (key) fileKeys.push(key);
-          }
-          if (book.savedPdfUrl) {
-            const key = book.savedPdfUrl.split("/f/")[1];
-            if (key) fileKeys.push(key);
-          }
+        book = await db.collection("user_books").findOne({ _id: new ObjectId(order.bookId) });
+      }
 
-          if (fileKeys.length > 0) {
-            const { UTApi } = await import("uploadthing/server");
-            const utapi = new UTApi();
-            await utapi.deleteFiles(fileKeys).catch(err => console.error("UploadThing delete failed:", err));
-          }
-
-          await db.collection("user_books").deleteOne({ _id: new ObjectId(order.bookId) });
+      if (book) {
+        const bookUrls = [
+          book.savedSoftPdfUrl,
+          book.savedPdfUrl,
+          book.pdfUrl,
+          book.softUrl,
+          book.savedCoverPdfUrl,
+          book.coverPdfUrl,
+          book.savedTextPdfUrl,
+          book.textPdfUrl,
+        ];
+        for (const u of bookUrls) {
+          const k = extractUploadThingKey(u);
+          if (k && !fileKeys.includes(k)) fileKeys.push(k);
         }
       }
+
+      // 3. Delete physical files from UploadThing cloud storage
+      if (fileKeys.length > 0) {
+        const { UTApi } = await import("uploadthing/server");
+        const utapi = new UTApi();
+        await utapi.deleteFiles(fileKeys).catch(err => console.error("UploadThing delete failed:", err));
+      }
+
+      // 4. Delete the order document
+      await db.collection("orders").deleteOne({ _id: new ObjectId(orderId) });
+
+      // 5. Delete matching user_book
+      if (book?._id) {
+        await db.collection("user_books").deleteOne({ _id: book._id });
+      }
+
       return NextResponse.json({ success: true, message: "Order, related book, and PDF files permanently deleted" });
     }
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });

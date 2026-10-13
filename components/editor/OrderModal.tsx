@@ -35,8 +35,20 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
 
   const { user, refreshUser, logout } = useAuth();
   const isPurchased = user?.isPurchased;
+  const storeCopyType = useEditorStore((s) => s.selectedCopyType);
 
   const [step, setStep] = useState<"selection" | "shipping">("selection");
+
+  useEffect(() => {
+    if (isOpen && storeCopyType) {
+      setSelectedType(storeCopyType);
+      if (storeCopyType === "hard") {
+        setStep("shipping");
+      } else {
+        setStep("selection");
+      }
+    }
+  }, [isOpen, storeCopyType]);
   const [shippingInfo, setShippingInfo] = useState({
     name: user?.name || "",
     line1: "",
@@ -118,6 +130,8 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
             type: selectedType,
             templateName: activeTemplateName,
             bookId: freshestBookId || bookId,
+            pagesCount: spreads.length * 2,
+            spreadsCount: spreads.length,
             shippingInfo: selectedType === "hard" ? shippingInfo : undefined,
             shippingRate: selectedType === "hard" ? shippingRate : undefined
         }),
@@ -232,64 +246,66 @@ export function OrderModal({ isOpen, onClose }: OrderModalProps) {
 
           <div className="px-4 sm:px-6 -mt-4 bg-[#0a0a0a] rounded-t-[24px]">
             <div className="pt-4">
-                {step === "selection" ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-3">
-                    <div
-                        onClick={() => setSelectedType("soft")}
-                        className={`relative cursor-pointer rounded-xl sm:rounded-2xl border-2 p-3 sm:p-5 transition-all duration-300 ${selectedType === "soft"
-                            ? "border-[#9f2e2b] bg-[#9f2e2b]/10 shadow-lg"
-                            : "border-white/5 bg-white/5 hover:bg-white/[0.08]"
-                        }`}
-                    >
+                {storeCopyType === "soft" ? (
+                    <div className="mb-3">
+                      <div className="relative rounded-xl sm:rounded-2xl border-2 border-[#9f2e2b] bg-[#9f2e2b]/10 shadow-lg p-3 sm:p-5">
                         <div className="flex justify-between items-center mb-2">
-                        <div className={`p-1.5 sm:p-2 rounded-lg transition-colors ${selectedType === "soft" ? "bg-red-500/20" : "bg-white/5"}`}>
-                            <FileText className={`w-4 h-4 sm:w-5 sm:h-5 ${selectedType === "soft" ? "text-red-400" : "text-white/40"}`} />
-                        </div>
-                        {selectedType === "soft" && <Check className="w-3 h-3 text-red-500" />}
+                          <div className="p-1.5 sm:p-2 rounded-lg bg-red-500/20 text-red-400">
+                            <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-red-400" />
+                          </div>
+                          <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[10px] font-bold uppercase tracking-wider">
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Digital Proof Verified</span>
+                          </div>
                         </div>
                         <div>
-                        <h3 className="font-black text-sm sm:text-base">PDF Book Edition</h3>
-                        <div className="flex gap-1.5 mt-0.5">
+                          <h3 className="font-black text-sm sm:text-base text-white">PDF Book Edition</h3>
+                          <div className="flex gap-1.5 mt-0.5">
                             <span className="text-[7px] font-bold text-green-400 uppercase tracking-tighter">High Res</span>
-                            <span className="text-[7px] font-bold text-blue-400 uppercase tracking-tighter">Instant</span>
+                            <span className="text-[7px] font-bold text-blue-400 uppercase tracking-tighter">Instant Delivery</span>
+                          </div>
+                          <p className="text-[11px] text-white/60 mt-1.5 leading-relaxed">
+                            Single unified PDF photobook proof verified and pre-rendered. Ready for instant download upon payment.
+                          </p>
                         </div>
+                        <div className="mt-3 flex items-baseline justify-between border-t border-white/10 pt-2">
+                          <span className="text-xs text-white/50 font-bold uppercase tracking-wider">Base Digital</span>
+                          <div className="flex items-baseline gap-1.5">
+                            <div className="font-black text-xl sm:text-2xl text-white">${softCopyPrice}</div>
+                            <div className="text-[8px] text-white/30 font-bold uppercase tracking-widest">USD</div>
+                          </div>
                         </div>
-                        <div className="mt-3 flex items-baseline gap-1.5">
-                        <div className="font-black text-xl sm:text-2xl text-white">${softCopyPrice}</div>
-                        <div className="text-[8px] text-white/30 font-bold uppercase tracking-widest">USD</div>
-                        </div>
+                      </div>
                     </div>
-
-                    <div
-                        onClick={() => setSelectedType("hard")}
-                        className={`relative cursor-pointer rounded-xl sm:rounded-2xl border-2 p-3 sm:p-5 transition-all duration-300 ${selectedType === "hard"
-                            ? "border-[#9f2e2b] bg-[#9f2e2b]/10 shadow-lg"
-                            : "border-white/5 bg-white/5 hover:bg-white/[0.08]"
-                        }`}
-                    >
+                ) : step === "selection" ? (
+                    <div className="mb-3">
+                      <div className="relative rounded-xl sm:rounded-2xl border-2 border-[#9f2e2b] bg-[#9f2e2b]/10 shadow-lg p-3 sm:p-5">
                         <div className="flex justify-between items-center mb-2">
-                        <div className={`p-1.5 sm:p-2 rounded-lg transition-colors ${selectedType === "hard" ? "bg-orange-500/20" : "bg-white/5"}`}>
-                            <Book className={`w-4 h-4 sm:w-5 sm:h-5 ${selectedType === "hard" ? "text-orange-400" : "text-white/40"}`} />
-                        </div>
-                        {selectedType === "hard" && <Check className="w-3 h-3 text-red-500" />}
+                          <div className="p-1.5 sm:p-2 rounded-lg bg-orange-500/20 text-orange-400">
+                            <Book className="w-4 h-4 sm:w-5 sm:h-5 text-orange-400" />
+                          </div>
+                          <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400 text-[10px] font-bold uppercase tracking-wider">
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Hardcover Selected</span>
+                          </div>
                         </div>
                         <div>
-                        <h3 className="font-black text-lg sm:text-xl">Hardcover Volume</h3>
-                        <div className="flex gap-2 mt-1">
+                          <h3 className="font-black text-lg sm:text-xl text-white">Hardcover Volume</h3>
+                          <div className="flex gap-2 mt-1">
                             <span className="text-[8px] font-bold text-orange-400 uppercase tracking-tighter">Premium Print</span>
                             <span className="text-[8px] font-bold text-purple-400 uppercase tracking-tighter">Linen Wrap</span>
+                          </div>
                         </div>
-                        </div>
-                        <div className="flex items-center justify-between mt-4">
-                        <div className="flex items-baseline gap-2">
+                        <div className="flex items-center justify-between mt-3 border-t border-white/10 pt-2">
+                          <div className="flex items-baseline gap-2">
                             <div className="font-black text-2xl sm:text-3xl text-white">${hardCopyPrice}</div>
                             <div className="text-[10px] text-white/30 font-bold uppercase tracking-widest">USD</div>
-                        </div>
-                        <div className="text-[8px] font-black text-white/40 bg-white/5 px-2 py-1 rounded-md uppercase tracking-wider border border-white/10">
+                          </div>
+                          <div className="text-[8px] font-black text-white/40 bg-white/5 px-2 py-1 rounded-md uppercase tracking-wider border border-white/10">
                             + Shipping
+                          </div>
                         </div>
-                        </div>
-                    </div>
+                      </div>
                     </div>
                 ) : (
                     <div className="space-y-4 mb-6 p-1 animate-in slide-in-from-right-4 duration-300">

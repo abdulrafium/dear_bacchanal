@@ -13,6 +13,8 @@ import { Loader2, Edit3, LayoutGrid, Layout } from "lucide-react";
 
 import { useAuth } from "@/hooks/useAuth";
 import { OrderModal } from "./OrderModal";
+import { BookPreviewModal } from "./BookPreviewModal";
+import { PostPaymentModal } from "./PostPaymentModal";
 import { ShoppingCart } from "lucide-react";
 
 export default function EditorWorkspace() {
@@ -45,6 +47,10 @@ export default function EditorWorkspace() {
   const [isPortrait, setIsPortrait] = useState(false);
   const templateLoaded = useEditorStore((s) => s.templateLoaded);
   const isPageTransitioning = useEditorStore((s) => s.isPageTransitioning);
+  const isRenderingPreview = useEditorStore((s) => s.isRenderingPreview);
+  const previewRenderProgress = useEditorStore((s) => s.previewRenderProgress);
+
+  const [postPaymentState, setPostPaymentState] = useState<{ open: boolean; type: "soft" | "hard"; isProcessingHard?: boolean } | null>(null);
 
   // Handle Orientation and Lock for Mobile Landscape
   useEffect(() => {
@@ -332,66 +338,7 @@ export default function EditorWorkspace() {
 
   const downloadTriggeredRef = useRef(false);
 
-  // Handle auto-download after payment
-  useEffect(() => {
-    const isPaymentSuccess = searchParams.get("payment") === "success";
-    const isPaymentSuccessHard = searchParams.get("payment") === "success_hard";
-    const isLoaded = useEditorStore.getState().templateLoaded;
-    const stage = useEditorStore.getState().stageRef;
-
-    if ((isPaymentSuccess || isPaymentSuccessHard) && isLoaded && stage && !loading && !downloadTriggeredRef.current) {
-      // Set ref FIRST and never reset it — prevents re-trigger on any re-render
-      downloadTriggeredRef.current = true;
-
-      const triggerDownload = async () => {
-        const { generatePdfBook } = useEditorStore.getState();
-        const { toast } = await import("sonner");
-
-        if (isPaymentSuccessHard) {
-          toast.success("Payment successful! Generating your high-quality PDFs for printing...", { duration: 8000 });
-        } else {
-          toast.info("Payment verified! Starting your automatic book download...", { duration: 5000 });
-        }
-
-        try {
-          // generatePdfBook handles PDF generation, local download, and UploadThing upload
-          await generatePdfBook(isPaymentSuccessHard, true);
-
-          // Force overlay to stay visible with completion message until redirect
-          useEditorStore.setState({
-            pdfGenerationProgress: { current: 100, total: 100, status: "Complete! Redirecting...", isSoftCopy: !isPaymentSuccessHard }
-          });
-
-          await refreshUser(); // refreshUser from component scope
-
-          if (isPaymentSuccessHard) {
-            toast.success("Files successfully attached to order! Redirecting...", { duration: 3000 });
-          } else {
-            toast.success("Download initiated! Redirecting...", { duration: 3000 });
-          }
-
-          // Redirect — overlay naturally disappears with the page
-          setTimeout(() => {
-            window.location.href = "/customize";
-          }, 2000);
-        } catch (err) {
-          console.error("Auto-download failed:", err);
-          toast.error(isPaymentSuccessHard ? "Failed to process files for print." : "Failed to download PDF automatically.");
-          // Do NOT reset downloadTriggeredRef — prevents a retry loop
-          useEditorStore.setState({ pdfGenerationProgress: null });
-        }
-      };
-
-      // Set initial overlay immediately so user doesn't see the editor flashing
-      useEditorStore.setState({
-        pdfGenerationProgress: { current: 0, total: 100, status: "Initializing print job...", isSoftCopy: !isPaymentSuccessHard }
-      });
-
-      // Slight delay to ensure fonts/images are fully rendered
-      setTimeout(triggerDownload, 1500);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, templateName]); // Removed `loading` and `refreshUser` — they cause re-fires after PDF completes
+  // Post-payment success and download is handled on /editor/payment-status page directly.
 
 
   // Sync templateName, isAdmin, activeTemplateId and currentSpreadIndex with URL and handle beforeunload
@@ -770,6 +717,117 @@ export default function EditorWorkspace() {
         isOpen={isOrderModalOpen}
         onClose={() => useEditorStore.getState().setIsOrderModalOpen(false)}
       />
+
+      <BookPreviewModal />
+
+      {postPaymentState?.open && (
+        <PostPaymentModal
+          type={postPaymentState.type}
+          isProcessingHard={postPaymentState.isProcessingHard}
+          onClose={() => setPostPaymentState(null)}
+        />
+      )}
+
+      {/* Actual PDF Production Generation Overlay */}
+      {pdfProgress && (
+        <div className="fixed inset-0 z-[100000] bg-black/95 backdrop-blur-md flex flex-col items-center justify-center text-white p-6 select-none animate-in fade-in duration-200">
+          <div className="w-16 h-16 relative mb-6">
+            <div className="absolute inset-0 border-4 border-white/20 rounded-full" />
+            <div className="absolute inset-0 border-4 border-[#9f2e2b] rounded-full animate-spin border-t-transparent" />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Loader2 className="w-6 h-6 text-white animate-pulse" />
+            </div>
+          </div>
+          <h3 className="text-2xl font-black uppercase tracking-wider mb-2 font-poppins text-center">
+            {pdfProgress.isSoftCopy ? "GENERATING DIGITAL PDF" : "GENERATING PRODUCTION PRINT FILES"}
+          </h3>
+          <p className="text-white/60 text-sm max-w-sm text-center mb-6">
+            {pdfProgress.status}
+          </p>
+
+          <div className="w-full max-w-md px-6 flex flex-col gap-6">
+            {pdfProgress.isSoftCopy ? (
+              <div>
+                <div className="flex justify-between text-sm mb-1.5 font-bold tracking-wide text-white/90">
+                  <span>Generating Digital PDF</span>
+                  <span>{pdfProgress.total > 0 ? Math.round((pdfProgress.current / pdfProgress.total) * 100) + "%" : "0%"}</span>
+                </div>
+                <div className="w-full bg-white/20 h-2.5 rounded-full overflow-hidden shadow-inner">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#9f2e2b] to-[#d6302c] transition-all duration-300 rounded-full"
+                    style={{ width: `${pdfProgress.total > 0 ? Math.round((pdfProgress.current / pdfProgress.total) * 100) : 0}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* 1. Hardback Cover (Top) */}
+                <div>
+                  <div className="flex justify-between text-sm mb-1.5 font-bold tracking-wide text-white/90">
+                    <span>Hardback Cover</span>
+                    <span>
+                      {(pdfProgress.coverCurrent || 0) >= (pdfProgress.coverTotal || 1)
+                        ? "100%"
+                        : (pdfProgress.coverCurrent === 0.5 || pdfProgress.current === 1)
+                          ? "Processing..."
+                          : (pdfProgress.pdfType === 'inner')
+                            ? "100%"
+                            : "Waiting..."}
+                    </span>
+                  </div>
+                  <div className="w-full bg-white/20 h-2.5 rounded-full overflow-hidden shadow-inner">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#9f2e2b] to-[#d6302c] transition-all duration-300 rounded-full"
+                      style={{
+                        width: `${
+                          (pdfProgress.coverCurrent || 0) >= (pdfProgress.coverTotal || 1)
+                            ? 100
+                            : (pdfProgress.coverCurrent === 0.5 || pdfProgress.current === 1)
+                              ? 60
+                              : (pdfProgress.pdfType === 'inner')
+                                ? 100
+                                : 0
+                        }%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Inner Pages (Below Cover) */}
+                <div>
+                  <div className="flex justify-between text-sm mb-1.5 font-bold tracking-wide text-white/90">
+                    <span>Inner Pages</span>
+                    <span>
+                      {pdfProgress.innerTotal && pdfProgress.innerTotal > 0
+                        ? (pdfProgress.innerCurrent || 0) > 0
+                          ? Math.min(100, Math.round(((pdfProgress.innerCurrent || 0) / pdfProgress.innerTotal) * 100)) + "%"
+                          : "Waiting..."
+                        : "0%"}
+                    </span>
+                  </div>
+                  <div className="w-full bg-white/20 h-2.5 rounded-full overflow-hidden shadow-inner">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#9f2e2b] to-[#d6302c] transition-all duration-300 rounded-full"
+                      style={{
+                        width: `${
+                          pdfProgress.innerTotal && pdfProgress.innerTotal > 0
+                            ? Math.min(100, Math.round(((pdfProgress.innerCurrent || 0) / pdfProgress.innerTotal) * 100))
+                            : 0
+                        }%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="bg-white/10 px-6 py-2.5 rounded-full mt-10 flex items-center gap-3">
+            <div className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            <span className="text-xs font-semibold text-white/80">Please do not close or refresh this tab</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

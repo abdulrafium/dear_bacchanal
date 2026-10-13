@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
     
     let coverUrl: string | undefined;
     let textUrl: string | undefined;
+    let softUrl: string | undefined;
     let bookId: string | null = null;
     let templateName: string | null = null;
 
@@ -32,25 +33,34 @@ export async function POST(req: NextRequest) {
       const body = await req.json();
       coverUrl = body.coverUrl;
       textUrl = body.textUrl;
+      softUrl = body.softUrl;
       bookId = body.bookId;
       templateName = body.templateName;
     } else {
       return NextResponse.json({ error: "Invalid Content-Type, expected application/json" }, { status: 400 });
     }
 
-    if (!coverUrl || !textUrl) {
-      return NextResponse.json({ error: "Failed to retrieve URLs" }, { status: 500 });
+    if (!softUrl && (!coverUrl || !textUrl)) {
+      return NextResponse.json({ error: "Failed to retrieve URLs" }, { status: 400 });
     }
 
-    console.log(`[upload-pdf] PDFs uploaded successfully: Cover(${coverUrl}) Text(${textUrl})`);
+    console.log(`[upload-pdf] PDFs received: Soft(${softUrl || 'none'}) Cover(${coverUrl || 'none'}) Text(${textUrl || 'none'})`);
 
     const db = await getDatabase();
 
-    const updateFields = {
-      savedCoverPdfUrl: coverUrl,
-      savedTextPdfUrl: textUrl,
+    const updateFields: any = {
       pdfUploadedAt: new Date()
     };
+
+    if (softUrl) {
+      updateFields.savedSoftPdfUrl = softUrl;
+      updateFields.pdfUrl = softUrl;
+      updateFields.savedPdfUrl = softUrl;
+    }
+    if (coverUrl && textUrl) {
+      updateFields.savedCoverPdfUrl = coverUrl;
+      updateFields.savedTextPdfUrl = textUrl;
+    }
 
     // We intentionally DO NOT save PDF URLs to the `users` collection anymore,
     // because that caused the system to mistakenly serve old PDFs for new orders.
@@ -105,6 +115,16 @@ export async function POST(req: NextRequest) {
             console.error(`[upload-pdf] CRITICAL ERROR: Could not find user_book in database for this query!`);
             errorMessage = "Could not find matching book in database to save PDF URLs.";
         }
+
+        // Also update matching orders in orders collection so orders tab has saved URLs
+        const orderOrQueries: any[] = [{ userId }, { userEmail: user.email }, { email: user.email }];
+        if (cleanBookId) {
+          orderOrQueries.push({ bookId: cleanBookId });
+        }
+        await db.collection("orders").updateMany(
+          { $or: orderOrQueries },
+          { $set: updateFields }
+        ).catch(() => {});
       } else {
         errorMessage = "No bookQuery generated (missing bookId and templateName)";
       }
